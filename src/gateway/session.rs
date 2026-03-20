@@ -1,6 +1,5 @@
 //! Session management
 
-use crate::common::Result;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

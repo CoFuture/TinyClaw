@@ -2,4 +2,4 @@
 
 pub mod schema;
 
-pub use schema::{load_config, default_config_path, Config, GatewayConfig, AgentConfig, ToolsConfig};
+pub use schema::{load_config, default_config_path, Config, AgentConfig};

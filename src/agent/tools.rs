@@ -1,11 +1,10 @@
 //! Tools module
 
-use crate::common::{Error, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{debug, error, info};
+use tracing::info;
 
 /// Tool definition
 #[derive(Debug, Clone)]

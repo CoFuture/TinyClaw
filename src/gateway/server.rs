@@ -1,6 +1,6 @@
 //! WebSocket server
 
-use crate::common::{Error, Result};
+use crate::common::Result;
 use crate::config::Config;
 use crate::gateway::messages::handle_request;
 use crate::gateway::protocol::*;
@@ -30,7 +30,7 @@ pub async fn start_server(
         tokio::select! {
             result = listener.accept() => {
                 match result {
-                    Ok((stream, addr)) => {
+                    Ok((stream, _addr)) => {
                         let ctx = crate::gateway::messages::HandlerContext::new(
                             ctx.session_manager.clone(),
                             ctx.config.clone(),
@@ -118,7 +118,7 @@ async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::Han
             Ok(Message::Pong(_)) => {
                 // Ignore pong
             }
-            Ok(Message::Binary(data)) => {
+            Ok(Message::Binary(_data)) => {
                 warn!("Received binary data, ignoring");
             }
             Ok(Message::Frame(_)) => {

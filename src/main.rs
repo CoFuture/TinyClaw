@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
     // Create handler context
-    let ctx = HandlerContext::new(
+    let _ctx = HandlerContext::new(
         session_manager.clone(),
         config.clone(),
         agent.clone(),

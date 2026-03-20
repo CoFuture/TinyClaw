@@ -1,7 +1,6 @@
 //! Protocol definitions
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Request message from client
 #[derive(Debug, Clone, Serialize, Deserialize)]
