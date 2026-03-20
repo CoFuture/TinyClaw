@@ -139,10 +139,27 @@
 
 ---
 
+## v1.1.0 - 2026-03-21
+
+### Iteration 11: 插件系统
+
+新增功能:
+- [x] 插件 trait 定义 (Plugin, Hook, PluginMetadata)
+- [x] 插件管理器 (PluginManager)
+- [x] 插件加载器 (PluginLoader)
+- [x] 内置插件
+  - Echo Plugin - 回显消息
+  - Logger Plugin - 记录所有消息和事件
+  - Validator Plugin - 验证消息和参数
+
+### 完成状态: ✅ 已完成并推送
+
+---
+
 ## 迭代计划
 
-### v1.1.0 待实现
-- 插件系统
+### v1.2.0 待实现
 - 高级会话管理
 - 认证与授权
 - 消息模板
+- 插件 API

@@ -37,6 +37,9 @@ pub enum Error {
     #[error("Authentication error: {0}")]
     Auth(String),
 
+    #[error("Plugin error: {0}")]
+    Plugin(String),
+
     #[error("Timeout")]
     Timeout,
 
