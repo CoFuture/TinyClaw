@@ -113,6 +113,7 @@ impl ResponseError {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_data(
         id: Option<String>,
         code: impl Into<String>,
@@ -143,6 +144,7 @@ impl From<ResponseError> for Response {
 }
 
 /// JSON-RPC 2.0 method names
+#[allow(dead_code)]
 pub mod methods {
     /// Ping method
     pub const PING: &str = "ping";
@@ -173,6 +175,7 @@ pub mod methods {
 }
 
 /// Event types for notifications
+#[allow(dead_code)]
 pub mod events {
     /// Assistant text event
     pub const ASSISTANT_TEXT: &str = "assistant.text";

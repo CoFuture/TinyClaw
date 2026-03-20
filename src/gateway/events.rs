@@ -74,11 +74,13 @@ impl EventEmitter {
     }
 
     /// Subscribe to events
+    #[allow(dead_code)]
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.sender.subscribe()
     }
 
     /// Get subscriber count
+    #[allow(dead_code)]
     pub fn subscriber_count(&self) -> usize {
         self.sender.receiver_count()
     }

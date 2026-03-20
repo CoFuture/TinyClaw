@@ -56,6 +56,7 @@ impl Message {
         }
     }
 
+    #[allow(dead_code)]
     pub fn system(content: impl Into<String>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -67,6 +68,7 @@ impl Message {
         }
     }
 
+    #[allow(dead_code)]
     pub fn tool(content: impl Into<String>, tool_call_id: impl Into<String>, tool_name: impl Into<String>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -104,19 +106,23 @@ impl SessionHistory {
         self.messages.push(message);
     }
 
+    #[allow(dead_code)]
     pub fn get_messages(&self) -> &[Message] {
         &self.messages
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.messages.clear();
         self.updated_at = Utc::now();
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.messages.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
@@ -158,11 +164,13 @@ impl HistoryManager {
     }
 
     /// List all histories
+    #[allow(dead_code)]
     pub fn list(&self) -> Vec<Arc<RwLock<SessionHistory>>> {
         self.histories.read().values().cloned().collect()
     }
 
     /// Clear history for a session
+    #[allow(dead_code)]
     pub fn clear(&self, session_id: &str) {
         if let Some(history) = self.histories.read().get(session_id) {
             history.write().clear();
@@ -170,6 +178,7 @@ impl HistoryManager {
     }
 
     /// Remove history for a session
+    #[allow(dead_code)]
     pub fn remove(&self, session_id: &str) {
         self.histories.write().remove(session_id);
     }

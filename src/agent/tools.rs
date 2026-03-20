@@ -160,6 +160,7 @@ impl ToolExecutor {
     }
 
     /// Get a tool by name
+    #[allow(dead_code)]
     pub fn get_tool(&self, name: &str) -> Option<&Tool> {
         self.tools.get(name)
     }

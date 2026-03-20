@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 /// Execution state of the agent
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ExecutionState {
     /// Agent is thinking
     Thinking,
@@ -30,6 +31,7 @@ pub enum ExecutionState {
 }
 
 /// Agent context for a single conversation
+#[allow(dead_code)]
 pub struct AgentContext {
     /// Session ID
     pub session_id: String,
@@ -49,8 +51,10 @@ pub struct AgentContext {
     pub turn_count: RwLock<usize>,
 }
 
+#[allow(dead_code)]
 impl AgentContext {
     /// Create a new agent context
+    #[allow(dead_code)]
     pub fn new(
         session_id: String,
         history_manager: Arc<HistoryManager>,

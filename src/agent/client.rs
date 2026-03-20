@@ -26,6 +26,7 @@ struct Message {
 
 /// Anthropic API response
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct AnthropicResponse {
     content: Vec<ContentBlock>,
     #[serde(rename = "stop_reason")]
@@ -35,6 +36,7 @@ struct AnthropicResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ContentBlock {
     #[serde(rename = "type")]
     content_type: String,
@@ -42,6 +44,7 @@ struct ContentBlock {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Usage {
     #[serde(rename = "input_tokens")]
     input_tokens: u32,
@@ -124,6 +127,7 @@ impl Agent {
     }
 
     /// Send a message with conversation history
+    #[allow(dead_code)]
     pub async fn send_message_with_history(
         &self,
         _session_key: &str,

@@ -22,11 +22,13 @@ pub struct Session {
     /// Last activity timestamp
     pub last_active: chrono::DateTime<chrono::Utc>,
     /// Session metadata
+    #[allow(dead_code)]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Session kind
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum SessionKind {
     /// Main session (direct chat)
     Main,
@@ -53,21 +55,25 @@ impl Session {
         Self::new(SessionKind::Main)
     }
 
+    #[allow(dead_code)]
     pub fn isolated() -> Self {
         Self::new(SessionKind::Isolated)
     }
 
+    #[allow(dead_code)]
     pub fn channel(channel: impl Into<String>) -> Self {
         Self::new(SessionKind::Channel {
             channel: channel.into(),
         })
     }
 
+    #[allow(dead_code)]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
     }
 
+    #[allow(dead_code)]
     pub fn update_activity(&mut self) {
         self.last_active = chrono::Utc::now();
     }
@@ -94,6 +100,7 @@ impl SessionManager {
     }
 
     /// Get a session by ID
+    #[allow(dead_code)]
     pub fn get(&self, id: &SessionId) -> Option<Arc<RwLock<Session>>> {
         self.sessions.read().get(id).cloned()
     }
@@ -104,6 +111,7 @@ impl SessionManager {
     }
 
     /// Remove a session
+    #[allow(dead_code)]
     pub fn remove(&self, id: &SessionId) -> Option<Arc<RwLock<Session>>> {
         self.sessions.write().remove(id)
     }

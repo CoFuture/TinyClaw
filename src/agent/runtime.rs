@@ -16,6 +16,7 @@ use tracing::{info, warn};
 
 /// Tool call from the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ToolCall {
     /// Unique ID for the tool call
     pub id: String,
@@ -27,6 +28,7 @@ pub struct ToolCall {
 
 /// Response from the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ModelResponse {
     /// Text content from the model
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,6 +42,7 @@ pub struct ModelResponse {
 
 /// Agent runtime configuration
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct RuntimeConfig {
     /// Maximum turns in tool loop
     pub max_turns: usize,
@@ -60,12 +63,14 @@ impl Default for RuntimeConfig {
 }
 
 /// Agent runtime for executing agent loops
+#[allow(dead_code)]
 pub struct AgentRuntime {
     config: RwLock<RuntimeConfig>,
     tool_executor: Arc<ToolExecutor>,
     event_emitter: Option<Arc<EventEmitter>>,
 }
 
+#[allow(dead_code)]
 impl AgentRuntime {
     /// Create a new agent runtime
     pub fn new(tool_executor: Arc<ToolExecutor>) -> Self {

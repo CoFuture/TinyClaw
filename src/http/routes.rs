@@ -21,6 +21,7 @@ use tracing::info;
 pub struct HttpState {
     pub config: Arc<RwLock<Config>>,
     pub session_manager: Arc<SessionManager>,
+    #[allow(dead_code)]
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
     pub start_time: Instant,
