@@ -82,9 +82,20 @@
 ### Iteration 7: Agent Runtime 核心
 
 新增功能:
-- [ ] Agent Runtime 运行时
-- [ ] 工具调用循环
-- [ ] 消息处理管道
-- [ ] 状态管理
+- [x] AgentRuntime 运行时引擎
+- [x] AgentContext 上下文管理
+- [x] ExecutionState 执行状态跟踪
+- [x] ToolCall / ModelResponse 类型
+- [x] RuntimeConfig 运行时配置
+- [x] PRINCIPLES.md 开发规范
 
-### 状态: 🔄 进行中
+### 完成状态: ✅ 已完成并推送
+
+---
+
+## 迭代计划
+
+### v0.8.0 待实现
+- 消息持久化 (数据库支持)
+- Web 管理界面
+- pi-tui 终端界面
