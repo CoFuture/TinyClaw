@@ -41,20 +41,22 @@
 ### Iteration 4: 高级工具系统
 
 新增功能:
-- [ ] 文件操作工具
-- [ ] HTTP请求工具
-- [ ] 工具注册表
-- [ ] 工具调用API
+- [x] ToolExecutor 工具执行器
+- [x] 文件操作工具 (read_file, write_file, list_dir)
+- [x] HTTP请求工具 (http_request)
+- [x] tools.list 和 tools.execute API
 
-### 状态: 🔄 进行中
+### 完成状态: ✅ 已完成并推送
 
 ---
 
-## 迭代计划
+## v0.5.0 - 2026-03-21
 
 ### Iteration 5: 项目完善
-目标: 完善项目文档
 
-任务:
+新增功能:
 - [ ] README.md
 - [ ] 项目说明文档
+- [ ] 配置示例
+
+### 状态: 🔄 进行中
