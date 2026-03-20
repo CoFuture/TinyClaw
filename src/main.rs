@@ -4,6 +4,7 @@
 
 use parking_lot::RwLock;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::signal;
 use tokio::sync::broadcast;
 use tracing::{error, info};
@@ -25,6 +26,9 @@ use http::routes::{create_router, HttpState};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Record start time
+    let start_time = Instant::now();
+    
     // Initialize logging
     let log_dir = logging::default_log_dir();
     if let Err(e) = logging::init_logging(log_dir) {
@@ -58,12 +62,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         shutdown_tx.clone(),
     );
 
-    // Create HTTP state
+    // Create HTTP state with start time
     let http_state = Arc::new(HttpState {
         config: config.clone(),
         session_manager: session_manager.clone(),
         agent: agent.clone(),
         shutdown_tx: shutdown_tx.clone(),
+        start_time,
     });
 
     // Create the main session

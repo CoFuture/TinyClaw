@@ -11,7 +11,9 @@ use axum::{
     Router,
 };
 use parking_lot::RwLock;
+use serde::Serialize;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::broadcast;
 use tracing::info;
 
@@ -21,32 +23,62 @@ pub struct HttpState {
     pub session_manager: Arc<SessionManager>,
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
+    pub start_time: Instant,
 }
 
 /// Health check response
-#[derive(serde::Serialize)]
+#[derive(Serialize)]
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
     pub sessions: usize,
+    pub uptime_seconds: u64,
+    pub memory_usage: Option<MemoryInfo>,
+}
+
+/// Memory info
+#[derive(Serialize)]
+pub struct MemoryInfo {
+    pub resident_set_kb: u64,
 }
 
 /// Status response
-#[derive(serde::Serialize)]
+#[derive(Serialize)]
 pub struct StatusResponse {
     pub version: String,
     pub model: String,
     pub sessions: usize,
-    pub uptime: u64,
+    pub uptime_seconds: u64,
+    pub gateway: GatewayStatus,
+    pub tools: ToolsStatus,
+}
+
+/// Gateway status
+#[derive(Serialize)]
+pub struct GatewayStatus {
+    pub bind_address: String,
+    pub verbose: bool,
+}
+
+/// Tools status
+#[derive(Serialize)]
+pub struct ToolsStatus {
+    pub exec_enabled: bool,
 }
 
 /// Health check handler
 async fn health(State(state): State<Arc<HttpState>>) -> Json<HealthResponse> {
     let sessions = state.session_manager.list().len();
+    let uptime = state.start_time.elapsed().as_secs();
+    
+    let memory = get_memory_info();
+    
     Json(HealthResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         sessions,
+        uptime_seconds: uptime,
+        memory_usage: memory,
     })
 }
 
@@ -54,12 +86,20 @@ async fn health(State(state): State<Arc<HttpState>>) -> Json<HealthResponse> {
 async fn status(State(state): State<Arc<HttpState>>) -> Json<StatusResponse> {
     let config = state.config.read();
     let sessions = state.session_manager.list().len();
+    let uptime = state.start_time.elapsed().as_secs();
     
     Json(StatusResponse {
         version: env!("CARGO_PKG_VERSION").to_string(),
         model: config.agent.model.clone(),
         sessions,
-        uptime: 0, // TODO: Track uptime
+        uptime_seconds: uptime,
+        gateway: GatewayStatus {
+            bind_address: config.gateway.bind.clone(),
+            verbose: config.gateway.verbose,
+        },
+        tools: ToolsStatus {
+            exec_enabled: config.tools.exec_enabled,
+        },
     })
 }
 
@@ -113,6 +153,45 @@ async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::
         .collect();
 
     Json(serde_json::json!({ "sessions": session_infos }))
+}
+
+/// Get memory info (Linux/macOS)
+fn get_memory_info() -> Option<MemoryInfo> {
+    #[cfg(unix)]
+    {
+        use std::fs;
+        
+        // Try to read from /proc/self/status on Linux
+        if let Ok(content) = fs::read_to_string("/proc/self/status") {
+            for line in content.lines() {
+                if line.starts_with("VmRSS:") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        if let Ok(rss) = parts[1].parse::<u64>() {
+                            return Some(MemoryInfo { resident_set_kb: rss });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback for macOS
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, use ps command
+            if let Ok(output) = std::process::Command::new("ps")
+                .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+                .output()
+            {
+                let rss = String::from_utf8_lossy(&output.stdout);
+                if let Ok(rss_kb) = rss.trim().parse::<u64>() {
+                    return Some(MemoryInfo { resident_set_kb: rss_kb });
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 /// Create the router
