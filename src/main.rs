@@ -66,6 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_state = Arc::new(HttpState {
         config: config.clone(),
         session_manager: session_manager.clone(),
+        history_manager: history_manager.clone(),
         agent: agent.clone(),
         shutdown_tx: shutdown_tx.clone(),
         start_time,

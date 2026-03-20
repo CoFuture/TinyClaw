@@ -22,6 +22,7 @@ use tracing::info;
 pub struct HttpState {
     pub config: Arc<RwLock<Config>>,
     pub session_manager: Arc<SessionManager>,
+    pub history_manager: Arc<crate::gateway::history::HistoryManager>,
     #[allow(dead_code)]
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
@@ -208,6 +209,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/config", axum::routing::patch(config_patch))
         .route("/api/shutdown", axum::routing::post(shutdown))
         .route("/api/sessions", get(sessions_list))
+        .route("/api/sessions/:id/messages", get(session_messages))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
 }
@@ -215,4 +217,27 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
 /// Root path redirect to admin
 async fn root_redirect() -> axum::response::Redirect {
     axum::response::Redirect::to("/admin/admin.html")
+}
+
+/// Session messages handler
+async fn session_messages(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let messages = if let Some(history) = state.history_manager.get(&session_id) {
+        let history = history.read();
+        history.messages.iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": format!("{:?}", m.role).to_lowercase(),
+                    "content": m.content,
+                    "timestamp": m.timestamp.to_rfc3339(),
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Json(serde_json::json!({ "messages": messages, "sessionId": session_id }))
 }

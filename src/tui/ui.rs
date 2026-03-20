@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph, Row, Table, Tabs},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Paragraph, Row, Table, Tabs, Wrap},
     Frame,
 };
 use crate::tui::app::{App, VERSION};
@@ -13,13 +13,13 @@ use crate::tui::app::{App, VERSION};
 pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)].as_ref())
         .split(f.area());
 
     // Draw title bar with tabs
     let titles = vec!["系统状态", "会话管理", "配置"];
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).title("TinyClaw TUI"))
+        .block(Block::default().borders(Borders::ALL).title(format!("TinyClaw TUI v{}", VERSION)))
         .select(app.current_tab)
         .style(Style::default().fg(Color::Cyan));
     f.render_widget(tabs, chunks[0]);
@@ -33,11 +33,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 
     // Draw help bar
-    let help = Paragraph::new(" [Tab/1-3] 切换标签 | [q/ESC] 退出 ")
+    let help_text = if app.current_tab == 1 {
+        if app.show_details {
+            " [Esc] 关闭详情 | [q] 退出 "
+        } else {
+            " [↑/↓] 选择会话 | [Enter] 查看详情 | [Tab/1-3] 切换标签 | [q/ESC] 退出 "
+        }
+    } else {
+        " [Tab/1-3] 切换标签 | [q/ESC] 退出 "
+    };
+    let help = Paragraph::new(help_text)
         .style(Style::default().fg(Color::DarkGray))
         .block(Block::default().borders(Borders::ALL));
-    let help_rect = Rect::new(chunks[1].x, chunks[1].y + chunks[1].height - 3, chunks[1].width, 3);
-    f.render_widget(help, help_rect);
+    f.render_widget(help, chunks[2]);
 }
 
 /// Draw system status tab
@@ -90,34 +98,53 @@ fn draw_status_tab(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(status, chunks[4]);
 }
 
-/// Draw sessions tab
+/// Draw sessions tab with interactive selection
 fn draw_sessions_tab(f: &mut Frame, app: &mut App, area: Rect) {
     let sessions = app.session_manager.list();
 
+    if app.show_details {
+        // Show session details
+        draw_session_details(f, app, area, &sessions);
+        return;
+    }
+
     if sessions.is_empty() {
-        let empty = Paragraph::new("暂无会话")
+        let empty = Paragraph::new("暂无会话\n\n按 [q] 退出")
             .style(Style::default().fg(Color::DarkGray))
             .block(Block::default().borders(Borders::ALL).title("会话列表"));
         f.render_widget(empty, area);
         return;
     }
 
+    // Build table with selection highlight
+    let header = Row::new(vec!["ID", "标签", "类型", "创建时间"])
+        .style(Style::default().fg(Color::Cyan));
+    
     let rows: Vec<Row> = sessions
         .iter()
-        .map(|s: &Arc<parking_lot::RwLock<crate::gateway::session::Session>>| {
+        .enumerate()
+        .map(|(i, s)| {
             let session = s.read();
+            let style = if i == app.selected_session {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
             Row::new(vec![
-                session.id[..8].to_string(),
+                session.id[..8.min(session.id.len())].to_string(),
                 session.label.clone().unwrap_or_else(|| "-".to_string()),
                 format!("{:?}", session.kind),
                 session.created_at.format("%H:%M:%S").to_string(),
-            ])
+            ]).style(style)
         })
         .collect();
 
     let table = Table::new(rows, [Constraint::Length(10), Constraint::Length(20), Constraint::Length(15), Constraint::Length(12)])
-        .block(Block::default().borders(Borders::ALL).title("会话列表"))
-        .header(Row::new(vec!["ID", "标签", "类型", "创建时间"]).style(Style::default().fg(Color::Cyan)))
+        .block(Block::default().borders(Borders::ALL).title("会话列表 (↑/↓ 选择, Enter 查看)"))
+        .header(header)
         .widths([
             Constraint::Length(10),
             Constraint::Length(20),
@@ -126,6 +153,65 @@ fn draw_sessions_tab(f: &mut Frame, app: &mut App, area: Rect) {
         ]);
 
     f.render_widget(table, area);
+}
+
+/// Draw session details panel
+fn draw_session_details(
+    f: &mut Frame,
+    app: &mut App,
+    area: Rect,
+    sessions: &[Arc<parking_lot::RwLock<crate::gateway::session::Session>>],
+) {
+    if sessions.is_empty() || app.selected_session >= sessions.len() {
+        return;
+    }
+
+    let session = sessions[app.selected_session].read();
+    
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(8), Constraint::Min(0)].as_ref())
+        .split(area);
+
+    // Session info
+    let info_text = format!(
+        "会话 ID: {}\n标签: {}\n类型: {:?}\n创建时间: {}\n最后活跃: {}",
+        session.id,
+        session.label.as_deref().unwrap_or("-"),
+        session.kind,
+        session.created_at.format("%Y-%m-%d %H:%M:%S"),
+        session.last_active.format("%Y-%m-%d %H:%M:%S"),
+    );
+    let info = Paragraph::new(info_text)
+        .style(Style::default().fg(Color::White))
+        .block(Block::default().borders(Borders::ALL).title("会话详情"));
+    f.render_widget(info, chunks[0]);
+
+    // Messages (if available)
+    let messages_text = if let Some(history_manager) = &app.history_manager {
+        if let Some(history) = history_manager.get(&session.id) {
+            let history = history.read();
+            if history.messages.is_empty() {
+                "暂无消息".to_string()
+            } else {
+                history.messages
+                    .iter()
+                    .map(|m| format!("[{:?}] {}", m.role, m.content))
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            }
+        } else {
+            "暂无消息".to_string()
+        }
+    } else {
+        "消息预览需要 HistoryManager".to_string()
+    };
+
+    let messages = Paragraph::new(messages_text)
+        .style(Style::default().fg(Color::White))
+        .block(Block::default().borders(Borders::ALL).title("消息历史"))
+        .wrap(Wrap { trim: true });
+    f.render_widget(messages, chunks[1]);
 }
 
 /// Draw config tab
@@ -141,13 +227,17 @@ fn draw_config_tab(f: &mut Frame, app: &mut App, area: Rect) {
 Agent 配置:
   模型: {}
   API 地址: {}
-  工作区: {}"#,
+  工作区: {}
+
+工具配置:
+  Exec 工具: {}"#,
         config.gateway.bind,
         if config.gateway.verbose { "启用" } else { "禁用" },
         config.gateway.data_dir.as_deref().unwrap_or("-"),
         config.agent.model,
         config.agent.api_base,
         config.agent.workspace.as_deref().unwrap_or("-"),
+        if config.tools.exec_enabled { "启用" } else { "禁用" },
     );
 
     let config_paragraph = Paragraph::new(config_text)
