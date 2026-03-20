@@ -120,9 +120,29 @@
 
 ---
 
+## v1.0.0 - 2026-03-21
+
+### Iteration 10: 多模型支持
+
+新增功能:
+- [x] ModelProvider 枚举 (Anthropic, OpenAI, Ollama)
+- [x] ModelConfig 模型配置
+- [x] AgentConfig 支持 provider 字段
+- [x] 多模型客户端实现
+  - Anthropic API 支持
+  - OpenAI API 支持
+  - Ollama 本地模型支持
+- [x] 自动模型类型检测 (根据模型名称)
+- [x] 单元测试覆盖
+
+### 完成状态: ✅ 已完成并推送
+
+---
+
 ## 迭代计划
 
-### v1.0.0 待实现
-- 多模型支持
+### v1.1.0 待实现
 - 插件系统
 - 高级会话管理
+- 认证与授权
+- 消息模板

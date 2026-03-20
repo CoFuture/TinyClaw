@@ -2,6 +2,66 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Supported model providers
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelProvider {
+    #[default]
+    Anthropic,
+    OpenAI,
+    Ollama,
+}
+
+impl ModelProvider {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ModelProvider::Anthropic => "Anthropic",
+            ModelProvider::OpenAI => "OpenAI",
+            ModelProvider::Ollama => "Ollama",
+        }
+    }
+}
+
+/// Model configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    /// Model provider
+    #[serde(default)]
+    pub provider: ModelProvider,
+
+    /// Model name
+    #[serde(default)]
+    pub name: String,
+
+    /// API key (for cloud providers)
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// API base URL
+    #[serde(default)]
+    pub base_url: Option<String>,
+
+    /// Max tokens for response
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        Self {
+            provider: ModelProvider::Anthropic,
+            name: default_model(),
+            api_key: None,
+            base_url: Some(default_api_base()),
+            max_tokens: default_max_tokens(),
+        }
+    }
+}
+
+fn default_max_tokens() -> u32 {
+    1024
+}
+
 /// Main configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -16,6 +76,10 @@ pub struct Config {
     /// Tools configuration
     #[serde(default)]
     pub tools: ToolsConfig,
+
+    /// Models configuration (for multi-model support)
+    #[serde(default)]
+    pub models: Vec<ModelConfig>,
 }
 
 /// Gateway configuration
@@ -55,6 +119,10 @@ pub struct AgentConfig {
     #[serde(default = "default_model")]
     pub model: String,
 
+    /// Model provider
+    #[serde(default)]
+    pub provider: Option<ModelProvider>,
+
     /// Model API key
     #[serde(default)]
     pub api_key: Option<String>,
@@ -72,6 +140,7 @@ impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             model: default_model(),
+            provider: None,
             api_key: None,
             api_base: default_api_base(),
             workspace: None,
