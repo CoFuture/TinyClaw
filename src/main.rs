@@ -12,12 +12,14 @@ mod agent;
 mod common;
 mod config;
 mod gateway;
+mod http;
 
 use common::logging;
 use config::{load_config, Config};
 use gateway::messages::HandlerContext;
 use gateway::server;
 use gateway::session::SessionManager;
+use http::routes::{create_router, HttpState};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,31 +44,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
-    // Create handler context
-    let _ctx = HandlerContext::new(
+    // Create handler context for WebSocket
+    let _ws_ctx = HandlerContext::new(
         session_manager.clone(),
         config.clone(),
         agent.clone(),
         shutdown_tx.clone(),
     );
 
+    // Create HTTP state
+    let http_state = Arc::new(HttpState {
+        config: config.clone(),
+        session_manager: session_manager.clone(),
+        agent: agent.clone(),
+        shutdown_tx: shutdown_tx.clone(),
+    });
+
     // Create the main session
     session_manager.get_or_create_main();
     info!("Main session created");
 
-    // Spawn server
+    // Spawn WebSocket server
     let server_config = config.clone();
-    let server_ctx = HandlerContext::new(
-        session_manager,
+    let ws_ctx_clone = HandlerContext::new(
+        session_manager.clone(),
         config.clone(),
-        agent,
-        shutdown_tx,
+        agent.clone(),
+        shutdown_tx.clone(),
     );
     
-    let server_handle = tokio::spawn(async move {
-        if let Err(e) = server::start_server(server_config, server_ctx, shutdown_rx).await {
-            error!("Server error: {}", e);
+    let ws_handle = tokio::spawn(async move {
+        if let Err(e) = server::start_server(server_config, ws_ctx_clone, shutdown_rx).await {
+            error!("WebSocket server error: {}", e);
         }
+    });
+
+    // Spawn HTTP server
+    let http_port = 8080u16;
+    let http_addr = format!("0.0.0.0:{}", http_port);
+    
+    let http_state_clone = http_state.clone();
+    let http_handle = tokio::spawn(async move {
+        let router = create_router(http_state_clone);
+        let listener = tokio::net::TcpListener::bind(&http_addr).await.unwrap();
+        info!("HTTP server listening on http://{}", http_addr);
+        axum::serve(listener, router).await.unwrap();
     });
 
     // Wait for shutdown signal
@@ -74,9 +96,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ = signal::ctrl_c() => {
             info!("Received Ctrl+C, shutting down...");
         }
-        result = server_handle => {
+        result = ws_handle => {
             if let Err(e) = result {
-                error!("Server task failed: {}", e);
+                error!("WebSocket server task failed: {}", e);
+            }
+        }
+        result = http_handle => {
+            if let Err(e) = result {
+                error!("HTTP server task failed: {}", e);
             }
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "tiny_claw"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A minimal implementation of OpenClaw in Rust"
 authors = ["TinyClaw"]
@@ -24,3 +24,6 @@ tokio-retry = "0.3"
 reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
 parking_lot = "0.12"
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
