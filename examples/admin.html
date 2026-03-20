@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyClaw 管理界面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #eee;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 28px;
+            color: #00d9ff;
+        }
+        .version {
+            color: #888;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 {
+            font-size: 18px;
+            color: #00d9ff;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+        }
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-label {
+            color: #888;
+        }
+        .stat-value {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        .status-ok {
+            color: #00ff88;
+        }
+        .status-error {
+            color: #ff4757;
+        }
+        .btn {
+            background: #00d9ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+        .btn:hover {
+            background: #00b8d4;
+            transform: translateY(-2px);
+        }
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #ff6b81;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        th {
+            color: #888;
+            font-weight: normal;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .session-kind {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            background: rgba(0,217,255,0.2);
+            color: #00d9ff;
+        }
+        .refresh-info {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 TinyClaw 管理界面</h1>
+            <div class="version">版本: <span id="version">加载中...</span></div>
+        </header>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>📊 系统状态</h2>
+                <div class="stat">
+                    <span class="stat-label">状态</span>
+                    <span class="stat-value status-ok" id="status">运行中</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">运行时间</span>
+                    <span class="stat-value" id="uptime">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">会话数</span>
+                    <span class="stat-value" id="sessions">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">当前模型</span>
+                    <span class="stat-value" id="model">-</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>⚙️ 网关配置</h2>
+                <div class="stat">
+                    <span class="stat-label">绑定地址</span>
+                    <span class="stat-value" id="bindAddress">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">调试模式</span>
+                    <span class="stat-value" id="verbose">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Exec 工具</span>
+                    <span class="stat-value" id="execEnabled">-</span>
+                </div>
+                <button class="btn" onclick="refreshData()">🔄 刷新数据</button>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 20px;">
+            <h2>📋 会话列表</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>标签</th>
+                        <th>类型</th>
+                        <th>创建时间</th>
+                        <th>最后活跃</th>
+                    </tr>
+                </thead>
+                <tbody id="sessionList">
+                    <tr><td colspan="5">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="refresh-info">
+            自动刷新间隔: 30秒 | <span id="lastUpdate">最后更新: -</span>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '';
+        
+        async function fetchJSON(url) {
+            const response = await fetch(url);
+            return response.json();
+        }
+        
+        async function refreshData() {
+            try {
+                // Fetch status
+                const status = await fetchJSON(API_BASE + '/api/status');
+                document.getElementById('version').textContent = status.version;
+                document.getElementById('uptime').textContent = formatUptime(status.uptime_seconds);
+                document.getElementById('sessions').textContent = status.sessions;
+                document.getElementById('model').textContent = status.model;
+                document.getElementById('bindAddress').textContent = status.gateway.bind_address;
+                document.getElementById('verbose').textContent = status.gateway.verbose ? '启用' : '禁用';
+                document.getElementById('execEnabled').textContent = status.tools.exec_enabled ? '启用' : '禁用';
+                
+                // Fetch sessions
+                const sessions = await fetchJSON(API_BASE + '/api/sessions');
+                const tbody = document.getElementById('sessionList');
+                if (sessions.sessions && sessions.sessions.length > 0) {
+                    tbody.innerHTML = sessions.sessions.map(s => `
+                        <tr>
+                            <td><code>${s.id.substring(0, 8)}...</code></td>
+                            <td>${s.label || '-'}</td>
+                            <td><span class="session-kind">${s.kind}</span></td>
+                            <td>${new Date(s.createdAt).toLocaleString('zh-CN')}</td>
+                            <td>${new Date(s.lastActive).toLocaleString('zh-CN')}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5">暂无会话</td></tr>';
+                }
+                
+                document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
+                
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                document.getElementById('status').textContent = '错误';
+                document.getElementById('status').className = 'stat-value status-error';
+            }
+        }
+        
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            if (hours > 0) {
+                return `${hours}小时 ${minutes}分钟 ${secs}秒`;
+            } else if (minutes > 0) {
+                return `${minutes}分钟 ${secs}秒`;
+            }
+            return `${secs}秒`;
+        }
+        
+        // Initial load
+        refreshData();
+        
+        // Auto refresh
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>

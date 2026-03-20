@@ -96,11 +96,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_port = 8080u16;
     let http_addr = format!("0.0.0.0:{}", http_port);
     
+    // Get static files directory
+    let static_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("examples");
+    
     let http_state_clone = http_state.clone();
     let http_handle = tokio::spawn(async move {
-        let router = create_router(http_state_clone);
+        let router = create_router(http_state_clone, static_dir.to_str().unwrap_or("examples"));
         let listener = tokio::net::TcpListener::bind(&http_addr).await.unwrap();
         info!("HTTP server listening on http://{}", http_addr);
+        info!("Admin UI available at http://{}/admin.html", http_addr);
         axum::serve(listener, router).await.unwrap();
     });
 

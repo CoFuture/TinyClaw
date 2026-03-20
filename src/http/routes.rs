@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
+use tower_http::services::ServeDir;
 use tracing::info;
 
 /// HTTP Server state
@@ -195,14 +196,23 @@ fn get_memory_info() -> Option<MemoryInfo> {
     None
 }
 
-/// Create the router
-pub fn create_router(state: Arc<HttpState>) -> Router {
+/// Create the router with static files and API routes
+pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
     Router::new()
+        .nest_service("/admin", ServeDir::new(static_dir))
+        .route("/", get(root_redirect))
+        .route("/admin.html", get(|| async { "/admin/admin.html" }))
         .route("/health", get(health))
         .route("/api/status", get(status))
         .route("/api/config", get(config_get))
         .route("/api/config", axum::routing::patch(config_patch))
         .route("/api/shutdown", axum::routing::post(shutdown))
         .route("/api/sessions", get(sessions_list))
+        .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
+}
+
+/// Root path redirect to admin
+async fn root_redirect() -> axum::response::Redirect {
+    axum::response::Redirect::to("/admin/admin.html")
 }

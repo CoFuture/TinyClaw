@@ -1,6 +1,6 @@
 [package]
 name = "tiny_claw"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "A minimal implementation of OpenClaw in Rust"
 authors = ["TinyClaw"]
@@ -27,4 +27,6 @@ parking_lot = "0.12"
 lazy_static = "1.4"
 axum = "0.8"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+ratatui = "0.28"
+crossterm = "0.28"
