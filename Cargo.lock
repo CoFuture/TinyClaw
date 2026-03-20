@@ -1636,6 +1636,7 @@ dependencies = [
  "chrono",
  "dirs",
  "futures-util",
+ "lazy_static",
  "parking_lot",
  "reqwest",
  "serde",

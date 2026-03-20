@@ -1,5 +1,6 @@
 //! Message handlers
 
+use crate::agent::tools::ToolExecutor;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -11,6 +12,10 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info};
+
+lazy_static::lazy_static! {
+    static ref TOOL_EXECUTOR: ToolExecutor = ToolExecutor::new();
+}
 
 /// Message handler context
 pub struct HandlerContext {
@@ -61,6 +66,8 @@ pub async fn handle_request(
         methods::SESSIONS_HISTORY => handle_sessions_history(ctx, id_clone.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, id_clone.clone(), params).await,
         methods::EXEC => handle_exec(ctx, id_clone.clone(), params).await,
+        methods::TOOLS_LIST => handle_tools_list(id_clone.clone()).await,
+        methods::TOOL_EXECUTE => handle_tool_execute(ctx, id_clone.clone(), params).await,
         methods::STATUS => handle_status(ctx, id_clone.clone()).await,
         methods::SHUTDOWN => handle_shutdown(ctx, id_clone.clone()).await,
         
@@ -243,6 +250,36 @@ async fn handle_exec(
         "stdout": String::from_utf8_lossy(&output.stdout),
         "stderr": String::from_utf8_lossy(&output.stderr),
         "exitCode": output.status.code().unwrap_or(-1),
+    }))
+}
+
+/// Handle tools.list
+async fn handle_tools_list(_id: Option<String>) -> Result<serde_json::Value> {
+    let tools = TOOL_EXECUTOR.list_tools();
+    Ok(serde_json::json!({ "tools": tools }))
+}
+
+/// Handle tools.execute
+async fn handle_tool_execute(
+    _ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let tool_name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("tool name required".to_string()))?;
+
+    let tool_input = params.get("input").cloned().unwrap_or(serde_json::Value::Null);
+
+    info!("Executing tool: {} with input: {:?}", tool_name, tool_input);
+
+    let result = TOOL_EXECUTOR.execute(tool_name, tool_input).await;
+
+    Ok(serde_json::json!({
+        "success": result.success,
+        "output": result.output,
+        "error": result.error
     }))
 }
 

@@ -158,6 +158,10 @@ pub mod methods {
     pub const SESSIONS_HISTORY: &str = "sessions.history";
     /// Exec command
     pub const EXEC: &str = "exec";
+    /// Tool execute
+    pub const TOOL_EXECUTE: &str = "tools.execute";
+    /// Tool list
+    pub const TOOLS_LIST: &str = "tools.list";
     /// Config get
     pub const CONFIG_GET: &str = "config.get";
     /// Config patch
