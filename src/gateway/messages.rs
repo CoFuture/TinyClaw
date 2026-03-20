@@ -2,6 +2,8 @@
 
 use crate::common::{Error, Result};
 use crate::config::Config;
+use crate::gateway::events::{Event, EventEmitter};
+use crate::gateway::history::HistoryManager;
 use crate::gateway::protocol::*;
 use crate::gateway::session::SessionManager;
 use crate::agent::Agent;
@@ -13,6 +15,8 @@ use tracing::{debug, error, info};
 /// Message handler context
 pub struct HandlerContext {
     pub session_manager: Arc<SessionManager>,
+    pub history_manager: Arc<HistoryManager>,
+    pub event_emitter: Arc<EventEmitter>,
     pub config: Arc<RwLock<Config>>,
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
@@ -21,12 +25,16 @@ pub struct HandlerContext {
 impl HandlerContext {
     pub fn new(
         session_manager: Arc<SessionManager>,
+        history_manager: Arc<HistoryManager>,
+        event_emitter: Arc<EventEmitter>,
         config: Arc<RwLock<Config>>,
         agent: Arc<Agent>,
         shutdown_tx: broadcast::Sender<()>,
     ) -> Self {
         Self {
             session_manager,
+            history_manager,
+            event_emitter,
             config,
             agent,
             shutdown_tx,
@@ -50,6 +58,7 @@ pub async fn handle_request(
         methods::PING => handle_ping(id_clone.clone()).await,
         methods::SESSIONS_LIST => handle_sessions_list(ctx, id_clone.clone(), params).await,
         methods::SESSIONS_SEND => handle_sessions_send(ctx, id_clone.clone(), params).await,
+        methods::SESSIONS_HISTORY => handle_sessions_history(ctx, id_clone.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, id_clone.clone(), params).await,
         methods::EXEC => handle_exec(ctx, id_clone.clone(), params).await,
         methods::STATUS => handle_status(ctx, id_clone.clone()).await,
@@ -106,6 +115,31 @@ async fn handle_sessions_list(
     Ok(serde_json::json!({ "sessions": session_infos }))
 }
 
+/// Handle sessions.history
+async fn handle_sessions_history(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+
+    if let Some(history) = ctx.history_manager.get(session_key) {
+        let history = history.read();
+        Ok(serde_json::json!({
+            "sessionId": history.session_id,
+            "messages": history.messages,
+        }))
+    } else {
+        Ok(serde_json::json!({
+            "sessionId": session_key,
+            "messages": [],
+        }))
+    }
+}
+
 /// Handle sessions.send
 async fn handle_sessions_send(
     ctx: &HandlerContext,
@@ -123,6 +157,12 @@ async fn handle_sessions_send(
         .ok_or_else(|| Error::Protocol("message required".to_string()))?;
 
     info!("Session {} received message: {}", session_key, message);
+    
+    // Add to history
+    ctx.history_manager.add_message(
+        session_key,
+        crate::gateway::history::Message::user(message),
+    );
     
     // Forward to agent
     ctx.agent.send_message(session_key, message).await?;
@@ -148,8 +188,26 @@ async fn handle_agent_turn(
 
     info!("Agent turn: session={}, message={}", session_key, message);
 
+    // Add user message to history
+    ctx.history_manager.add_message(
+        session_key,
+        crate::gateway::history::Message::user(message),
+    );
+
     // Send to agent and get response
     let response: String = ctx.agent.send_message(session_key, message).await?;
+
+    // Add assistant response to history
+    ctx.history_manager.add_message(
+        session_key,
+        crate::gateway::history::Message::assistant(&response),
+    );
+
+    // Emit event
+    ctx.event_emitter.emit(Event::AssistantText {
+        session_id: session_key.to_string(),
+        text: response.clone(),
+    });
 
     Ok(serde_json::json!({
         "text": response

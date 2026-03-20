@@ -33,6 +33,8 @@ pub async fn start_server(
                     Ok((stream, _addr)) => {
                         let ctx = crate::gateway::messages::HandlerContext::new(
                             ctx.session_manager.clone(),
+                            ctx.history_manager.clone(),
+                            ctx.event_emitter.clone(),
                             ctx.config.clone(),
                             ctx.agent.clone(),
                             ctx.shutdown_tx.clone(),

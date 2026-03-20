@@ -16,6 +16,8 @@ mod http;
 
 use common::logging;
 use config::{load_config, Config};
+use gateway::events::EventEmitter;
+use gateway::history::HistoryManager;
 use gateway::messages::HandlerContext;
 use gateway::server;
 use gateway::session::SessionManager;
@@ -37,6 +39,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create shared components
     let config = Arc::new(RwLock::new(config));
     let session_manager = Arc::new(SessionManager::new());
+    let history_manager = Arc::new(HistoryManager::new());
+    let event_emitter = Arc::new(EventEmitter::new());
     let agent = Arc::new(agent::Agent::new(Arc::new(RwLock::new(
         config.read().agent.clone(),
     ))));
@@ -47,6 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create handler context for WebSocket
     let _ws_ctx = HandlerContext::new(
         session_manager.clone(),
+        history_manager.clone(),
+        event_emitter.clone(),
         config.clone(),
         agent.clone(),
         shutdown_tx.clone(),
@@ -68,6 +74,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_config = config.clone();
     let ws_ctx_clone = HandlerContext::new(
         session_manager.clone(),
+        history_manager.clone(),
+        event_emitter.clone(),
         config.clone(),
         agent.clone(),
         shutdown_tx.clone(),
