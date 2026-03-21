@@ -468,6 +468,32 @@
 
 ---
 
+## v2.1.0 - 2026-03-21
+
+### Iteration 24: 增强文件工具 + 路径规范化
+
+**目标**: 增强文件操作工具，支持路径规范化和更多文件元数据
+
+新增功能:
+- [x] 路径规范化 - 扩展 `~` 到家目录，支持 `$VAR` 和 `${VAR}` 环境变量
+- [x] `mkdir` 工具 - 创建目录，支持 parents 选项
+- [x] `stat_file` 工具 - 获取文件元数据 (类型、大小、修改时间、创建时间、权限)
+- [x] 增强 `list_dir` - 显示文件大小、修改时间，目录排序 (目录优先)
+
+工具改进:
+- [x] `read_file` - 支持 ~ 和环境变量路径
+- [x] `write_file` - 支持 ~ 和环境变量路径
+- [x] `sed_file` - 支持 ~ 和环境变量路径
+- [x] 新增 `format_size` 辅助函数 (B/K/M/G 格式)
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 98 个测试通过 (+10 新测试)
+
+工具总数: 11 个 (exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file)
+
+---
+
 ## v2.0.0 待规划 (完整功能)
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
