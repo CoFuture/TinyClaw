@@ -1,5 +1,6 @@
 //! AI Model client with multi-provider support
 
+use crate::agent::retry::{with_retry, RetrySettings};
 use crate::agent::tools::{Tool, ToolExecutor};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
@@ -9,7 +10,7 @@ use std::sync::Arc;
 use tracing::{debug, error, info};
 
 /// Anthropic API request
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[allow(dead_code)]
 struct AnthropicRequest {
     model: String,
@@ -56,7 +57,7 @@ struct Usage {
 }
 
 /// OpenAI API request
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[allow(dead_code)]
 struct OpenAIRequest {
     model: String,
@@ -96,7 +97,7 @@ struct OpenAIUsage {
 }
 
 /// Ollama API request
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct OllamaRequest {
     model: String,
     prompt: String,
@@ -113,6 +114,7 @@ struct OllamaResponse {
 /// Agent client for AI model interaction
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
+    retry_config: RetrySettings,
     http_client: reqwest::Client,
     tool_executor: Arc<ToolExecutor>,
 }
@@ -121,9 +123,27 @@ impl Agent {
     pub fn new(config: Arc<RwLock<AgentConfig>>) -> Self {
         Self {
             config,
+            retry_config: RetrySettings::default(),
             http_client: reqwest::Client::new(),
             tool_executor: Arc::new(ToolExecutor::new()),
         }
+    }
+
+    /// Create Agent with custom retry settings
+    #[allow(dead_code)]
+    pub fn with_retry(config: Arc<RwLock<AgentConfig>>, retry: RetrySettings) -> Self {
+        Self {
+            config,
+            retry_config: retry,
+            http_client: reqwest::Client::new(),
+            tool_executor: Arc::new(ToolExecutor::new()),
+        }
+    }
+
+    /// Update retry settings
+    #[allow(dead_code)]
+    pub fn set_retry_settings(&mut self, retry: RetrySettings) {
+        self.retry_config = retry;
     }
 
     /// Get list of available tools
@@ -308,26 +328,35 @@ impl Agent {
             "tools": anthropic_tools
         });
 
-        // Send request
-        let response = self
-            .http_client
-            .post(format!("{}/v1/messages", api_base))
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        // Use retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let result = with_retry(&self.retry_config, || {
+            let http_client = http_client.clone();
+            let api_base = api_base.clone();
+            let api_key = api_key.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/v1/messages", api_base))
+                    .header("x-api-key", api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        if !result.status().is_success() {
+            let status = result.status();
+            let body = result.text().await.unwrap_or_default();
             error!("API error: {} - {}", status, body);
             return Err(Error::Agent(format!("API error: {} - {}", status, body)));
         }
 
         // Parse response as JSON value
-        let response: serde_json::Value = response.json().await?;
+        let response: serde_json::Value = result.json().await?;
 
         debug!("Anthropic tool response received");
 
@@ -380,23 +409,38 @@ impl Agent {
             "v1"
         };
 
-        let response = self
-            .http_client
-            .post(format!("{}/{}/chat/completions", api_base, api_version))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        let api_base_clone = api_base.clone();
+        let api_version_clone = api_version.to_string();
+        let api_key_clone = api_key.clone();
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        // Use retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let result = with_retry(&self.retry_config, || {
+            let http_client = http_client.clone();
+            let api_base_clone = api_base_clone.clone();
+            let api_version_clone = api_version_clone.clone();
+            let api_key_clone = api_key_clone.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/{}/chat/completions", api_base_clone, api_version_clone))
+                    .header("Authorization", format!("Bearer {}", api_key_clone))
+                    .header("Content-Type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        if !result.status().is_success() {
+            let status = result.status();
+            let body = result.text().await.unwrap_or_default();
             error!("API error: {} - {}", status, body);
             return Err(Error::Agent(format!("API error: {} - {}", status, body)));
         }
 
-        let response: serde_json::Value = response.json().await?;
+        let response: serde_json::Value = result.json().await?;
 
         debug!("OpenAI tool response received");
 
@@ -428,16 +472,27 @@ impl Agent {
             system: Some("You are TinyClaw, a helpful AI assistant.".to_string()),
         };
 
-        // Send request
-        let response = self
-            .http_client
-            .post(format!("{}/v1/messages", api_base))
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        // Use retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let api_base_clone = api_base.clone();
+        let api_key_clone = api_key.clone();
+        let response = with_retry(&self.retry_config, || {
+            let http_client = http_client.clone();
+            let api_base_clone = api_base_clone.clone();
+            let api_key_clone = api_key_clone.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/v1/messages", api_base_clone))
+                    .header("x-api-key", api_key_clone)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -491,23 +546,38 @@ impl Agent {
             "v1"
         };
 
-        let response = self
-            .http_client
-            .post(format!("{}/{}/chat/completions", api_base, api_version))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        let api_base_clone = api_base.clone();
+        let api_version_clone = api_version.to_string();
+        let api_key_clone = api_key.clone();
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        // Use retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let result = with_retry(&self.retry_config, || {
+            let http_client = http_client.clone();
+            let api_base_clone = api_base_clone.clone();
+            let api_version_clone = api_version_clone.clone();
+            let api_key_clone = api_key_clone.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/{}/chat/completions", api_base_clone, api_version_clone))
+                    .header("Authorization", format!("Bearer {}", api_key_clone))
+                    .header("Content-Type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        if !result.status().is_success() {
+            let status = result.status();
+            let body = result.text().await.unwrap_or_default();
             error!("API error: {} - {}", status, body);
             return Err(Error::Agent(format!("API error: {} - {}", status, body)));
         }
 
-        let response: OpenAIResponse = response.json().await?;
+        let response: OpenAIResponse = result.json().await?;
 
         let text = response
             .choices
@@ -540,22 +610,33 @@ impl Agent {
             stream: false,
         };
 
-        let response = self
-            .http_client
-            .post(format!("{}/api/generate", base_url))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        let base_url_clone = base_url.clone();
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        // Use retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let result = with_retry(&self.retry_config, || {
+            let http_client = http_client.clone();
+            let base_url_clone = base_url_clone.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/api/generate", base_url_clone))
+                    .header("Content-Type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        if !result.status().is_success() {
+            let status = result.status();
+            let body = result.text().await.unwrap_or_default();
             error!("API error: {} - {}", status, body);
             return Err(Error::Agent(format!("API error: {} - {}", status, body)));
         }
 
-        let response: OllamaResponse = response.json().await?;
+        let response: OllamaResponse = result.json().await?;
 
         debug!("Ollama response: {}", response.response);
 

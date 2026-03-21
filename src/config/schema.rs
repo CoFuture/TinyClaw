@@ -81,6 +81,14 @@ pub struct Config {
     /// Models configuration (for multi-model support)
     #[serde(default)]
     pub models: Vec<ModelConfig>,
+
+    /// Retry configuration for API calls
+    #[serde(default)]
+    pub retry: RetryConfig,
+
+    /// Hot reload configuration
+    #[serde(default)]
+    pub hot_reload: HotReloadConfig,
 }
 
 /// Gateway configuration
@@ -167,6 +175,79 @@ pub struct ToolsConfig {
 
 fn default_true() -> bool {
     true
+}
+
+/// Retry configuration for API calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryConfig {
+    /// Maximum number of retries
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+
+    /// Initial delay in milliseconds
+    #[serde(default = "default_initial_delay_ms")]
+    pub initial_delay_ms: u64,
+
+    /// Maximum delay in milliseconds
+    #[serde(default = "default_max_delay_ms")]
+    pub max_delay_ms: u64,
+
+    /// Enable exponential backoff
+    #[serde(default = "default_true")]
+    pub exponential_backoff: bool,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            initial_delay_ms: 1000,
+            max_delay_ms: 30000,
+            exponential_backoff: true,
+        }
+    }
+}
+
+fn default_max_retries() -> u32 {
+    3
+}
+
+fn default_initial_delay_ms() -> u64 {
+    1000
+}
+
+fn default_max_delay_ms() -> u64 {
+    30000
+}
+
+/// Hot reload configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotReloadConfig {
+    /// Enable config hot reload on file change
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Config file path to watch (default: ~/.config/tiny_claw/config.json)
+    #[serde(default)]
+    pub watch_path: Option<String>,
+
+    /// Poll interval in milliseconds (for file system events)
+    #[serde(default = "default_poll_interval_ms")]
+    pub poll_interval_ms: u64,
+}
+
+impl Default for HotReloadConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            watch_path: None,
+            poll_interval_ms: 5000,
+        }
+    }
+}
+
+fn default_poll_interval_ms() -> u64 {
+    5000
 }
 
 /// Load configuration from file

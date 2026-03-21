@@ -1,6 +1,6 @@
 //! HTTP routes
 
-use crate::config::Config;
+use crate::config::{Config, default_config_path};
 use crate::gateway::session::SessionManager;
 use crate::agent::Agent;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
-use tracing::info;
+use tracing::{info, error};
 use std::collections::HashMap;
 
 /// HTTP Server state
@@ -142,6 +142,66 @@ async fn config_patch(
     *config = new_config.clone();
     info!("Configuration updated");
     (StatusCode::OK, Json(config.clone()))
+}
+
+/// Config reload response
+#[derive(Serialize)]
+pub struct ConfigReloadResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Config reload handler - reloads config from disk
+async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json<ConfigReloadResponse>) {
+    // Try to find config file
+    let config_path = match default_config_path() {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ConfigReloadResponse {
+                    success: false,
+                    message: "Could not determine config path".to_string(),
+                }),
+            );
+        }
+    };
+
+    if !config_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ConfigReloadResponse {
+                success: false,
+                message: format!("Config file not found at {:?}", config_path),
+            }),
+        );
+    }
+
+    // Try to load new config
+    match crate::config::load_config(&config_path) {
+        Ok(new_config) => {
+            let mut config = state.config.write();
+            *config = new_config;
+            info!("Configuration reloaded from {:?}", config_path);
+            (
+                StatusCode::OK,
+                Json(ConfigReloadResponse {
+                    success: true,
+                    message: format!("Configuration reloaded from {:?}", config_path),
+                }),
+            )
+        }
+        Err(e) => {
+            error!("Failed to reload config: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ConfigReloadResponse {
+                    success: false,
+                    message: format!("Failed to reload config: {}", e),
+                }),
+            )
+        }
+    }
 }
 
 /// Shutdown handler
@@ -294,6 +354,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/ratelimit/{client_id}", get(rate_limit_check))
         .route("/api/config", get(config_get))
         .route("/api/config", axum::routing::patch(config_patch))
+        .route("/api/config/reload", axum::routing::post(config_reload))
         .route("/api/shutdown", axum::routing::post(shutdown))
         .route("/api/sessions", get(sessions_list))
         .route("/api/sessions/{id}/messages", get(session_messages))

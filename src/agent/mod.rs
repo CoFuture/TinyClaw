@@ -4,5 +4,6 @@ pub mod client;
 pub mod context;
 pub mod runtime;
 pub mod tools;
+pub mod retry;
 
 pub use client::Agent;
