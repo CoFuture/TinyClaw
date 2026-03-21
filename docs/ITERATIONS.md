@@ -234,7 +234,7 @@
 
 ### v1.5.0 - 2026-03-21
 
-### Iteration 15: 全链路 Agent 工具调用
+### Iteration 15: 全链路 Agent 工具调用 + 流式响应
 
 **目标**: 实现完整的对话 → Agent → 工具执行 → 结果返回 闭环
 
@@ -246,10 +246,13 @@
   - 循环直到模型返回最终文本
 - [x] 支持 Anthropic tool_use 格式
 - [x] 支持 OpenAI function_call 格式
-- [ ] 工具执行超时处理
-- [ ] 错误处理与重试机制
+- [x] 流式响应支持 (gateway/streaming.rs)
+  - StreamingEvent 事件类型 (chunk, tool_start, tool_result, end, error)
+  - StreamingResponse 流式响应句柄
+  - StreamingManager 并发流管理
+  - SSE (Server-Sent Events) 支持
 
-### 完成状态: ✅ 大部分完成 (需配置API Key测试)
+### 完成状态: ✅ 已完成
 
 ---
 
@@ -275,8 +278,9 @@
 
 ---
 
-## v1.7.0 待实现
-- 流式响应支持
+## v1.6.0 待实现
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
 - 高级认证 (OAuth, JWT)
+- 工具执行超时处理
+- 错误处理与重试机制
