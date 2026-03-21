@@ -30,6 +30,7 @@ use http::routes::{create_router, HttpState};
 use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use ratelimit::RateLimiter;
+use agent::{SkillRegistry, SessionSkillManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -102,11 +103,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metrics = Arc::new(MetricsCollector::new());
     let rate_limiter = Arc::new(RateLimiter::new());
 
+    // Create skill registry and session skill manager
+    let skill_registry = SkillRegistry::new();
+    let skill_manager = Arc::new(SessionSkillManager::new(skill_registry.clone()));
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
     // Create server state for graceful shutdown
     let server_state = server::ServerState::new(config.read().shutdown.timeout_secs);
+
+    // Create the main session and enable default skills
+    let main_session = session_manager.get_or_create_main();
+    let main_session_id = main_session.read().id.clone();
+    skill_manager.enable_defaults_for_session(&main_session_id);
+    info!("Main session created with default skills");
 
     // Create HTTP state with start time
     let http_state = Arc::new(HttpState {
@@ -119,11 +130,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metrics: metrics.clone(),
         rate_limiter: rate_limiter.clone(),
         server_state: server_state.clone(),
+        skill_registry,
+        skill_manager,
     });
-
-    // Create the main session
-    session_manager.get_or_create_main();
-    info!("Main session created");
 
     // Spawn WebSocket server
     let server_config = config.clone();

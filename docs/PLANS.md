@@ -29,6 +29,32 @@
 
 ## 迭代历史
 
+### v3.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Skill 系统核心** - 全新 Skill 机制，支持将相关工具分组为可复用技能单元
+  - `Skill` 结构：name, description, instructions, tool_names, tags
+  - `SkillRegistry` - 全局技能注册表，内置 5 个常用技能 (file_ops, code_analysis, system_ops, web_search, diff_compare)
+  - `SessionSkillManager` - 会话级技能管理，支持 per-session 启用/禁用
+  - 技能指令自动注入系统提示词
+  - 默认技能：file_ops 和 code_analysis 自动对新会话启用
+- **HTTP API 扩展** - 完整的技能管理 REST API:
+  - `GET /api/skills` - 列出所有技能
+  - `GET /api/skills/{name}` - 获取单个技能
+  - `POST /api/skills` - 创建技能
+  - `PUT /api/skills/{name}` - 更新技能
+  - `DELETE /api/skills/{name}` - 删除技能
+  - `GET /api/sessions/{id}/skills` - 获取会话已启用技能
+  - `POST /api/sessions/{id}/skills` - 设置会话技能
+  - `PUT /api/sessions/{id}/skills/{name}` - 启用技能
+  - `DELETE /api/sessions/{id}/skills/{name}` - 禁用技能
+- cargo clippy 0 警告
+- cargo test 174 tests
+
+**下一步**: WebUI 技能管理面板、实时反馈
+
+---
+
 ### v2.9.0 (已完成 ✅)
 
 **完成事项**:
@@ -102,32 +128,25 @@
 
 ---
 
-## 当前迭代规划 (v2.9.0)
+## 当前迭代规划 (v3.0.0)
 
 ### 本轮目标
-结合 PLANS.md 优先级指引和项目现状，本轮迭代重点：**WebUI 完善 (P0)**
+结合 PLANS.md 优先级指引和项目现状，本轮迭代重点：**Agent Skill 机制 (P0)**
 
-#### 1. WebUI 增强 (P0)
-**目标**: 参考 OpenClaw 管理界面，实现精简版 WebUI
+#### 1. Skill 机制 (P0)
+**目标**: 实现轻量级 Skill 系统，将相关工具分组为可复用技能单元
 
-**具体内容**:
+**已实现**:
+- Skill 数据结构与注册表
+- 内置 5 个常用技能
+- 会话级技能管理 (启用/禁用/设置)
+- 完整的 REST API 支持
+- 技能指令自动注入系统提示词
 
-**界面美观度**:
-- 现代简洁的 UI 设计 (参考 admin dashboard)
-- 响应式布局，适配不同屏幕
-- 良好的视觉层次与配色
-- 动画与交互反馈
-
-**功能设计**:
-- 会话列表展示与管理 (创建、切换、删除)
-- 实时状态监控 (连接数、活跃会话、内存使用)
-- 消息历史查看 (分页、搜索)
-- 基础配置调整 (在线编辑)
-- Agent 状态面板 (当前模型、工具列表)
-
-**参考 OpenClaw**:
-- 管理员 Dashboard
-- 实时状态面板
+**待完善**:
+- [ ] WebUI 技能管理面板 - 在 admin.html 中展示和操作技能
+- [ ] 技能 prompt 注入到 Agent - 运行时将激活技能的 instructions 注入给模型
+- [ ] 持久化技能配置 - 支持保存/加载技能配置
 
 #### 2. 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -140,13 +159,13 @@
 
 ### Agent 能力增强
 - [ ] 上下文管理机制 (Context struct + 压缩策略)
-- [ ] Skill 机制 (轻量级工具集)
+- [x] Skill 机制 (轻量级工具集) ✅ v3.0.0
 - [ ] 工具扩展 (更多内置工具)
 - [ ] Agent 配置文件支持
 
 ### 交互体验
-- [ ] WebUI 完善 (Dashboard + 会话管理) ← 本轮重点
-- [x] Terminal UI (TUI) ✅ 已完成
+- [ ] WebUI 技能管理面板
+- [x] Terminal UI (TUI) ✅ v2.6.0
 - [ ] 实时反馈 (执行进度、流式输出)
 - [ ] 命令行客户端
 
@@ -161,6 +180,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.0.0 | Skill 系统核心 (Skill/SkillRegistry/SessionSkillManager + HTTP API) |
 | v2.9.0 | WebUI 增强 (工具面板、配置编辑器)、测试冲突修复 |
 | v2.8.0 | 错误处理增强 (13种错误代码、ErrorRecovery) |
 | v2.7.0 | 工具扩展 (cp, mv, rm, cat) |
@@ -168,9 +188,7 @@
 | v2.5.0 | 上下文管理 (ContextManager) |
 | v2.4.0 | 会话导入/导出 API |
 | v2.0.2 | Request ID 追踪、SQLite 会话恢复 |
-| v2.0.1 | ... |
-| v2.0.0 | ... |
 
 ---
 
-*更新时间: 2026-03-21 21:32*
+*更新时间: 2026-03-21 22:34*

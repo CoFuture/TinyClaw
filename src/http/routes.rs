@@ -3,18 +3,18 @@
 use crate::config::{Config, default_config_path};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::Agent;
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager};
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::ratelimit::RateLimiter;
 use crate::types::{SessionHistory, Role};
 use axum::{
     extract::State,
-    http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
 use chrono::Utc;
+use http::StatusCode as HttpStatusCode;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -36,6 +36,8 @@ pub struct HttpState {
     pub metrics: Arc<MetricsCollector>,
     pub rate_limiter: Arc<RateLimiter>,
     pub server_state: ServerState,
+    pub skill_registry: Arc<SkillRegistry>,
+    pub skill_manager: Arc<SessionSkillManager>,
 }
 
 /// Health check response
@@ -183,11 +185,11 @@ async fn session_export(
 async fn session_import(
     State(state): State<Arc<HttpState>>,
     Json(request): Json<SessionImportRequest>,
-) -> (StatusCode, Json<SessionImportResponse>) {
+ ) -> (HttpStatusCode, Json<SessionImportResponse>) {
     // Validate that the session_id matches
     if request.data.session_id != request.session_id {
         return (
-            StatusCode::BAD_REQUEST,
+            HttpStatusCode::BAD_REQUEST,
             Json(SessionImportResponse {
                 success: false,
                 session_id: request.session_id,
@@ -201,7 +203,7 @@ async fn session_import(
     for msg in &request.data.messages {
         if !matches!(msg.role, Role::User | Role::Assistant | Role::System | Role::Tool) {
             return (
-                StatusCode::BAD_REQUEST,
+                HttpStatusCode::BAD_REQUEST,
                 Json(SessionImportResponse {
                     success: false,
                     session_id: request.session_id,
@@ -216,7 +218,7 @@ async fn session_import(
     let message_count = request.data.messages.len();
     state.history_manager.import_session(&request.session_id, request.data);
 
-    (StatusCode::OK, Json(SessionImportResponse {
+    (HttpStatusCode::OK, Json(SessionImportResponse {
         success: true,
         session_id: request.session_id,
         message_count,
@@ -250,11 +252,11 @@ async fn config_get(State(state): State<Arc<HttpState>>) -> Json<serde_json::Val
 async fn config_patch(
     State(state): State<Arc<HttpState>>,
     Json(new_config): Json<Config>,
-) -> (StatusCode, Json<Config>) {
+ ) -> (HttpStatusCode, Json<Config>) {
     let mut config = state.config.write();
     *config = new_config.clone();
     info!("Configuration updated");
-    (StatusCode::OK, Json(config.clone()))
+    (HttpStatusCode::OK, Json(config.clone()))
 }
 
 /// Config reload response
@@ -265,13 +267,13 @@ pub struct ConfigReloadResponse {
 }
 
 /// Config reload handler - reloads config from disk
-async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json<ConfigReloadResponse>) {
+async fn config_reload(State(state): State<Arc<HttpState>> ) -> (HttpStatusCode, Json<ConfigReloadResponse>) {
     // Try to find config file
     let config_path = match default_config_path() {
         Some(path) => path,
         None => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                HttpStatusCode::INTERNAL_SERVER_ERROR,
                 Json(ConfigReloadResponse {
                     success: false,
                     message: "Could not determine config path".to_string(),
@@ -282,7 +284,7 @@ async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json
 
     if !config_path.exists() {
         return (
-            StatusCode::NOT_FOUND,
+            HttpStatusCode::NOT_FOUND,
             Json(ConfigReloadResponse {
                 success: false,
                 message: format!("Config file not found at {:?}", config_path),
@@ -297,7 +299,7 @@ async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json
             *config = new_config;
             info!("Configuration reloaded from {:?}", config_path);
             (
-                StatusCode::OK,
+                HttpStatusCode::OK,
                 Json(ConfigReloadResponse {
                     success: true,
                     message: format!("Configuration reloaded from {:?}", config_path),
@@ -307,7 +309,7 @@ async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json
         Err(e) => {
             error!("Failed to reload config: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                HttpStatusCode::INTERNAL_SERVER_ERROR,
                 Json(ConfigReloadResponse {
                     success: false,
                     message: format!("Failed to reload config: {}", e),
@@ -318,10 +320,10 @@ async fn config_reload(State(state): State<Arc<HttpState>>) -> (StatusCode, Json
 }
 
 /// Shutdown handler
-async fn shutdown(State(state): State<Arc<HttpState>>) -> (StatusCode, Json<serde_json::Value>) {
+async fn shutdown(State(state): State<Arc<HttpState>> ) -> (HttpStatusCode, Json<serde_json::Value>) {
     info!("Shutdown requested via HTTP");
     let _ = state.shutdown_tx.send(());
-    (StatusCode::OK, Json(serde_json::json!({ "shuttingDown": true })))
+    (HttpStatusCode::OK, Json(serde_json::json!({ "shuttingDown": true })))
 }
 
 /// Sessions list handler
@@ -475,6 +477,17 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{id}/export", get(session_export))
         .route("/api/sessions/import", post(session_import))
         .route("/api/tools", get(tools_list))
+        // Skill management API
+        .route("/api/skills", get(skills_list))
+        .route("/api/skills", post(skills_create))
+        .route("/api/skills/{name}", get(skills_get))
+        .route("/api/skills/{name}", axum::routing::put(skills_update))
+        .route("/api/skills/{name}", axum::routing::delete(skills_delete))
+        // Session skills API
+        .route("/api/sessions/{session_id}/skills", get(session_skills_get))
+        .route("/api/sessions/{session_id}/skills", axum::routing::post(session_skills_set))
+        .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::put(session_skills_enable))
+        .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::delete(session_skills_disable))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
 }
@@ -534,4 +547,211 @@ async fn tools_list(State(state): State<Arc<HttpState>>) -> Json<ToolsListRespon
         .collect();
 
     Json(ToolsListResponse { tools: tool_infos })
+}
+
+// ============================================================================
+// Skill API Handlers
+// ============================================================================
+
+/// Skills list response
+#[derive(Serialize)]
+pub struct SkillsListResponse {
+    pub skills: Vec<SkillInfo>,
+}
+
+/// Skill info for API responses
+#[derive(Serialize, Deserialize)]
+pub struct SkillInfo {
+    pub name: String,
+    pub description: String,
+    pub instructions: String,
+    pub tool_names: Vec<String>,
+    #[serde(default)]
+    pub enabled_by_default: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+/// Skills list handler - returns all available skills
+async fn skills_list(State(state): State<Arc<HttpState>>) -> Json<SkillsListResponse> {
+    let skills = state.skill_registry.list();
+    let skill_infos: Vec<SkillInfo> = skills
+        .into_iter()
+        .map(|s| SkillInfo {
+            name: s.name,
+            description: s.description,
+            instructions: s.instructions,
+            tool_names: s.tool_names,
+            enabled_by_default: s.enabled_by_default,
+            tags: s.tags,
+        })
+        .collect();
+
+    Json(SkillsListResponse { skills: skill_infos })
+}
+
+/// Get a specific skill by name
+async fn skills_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    if let Some(skill) = state.skill_registry.get(&name) {
+        let info = SkillInfo {
+            name: skill.name,
+            description: skill.description,
+            instructions: skill.instructions,
+            tool_names: skill.tool_names,
+            enabled_by_default: skill.enabled_by_default,
+            tags: skill.tags,
+        };
+        (HttpStatusCode::OK, Json(serde_json::to_value(info).unwrap()))
+    } else {
+        (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Skill not found"
+        })))
+    }
+}
+
+/// Create a new skill
+async fn skills_create(
+    State(state): State<Arc<HttpState>>,
+    Json(skill): Json<SkillInfo>,
+) -> Result<Json<serde_json::Value>, HttpStatusCode> {
+    // Check if skill already exists
+    if state.skill_registry.exists(&skill.name) {
+        return Err(HttpStatusCode::CONFLICT);
+    }
+
+    let new_skill = crate::agent::Skill::new(
+        skill.name.clone(),
+        skill.description.clone(),
+        skill.instructions.clone(),
+    )
+    .with_tools(skill.tool_names.iter().cloned())
+    .with_default_enabled(skill.enabled_by_default);
+
+    state.skill_registry.register(new_skill);
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "name": skill.name
+    })))
+}
+
+/// Update an existing skill
+async fn skills_update(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    Json(skill_info): Json<SkillInfo>,
+) -> Result<Json<serde_json::Value>, HttpStatusCode> {
+    if !state.skill_registry.exists(&name) {
+        return Err(HttpStatusCode::NOT_FOUND);
+    }
+
+    let updated_skill = crate::agent::Skill::new(
+        skill_info.name.clone(),
+        skill_info.description.clone(),
+        skill_info.instructions.clone(),
+    )
+    .with_tools(skill_info.tool_names.iter().cloned())
+    .with_default_enabled(skill_info.enabled_by_default)
+    .with_tags(skill_info.tags.iter().cloned());
+
+    if state.skill_registry.update(&updated_skill) {
+        Ok(Json(serde_json::json!({
+            "success": true,
+            "name": skill_info.name
+        })))
+    } else {
+        Err(HttpStatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
+/// Delete a skill
+async fn skills_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    if state.skill_registry.unregister(&name).is_some() {
+        // Also remove from all sessions
+        state.skill_manager.remove_skill_from_all(&name);
+        (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true
+        })))
+    } else {
+        (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Skill not found"
+        })))
+    }
+}
+
+/// Session skills response
+#[derive(Serialize)]
+pub struct SessionSkillsResponse {
+    pub session_id: String,
+    pub active_skills: Vec<String>,
+    pub available_skills: Vec<String>,
+}
+
+/// Get active skills for a session
+async fn session_skills_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<SessionSkillsResponse> {
+    let active = state.skill_manager.get_active_skills(&session_id);
+    let available: Vec<String> = state.skill_registry.list()
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+
+    Json(SessionSkillsResponse {
+        session_id,
+        active_skills: active,
+        available_skills: available,
+    })
+}
+
+/// Enable a skill for a session
+async fn session_skills_enable(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, skill_name)): axum::extract::Path<(String, String)>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    if state.skill_manager.enable_skill(&session_id, &skill_name) {
+        (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "skill": skill_name,
+            "session": session_id
+        })))
+    } else {
+        (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Skill not found"
+        })))
+    }
+}
+
+/// Disable a skill for a session
+async fn session_skills_disable(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, skill_name)): axum::extract::Path<(String, String)>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    state.skill_manager.disable_skill(&session_id, &skill_name);
+    (HttpStatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "skill": skill_name,
+        "session": session_id
+    })))
+}
+
+/// Set all active skills for a session
+async fn session_skills_set(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    Json(skills): Json<Vec<String>>,
+) -> Json<serde_json::Value> {
+    state.skill_manager.set_active_skills(&session_id, skills.clone());
+    Json(serde_json::json!({
+        "success": true,
+        "session": session_id,
+        "active_skills": skills
+    }))
 }
