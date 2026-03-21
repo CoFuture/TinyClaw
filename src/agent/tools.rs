@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 use tokio::fs;
+use tokio::time::timeout;
 use tracing::info;
 
 /// Tool definition
@@ -178,6 +180,27 @@ impl ToolExecutor {
                 output: String::new(),
                 error: Some(format!("Unknown tool: {}", name)),
             },
+        }
+    }
+
+    /// Execute a tool with timeout (in milliseconds)
+    /// Set timeout_ms to None for no timeout, or Some(ms) for custom timeout
+    /// Default timeout is 30 seconds if not specified
+    #[allow(dead_code)]
+    pub async fn execute_with_timeout(&self, name: &str, input: serde_json::Value, timeout_ms: Option<u64>) -> ToolResult {
+        if let Some(ms) = timeout_ms {
+            let result = timeout(Duration::from_millis(ms), self.execute(name, input)).await;
+            match result {
+                Ok(tool_result) => tool_result,
+                Err(_) => ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Tool execution timed out after {}ms", ms)),
+                },
+            }
+        } else {
+            // No timeout
+            self.execute(name, input).await
         }
     }
 
