@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/CoFuture/TinyClaw">
-    <img src="https://img.shields.io/badge/version-1.4.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-1.6.0-blue.svg" alt="Version">
   </a>
   <a href="https://github.com/CoFuture/TinyClaw/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -14,36 +14,69 @@
   <a href="https://github.com/CoFuture/TinyClaw">
     <img src="https://img.shields.io/badge/Rust-1.70+-orange.svg" alt="Rust Version">
   </a>
+  <a href="https://github.com/CoFuture/TinyClaw/actions">
+    <img src="https://github.com/CoFuture/TinyClaw/workflows/CI/badge.svg" alt="CI">
+  </a>
 </p>
 
 ## 简介
 
-TinyClaw 是一个用 Rust 实现的 OpenClaw 最小化版本，旨在还原 OpenClaw 的核心架构，提供一个轻量级、可扩展的 AI Agent Gateway。
+TinyClaw 是一个用 Rust 实现的轻量级 AI Agent Gateway，完整支持 AI 对话、工具调用、工具执行全链路闭环。
 
-## 特性
+## 核心特性
 
-- 🌐 **WebSocket Gateway** - 基于 JSON-RPC 2.0 协议的 WebSocket 服务器
-- 🔌 **HTTP REST API** - 完整的 RESTful API 接口
-- 💬 **会话管理** - 支持多个并发会话
-- 📝 **消息历史** - 会话消息历史记录
-- 🔧 **工具系统** - 多种内置工具支持
-  - `exec` - 执行 Shell 命令
-  - `read_file` - 读取文件
-  - `write_file` - 写入文件
-  - `list_dir` - 列出目录
-  - `http_request` - HTTP 请求
-- 📊 **事件系统** - 事件广播机制
-- ⚙️ **配置管理** - 运行时配置更新
+| 特性 | 描述 | 状态 |
+|------|------|------|
+| 🌐 **WebSocket Gateway** | 基于 JSON-RPC 2.0 协议的 WebSocket 服务器 | ✅ |
+| 🔌 **HTTP REST API** | 完整的 RESTful API 接口 + Web 管理界面 | ✅ |
+| 💬 **会话管理** | 支持多个并发会话，消息历史持久化 | ✅ |
+| 🤖 **Agent 工具调用** | AI Agent 自动调用工具完成任务 | ✅ |
+| 🔧 **内置工具** | exec, read_file, write_file, list_dir, http_request | ✅ |
+| 📊 **指标监控** | 系统指标收集与速率限制 | ✅ |
+| 🔌 **插件系统** | 可扩展的插件架构 | ✅ |
+| 🛡️ **认证授权** | API Key 认证与权限管理 | ✅ |
+
+## 支持的 AI 模型
+
+| 提供商 | 模型 | 状态 |
+|--------|------|------|
+| Anthropic | claude-sonnet-4, claude-3.5 等 | ✅ |
+| OpenAI | gpt-4, gpt-3.5-turbo 等 | ✅ |
+| Ollama | 本地模型 (llama2, etc.) | ✅ |
 
 ## 快速开始
 
-### 构建
+### 1. 构建
 
 ```bash
 cargo build --release
 ```
 
-### 运行
+### 2. 配置
+
+创建配置文件 `~/.config/tiny_claw/config.json`:
+
+```json
+{
+  "gateway": {
+    "bind": "127.0.0.1:18789",
+    "verbose": false
+  },
+  "agent": {
+    "model": "claude-sonnet-4-20250514",
+    "apiKey": "your-api-key-here",
+    "apiBase": "https://api.anthropic.com"
+  },
+  "tools": {
+    "execEnabled": true
+  },
+  "ratelimit": {
+    "requestsPerMinute": 60
+  }
+}
+```
+
+### 3. 运行
 
 ```bash
 # 使用默认配置
@@ -53,48 +86,31 @@ cargo run --release
 cargo run --release -- --config /path/to/config.json
 ```
 
-### 配置
+### 4. 访问
 
-创建配置文件 `~/.config/tiny_claw/config.json`:
-
-```json
-{
-  "gateway": {
-    "bind": "127.0.0.1:18789",
-    "verbose": false,
-    "dataDir": null
-  },
-  "agent": {
-    "model": "anthropic/claude-sonnet-4-20250514",
-    "apiKey": "your-api-key-here",
-    "apiBase": "https://api.anthropic.com",
-    "workspace": null
-  },
-  "tools": {
-    "execEnabled": true
-  }
-}
-```
+- **Web 管理界面**: http://localhost:8080/admin.html
+- **WebSocket**: ws://127.0.0.1:18789
+- **HTTP API**: http://localhost:8080
 
 ## API 使用
 
-### WebSocket 连接
+### WebSocket 对话 (agent.turn)
 
 ```javascript
 const ws = new WebSocket('ws://127.0.0.1:18789');
 
-// 发送消息
 ws.send(JSON.stringify({
   id: "1",
   method: "agent.turn",
   params: {
-    message: "Hello!"
+    message: "列出当前目录的文件"
   }
 }));
 
-// 接收响应
 ws.onmessage = (event) => {
-  console.log(JSON.parse(event.data));
+  const response = JSON.parse(event.data);
+  console.log(response);
+  // 如果AI调用工具，会自动执行并返回结果
 };
 ```
 
@@ -110,13 +126,19 @@ curl http://localhost:8080/api/status
 # 列出工具
 curl http://localhost:8080/api/tools
 
-# 执行命令
-curl -X POST http://localhost:8080/api/exec \
+# 获取会话列表
+curl http://localhost:8080/api/sessions
+
+# 获取会话历史
+curl http://localhost:8080/api/sessions/{session_id}/messages
+
+# 执行工具
+curl -X POST http://localhost:8080/api/tools/execute \
   -H "Content-Type: application/json" \
-  -d '{"command": "ls -la"}'
+  -d '{"name": "exec", "input": {"command": "ls -la"}}'
 ```
 
-## 可用方法
+## 可用 JSON-RPC 方法
 
 | 方法 | 描述 |
 |------|------|
@@ -124,33 +146,90 @@ curl -X POST http://localhost:8080/api/exec \
 | `sessions.list` | 列出所有会话 |
 | `sessions.send` | 发送消息到会话 |
 | `sessions.history` | 获取会话历史 |
-| `agent.turn` | 与 AI 对话 |
-| `exec` | 执行 Shell 命令 |
-| `tools.list` | 列出所有工具 |
-| `tools.execute` | 执行工具 |
+| `agent.turn` | 与 AI 对话（自动工具调用） |
+| `exec` | 直接执行 Shell 命令 |
+| `tools.list` | 列出所有可用工具 |
+| `tools.execute` | 执行指定工具 |
 | `status` | 获取服务器状态 |
 | `shutdown` | 关闭服务器 |
+
+## 可用内置工具
+
+| 工具 | 描述 | 示例 |
+|------|------|------|
+| `exec` | 执行 Shell 命令 | `{"command": "ls -la"}` |
+| `read_file` | 读取文件内容 | `{"path": "/tmp/test.txt"}` |
+| `write_file` | 写入文件内容 | `{"path": "/tmp/test.txt", "content": "hello"}` |
+| `list_dir` | 列出目录内容 | `{"path": "."}` |
+| `http_request` | 发起 HTTP 请求 | `{"url": "https://api.example.com", "method": "GET"}` |
 
 ## 项目结构
 
 ```
-tiny_claw/
+TinyClaw/
 ├── src/
-│   ├── agent/        # AI Agent 模块
-│   ├── common/       # 通用工具
-│   ├── config/       # 配置管理
-│   ├── gateway/      # WebSocket 网关
-│   └── http/         # HTTP 服务器
-├── docs/             # 文档
-└── Cargo.toml       # 项目配置
+│   ├── agent/           # AI Agent 模块
+│   │   ├── client.rs    # AI 模型客户端 (多提供商支持)
+│   │   ├── context.rs   # Agent 上下文
+│   │   ├── runtime.rs   # Agent 运行时
+│   │   └── tools.rs     # 工具执行器
+│   ├── gateway/          # WebSocket 网关
+│   │   ├── messages.rs  # 消息处理
+│   │   ├── protocol.rs  # JSON-RPC 协议
+│   │   ├── session.rs  # 会话管理
+│   │   ├── history.rs  # 消息历史
+│   │   ├── events.rs   # 事件系统
+│   │   ├── queue.rs    # 消息队列
+│   │   ├── templates.rs # 消息模板
+│   │   └── server.rs   # WebSocket 服务器
+│   ├── http/            # HTTP 服务器
+│   │   └── routes.rs   # HTTP 路由
+│   ├── config/          # 配置管理
+│   ├── plugins/         # 插件系统
+│   ├── metrics/         # 指标收集
+│   ├── ratelimit/      # 速率限制
+│   └── tui/             # 终端界面
+├── examples/
+│   └── admin.html       # Web 管理界面
+├── docs/
+│   ├── DESIGN.md       # 设计文档
+│   ├── PROJECT.md      # 项目说明
+│   ├── PRINCIPLES.md  # 开发规范
+│   └── ITERATIONS.md  # 迭代记录
+└── Cargo.toml
 ```
 
-## 迭代版本
+## 版本历史
 
-- **v0.1.0** - 初始版本，基础 Gateway
-- **v0.2.0** - 添加 HTTP REST API
-- **v0.3.0** - 会话历史与事件系统
-- **v0.4.0** - 高级工具系统
+See [docs/ITERATIONS.md](docs/ITERATIONS.md) for detailed version history.
+
+- **v1.6.0** - 测试体系完善 (76 个测试用例)
+- **v1.5.0** - 全链路 Agent 工具调用
+- **v1.4.0** - WebSocket 消息队列优化
+- **v1.3.0** - 指标监控与速率限制
+- **v1.0.0** - 多模型支持
+
+## 测试
+
+```bash
+# 运行所有测试
+cargo test
+
+# 运行测试覆盖率
+cargo tarpaulin --out Json
+
+# 查看 clippy 警告
+cargo clippy
+```
+
+## 设计理念
+
+TinyClaw 旨在实现一个完整可用的 AI Agent Gateway，核心设计原则：
+
+1. **轻量级** - 最小依赖，Rust 实现高性能
+2. **可扩展** - 插件系统支持自定义扩展
+3. **全链路** - 从对话到工具执行完整闭环
+4. **生产可用** - 速率限制、认证授权、指标监控
 
 ## 贡献
 

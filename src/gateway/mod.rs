@@ -11,3 +11,4 @@ pub mod session;
 pub mod auth;
 pub mod templates;
 pub mod session_ext;
+pub mod streaming;
