@@ -304,6 +304,70 @@ impl ToolExecutor {
             },
         );
 
+        // Register batch_execute tool (execute multiple tools)
+        tools.insert(
+            "batch_execute".to_string(),
+            Tool {
+                name: "batch_execute".to_string(),
+                description: "Execute multiple tools in sequence".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "tools": {
+                            "type": "array",
+                            "description": "Array of tool calls, each with 'name' and 'input' fields"
+                        }
+                    },
+                    "required": ["tools"]
+                }),
+            },
+        );
+
+        // Register env tool (get/set environment variables)
+        tools.insert(
+            "env".to_string(),
+            Tool {
+                name: "env".to_string(),
+                description: "Get or set environment variables".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Environment variable name (omit to list all)"
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "Value to set (omit to get value, set to empty string to unset)"
+                        }
+                    }
+                }),
+            },
+        );
+
+        // Register diff tool (compare two files)
+        tools.insert(
+            "diff".to_string(),
+            Tool {
+                name: "diff".to_string(),
+                description: "Compare two files and show differences".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path1": {
+                            "type": "string",
+                            "description": "First file path (supports ~ and $VAR)"
+                        },
+                        "path2": {
+                            "type": "string",
+                            "description": "Second file path (supports ~ and $VAR)"
+                        }
+                    },
+                    "required": ["path1", "path2"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -332,6 +396,9 @@ impl ToolExecutor {
             "which" => self.execute_which(input).await,
             "mkdir" => self.execute_mkdir(input).await,
             "stat_file" => self.execute_stat_file(input).await,
+            "batch_execute" => self.execute_batch_execute(input).await,
+            "env" => self.execute_env(input).await,
+            "diff" => self.execute_diff(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
@@ -1211,6 +1278,232 @@ impl ToolExecutor {
             error: None,
         }
     }
+
+    /// Execute the batch_execute tool - execute multiple tools in sequence
+    async fn execute_batch_execute(&self, input: serde_json::Value) -> ToolResult {
+        let empty: Vec<serde_json::Value> = Vec::new();
+        let tools = input
+            .get("tools")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&empty);
+
+        if tools.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("tools array is required".to_string()),
+            };
+        }
+
+        info!("batch_execute: executing {} tools", tools.len());
+
+        let mut results: Vec<serde_json::Value> = Vec::new();
+        let mut all_success = true;
+
+        for (i, tool_call) in tools.iter().enumerate() {
+            let tool_name = tool_call
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let tool_input = tool_call.get("input").cloned().unwrap_or(serde_json::Value::Null);
+
+            // Execute each tool inline (avoid recursion)
+            let result = self.execute_single(tool_name, tool_input).await;
+            
+            if !result.success {
+                all_success = false;
+            }
+
+            results.push(serde_json::json!({
+                "index": i,
+                "tool": tool_name,
+                "success": result.success,
+                "output": result.output,
+                "error": result.error
+            }));
+        }
+
+        let output = serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string());
+
+        ToolResult {
+            success: all_success,
+            output,
+            error: if all_success { None } else { Some("Some tools failed".to_string()) },
+        }
+    }
+
+    /// Execute a single tool (internal, non-recursive)
+    async fn execute_single(&self, name: &str, input: serde_json::Value) -> ToolResult {
+        match name {
+            "exec" => self.execute_exec(input).await,
+            "read_file" => self.execute_read_file(input).await,
+            "write_file" => self.execute_write_file(input).await,
+            "list_dir" => self.execute_list_dir(input).await,
+            "http_request" => self.execute_http_request(input).await,
+            "glob" => self.execute_glob(input).await,
+            "grep" => self.execute_grep(input).await,
+            "sed_file" => self.execute_sed_file(input).await,
+            "which" => self.execute_which(input).await,
+            "mkdir" => self.execute_mkdir(input).await,
+            "stat_file" => self.execute_stat_file(input).await,
+            "env" => self.execute_env(input).await,
+            "diff" => self.execute_diff(input).await,
+            _ => ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Unknown tool: {}", name)),
+            },
+        }
+    }
+
+    /// Execute the env tool - get or set environment variables
+    async fn execute_env(&self, input: serde_json::Value) -> ToolResult {
+        let name = input
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let value = input
+            .get("value")
+            .and_then(|v| v.as_str());
+
+        if name.is_empty() {
+            // List all environment variables
+            let env_vars: Vec<String> = std::env::vars()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect();
+            
+            return ToolResult {
+                success: true,
+                output: env_vars.join("\n"),
+                error: None,
+            };
+        }
+
+        match value {
+            Some("") => {
+                // Unset the variable
+                std::env::remove_var(name);
+                info!("env: unset {}", name);
+                ToolResult {
+                    success: true,
+                    output: format!("Unset {}", name),
+                    error: None,
+                }
+            }
+            Some(v) => {
+                // Set the variable
+                std::env::set_var(name, v);
+                info!("env: set {} = {}", name, v);
+                ToolResult {
+                    success: true,
+                    output: format!("Set {} = {}", name, v),
+                    error: None,
+                }
+            }
+            None => {
+                // Get the variable
+                let value = std::env::var(name).unwrap_or_else(|_| "(not set)".to_string());
+                info!("env: get {} = {}", name, value);
+                ToolResult {
+                    success: true,
+                    output: value,
+                    error: None,
+                }
+            }
+        }
+    }
+
+    /// Execute the diff tool - compare two files
+    async fn execute_diff(&self, input: serde_json::Value) -> ToolResult {
+        let path1 = input
+            .get("path1")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let path2 = input
+            .get("path2")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path1.is_empty() || path2.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path1 and path2 are required".to_string()),
+            };
+        }
+
+        let path1 = Self::normalize_path(path1);
+        let path2 = Self::normalize_path(path2);
+
+        info!("diff: {} vs {}", path1, path2);
+
+        // Read both files
+        let content1 = match fs::read_to_string(&path1).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to read {}: {}", path1, e)),
+                };
+            }
+        };
+
+        let content2 = match fs::read_to_string(&path2).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to read {}: {}", path2, e)),
+                };
+            }
+        };
+
+        if content1 == content2 {
+            return ToolResult {
+                success: true,
+                output: "Files are identical".to_string(),
+                error: None,
+            };
+        }
+
+        // Simple line-by-line diff
+        let lines1: Vec<&str> = content1.lines().collect();
+        let lines2: Vec<&str> = content2.lines().collect();
+
+        let mut diff_output = String::new();
+        let max_lines = lines1.len().max(lines2.len());
+
+        for i in 0..max_lines {
+            let l1 = lines1.get(i).copied();
+            let l2 = lines2.get(i).copied();
+
+            match (l1, l2) {
+                (Some(a), Some(b)) if a == b => {
+                    diff_output.push_str(&format!("  {}\n", a));
+                }
+                (Some(a), Some(b)) => {
+                    diff_output.push_str(&format!("- {}\n", a));
+                    diff_output.push_str(&format!("+ {}\n", b));
+                }
+                (Some(a), None) => {
+                    diff_output.push_str(&format!("- {}\n", a));
+                }
+                (None, Some(b)) => {
+                    diff_output.push_str(&format!("+ {}\n", b));
+                }
+                (None, None) => {}
+            }
+        }
+
+        ToolResult {
+            success: true,
+            output: diff_output,
+            error: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1222,7 +1515,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 11); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file
+        assert_eq!(tools.len(), 14); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, batch_execute, env, diff
     }
 
     #[test]
@@ -1703,5 +1996,99 @@ mod tests {
         assert_eq!(ToolExecutor::format_size(1536), "1.5K");
         assert_eq!(ToolExecutor::format_size(1048576), "1.0M");
         assert_eq!(ToolExecutor::format_size(1073741824), "1.0G");
+    }
+
+    #[tokio::test]
+    async fn test_execute_batch_execute_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("batch_execute", serde_json::json!({
+            "tools": [
+                {"name": "exec", "input": {"command": "echo hello"}},
+                {"name": "exec", "input": {"command": "echo world"}}
+            ]
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("hello"));
+        assert!(result.output.contains("world"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_batch_execute_empty() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("batch_execute", serde_json::json!({
+            "tools": []
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_env_get() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("env", serde_json::json!({
+            "name": "PATH"
+        })).await;
+        
+        assert!(result.success);
+        assert!(!result.output.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_env_list_all() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("env", serde_json::json!({})).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("="));
+    }
+
+    #[tokio::test]
+    async fn test_execute_diff_identical() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_diff_test.txt";
+        tokio::fs::write(path, "hello\nworld\n").await.unwrap();
+        
+        let result = executor.execute("diff", serde_json::json!({
+            "path1": path,
+            "path2": path
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("identical"));
+        
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_diff_different() {
+        let executor = ToolExecutor::new();
+        let path1 = "/tmp/tinyclaw_diff1.txt";
+        let path2 = "/tmp/tinyclaw_diff2.txt";
+        tokio::fs::write(path1, "hello\nworld\n").await.unwrap();
+        tokio::fs::write(path2, "hello\nrust\n").await.unwrap();
+        
+        let result = executor.execute("diff", serde_json::json!({
+            "path1": path1,
+            "path2": path2
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("-"));
+        assert!(result.output.contains("+"));
+        
+        tokio::fs::remove_file(path1).await.unwrap();
+        tokio::fs::remove_file(path2).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_diff_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("diff", serde_json::json!({
+            "path1": "/nonexistent1.txt",
+            "path2": "/nonexistent2.txt"
+        })).await;
+        
+        assert!(!result.success);
     }
 }
