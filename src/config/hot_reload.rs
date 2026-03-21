@@ -1,15 +1,16 @@
-//! Config hot reload module
+//! Config hot reload module with proper file tracking and event emission
 
 use crate::common::{Error, Result};
 use crate::config::schema::{Config, HotReloadConfig};
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::time::interval;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 /// Config watcher that monitors file changes and triggers reloads
 #[allow(dead_code)]
@@ -20,8 +21,8 @@ pub struct ConfigWatcher {
     settings: HotReloadConfig,
     /// Config file path
     watch_path: PathBuf,
-    /// Last modified time we successfully loaded
-    last_modified: Option<std::time::SystemTime>,
+    /// Last modified times per path (proper tracking)
+    last_modified_map: RwLock<HashMap<PathBuf, SystemTime>>,
     /// Shutdown signal receiver
     shutdown_rx: Option<tokio::sync::watch::Receiver<()>>,
     /// Event sender for config change notifications
@@ -40,7 +41,7 @@ impl ConfigWatcher {
             config,
             settings,
             watch_path,
-            last_modified: None,
+            last_modified_map: RwLock::new(HashMap::new()),
             shutdown_rx: None,
             event_tx: None,
         }
@@ -57,7 +58,7 @@ impl ConfigWatcher {
             config,
             settings,
             watch_path,
-            last_modified: None,
+            last_modified_map: RwLock::new(HashMap::new()),
             shutdown_rx: None,
             event_tx: Some(event_tx),
         }
@@ -70,21 +71,51 @@ impl ConfigWatcher {
         let mut shutdown_rx_clone = shutdown_rx.clone();
 
         let watch_path = self.watch_path.clone();
-        let config = self.config.clone();
+        let config = Arc::clone(&self.config);
+        let last_modified_map = Arc::new(RwLock::new(HashMap::new()));
+        let event_tx = self.event_tx.clone();
         let poll_interval = Duration::from_millis(self.settings.poll_interval_ms);
+
+        // Initialize last modified time
+        if watch_path.exists() {
+            if let Ok(metadata) = std::fs::metadata(&watch_path) {
+                if let Ok(modified) = metadata.modified() {
+                    last_modified_map.write().insert(watch_path.clone(), modified);
+                }
+            }
+        }
+
+        let last_modified_map_clone = Arc::clone(&last_modified_map);
 
         tokio::spawn(async move {
             let mut ticker = interval(poll_interval);
 
+            // Send started event
+            if let Some(ref tx) = event_tx {
+                let event = ConfigEvent::new(ConfigEventKind::Started);
+                let _ = tx.send(event).await;
+            }
+
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
-                        if let Err(e) = Self::check_and_reload(&watch_path, &config).await {
+                        if let Err(e) = Self::check_and_reload(
+                            &watch_path,
+                            &config,
+                            &last_modified_map_clone,
+                            &event_tx,
+                        ).await {
                             debug!("Config check: {}", e);
                         }
                     }
                     _ = shutdown_rx_clone.changed() => {
                         info!("Config watcher shutting down");
+
+                        // Send stopped event
+                        if let Some(ref tx) = event_tx {
+                            let event = ConfigEvent::new(ConfigEventKind::Stopped);
+                            let _ = tx.send(event).await;
+                        }
                         break;
                     }
                 }
@@ -95,10 +126,41 @@ impl ConfigWatcher {
         shutdown_tx
     }
 
+    /// Validate config on reload
+    fn validate_config(config: &Config) -> Result<()> {
+        // Validate bind address format
+        if config.gateway.bind.is_empty() {
+            return Err(Error::Config("Gateway bind address cannot be empty".into()));
+        }
+
+        // Validate model config
+        if config.agent.model.is_empty() {
+            return Err(Error::Config("Agent model cannot be empty".into()));
+        }
+
+        // Validate retry settings
+        if config.retry.max_retries > 10 {
+            return Err(Error::Config("Max retries cannot exceed 10".into()));
+        }
+
+        if config.retry.initial_delay_ms > config.retry.max_delay_ms {
+            return Err(Error::Config("Initial delay cannot exceed max delay".into()));
+        }
+
+        // Validate hot reload settings
+        if config.hot_reload.poll_interval_ms < 1000 {
+            return Err(Error::Config("Poll interval must be at least 1000ms".into()));
+        }
+
+        Ok(())
+    }
+
     /// Check if config file changed and reload if needed
     async fn check_and_reload(
         watch_path: &PathBuf,
         config: &Arc<RwLock<Config>>,
+        last_modified_map: &Arc<RwLock<HashMap<PathBuf, SystemTime>>>,
+        event_tx: &Option<mpsc::Sender<ConfigEvent>>,
     ) -> Result<()> {
         // Check if file exists
         if !watch_path.exists() {
@@ -114,49 +176,66 @@ impl ConfigWatcher {
             .map_err(Error::Io)?;
 
         // Check if file was modified since last load
-        // On first check, just record the modification time
-        let needs_reload = if let Some(last) = Self::get_last_modified(watch_path) {
-            modified > last
-        } else {
-            // First check - just record
-            Self::set_last_modified(watch_path, modified);
-            return Ok(());
+        let needs_reload = {
+            let map = last_modified_map.read();
+            match map.get(watch_path) {
+                Some(last) => modified > *last,
+                None => {
+                    // First check - just record and return
+                    drop(map);
+                    last_modified_map.write().insert(watch_path.clone(), modified);
+                    return Ok(());
+                }
+            }
         };
 
         if needs_reload {
             info!("Config file changed, reloading...");
 
             // Load new config
-            let new_config = crate::config::load_config(watch_path)
-                .map_err(|e| Error::Config(format!("Failed to load config: {}", e)))?;
+            let new_config = match crate::config::load_config(watch_path) {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    error!("Failed to load config: {}", e);
+
+                    // Send reload failed event
+                    if let Some(ref tx) = event_tx {
+                        let event = ConfigEvent::new(ConfigEventKind::ReloadFailed(e.to_string()));
+                        let _ = tx.send(event).await;
+                    }
+
+                    return Err(Error::Config(format!("Failed to load config: {}", e)));
+                }
+            };
+
+            // Validate new config
+            if let Err(e) = Self::validate_config(&new_config) {
+                error!("Config validation failed: {}", e);
+
+                if let Some(ref tx) = event_tx {
+                    let event = ConfigEvent::new(ConfigEventKind::ReloadFailed(e.to_string()));
+                    let _ = tx.send(event).await;
+                }
+
+                return Err(e);
+            }
 
             // Update config
             *config.write() = new_config.clone();
 
             // Record new modification time
-            Self::set_last_modified(watch_path, modified);
+            last_modified_map.write().insert(watch_path.clone(), modified);
 
             info!("Config reloaded successfully");
 
-            // Send event if we have an event channel
-            // Note: event_tx would need to be stored somewhere to send events
-            debug!("Config change event: version={}", env!("CARGO_PKG_VERSION"));
+            // Send reloaded event
+            if let Some(ref tx) = event_tx {
+                let event = ConfigEvent::new(ConfigEventKind::Reloaded);
+                let _ = tx.send(event).await;
+            }
         }
 
         Ok(())
-    }
-
-    /// Get last modified time from file system
-    fn get_last_modified(path: &PathBuf) -> Option<std::time::SystemTime> {
-        std::fs::metadata(path)
-            .ok()
-            .and_then(|m| m.modified().ok())
-    }
-
-    /// Set last modified time (stored in memory for comparison)
-    fn set_last_modified(_path: &PathBuf, _time: std::time::SystemTime) {
-        // In a more complete implementation, we'd store this per-path
-        // For now, we just track in memory during the session
     }
 
     /// Manually trigger a config reload
@@ -168,9 +247,25 @@ impl ConfigWatcher {
         let new_config = crate::config::load_config(&self.watch_path)
             .map_err(|e| Error::Config(format!("Failed to load config: {}", e)))?;
 
+        // Validate
+        Self::validate_config(&new_config)?;
+
         *self.config.write() = new_config;
 
+        // Update last modified
+        if let Ok(metadata) = std::fs::metadata(&self.watch_path) {
+            if let Ok(modified) = metadata.modified() {
+                self.last_modified_map.write().insert(self.watch_path.clone(), modified);
+            }
+        }
+
         info!("Config manually reloaded");
+
+        // Send event
+        if let Some(ref tx) = self.event_tx {
+            let event = ConfigEvent::new(ConfigEventKind::Reloaded);
+            let _ = tx.send(event).await;
+        }
 
         Ok(())
     }
@@ -184,6 +279,12 @@ impl ConfigWatcher {
     pub fn watch_path(&self) -> &PathBuf {
         &self.watch_path
     }
+
+    /// Get event sender for subscription
+    #[allow(dead_code)]
+    pub fn event_sender(&self) -> &Option<mpsc::Sender<ConfigEvent>> {
+        &self.event_tx
+    }
 }
 
 /// Config change event
@@ -193,7 +294,7 @@ pub struct ConfigEvent {
     /// Event type
     pub kind: ConfigEventKind,
     /// Timestamp
-    pub timestamp: std::time::SystemTime,
+    pub timestamp: SystemTime,
 }
 
 /// Config event kinds
@@ -210,13 +311,12 @@ pub enum ConfigEventKind {
     Stopped,
 }
 
-#[allow(dead_code)]
 impl ConfigEvent {
     /// Create a new config event
     pub fn new(kind: ConfigEventKind) -> Self {
         Self {
             kind,
-            timestamp: std::time::SystemTime::now(),
+            timestamp: SystemTime::now(),
         }
     }
 }
@@ -238,5 +338,36 @@ mod tests {
 
         let kind = ConfigEventKind::ReloadFailed("test".to_string());
         assert_eq!(format!("{:?}", kind), "ReloadFailed(\"test\")");
+    }
+
+    #[test]
+    fn test_validate_config_empty_bind() {
+        let mut config = Config::default();
+        config.gateway.bind = "".to_string();
+        let result = ConfigWatcher::validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_config_empty_model() {
+        let mut config = Config::default();
+        config.agent.model = "".to_string();
+        let result = ConfigWatcher::validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_config_bad_retry() {
+        let mut config = Config::default();
+        config.retry.max_retries = 100; // Too high
+        let result = ConfigWatcher::validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_config_good() {
+        let config = Config::default();
+        let result = ConfigWatcher::validate_config(&config);
+        assert!(result.is_ok());
     }
 }

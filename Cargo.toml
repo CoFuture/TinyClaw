@@ -1,6 +1,6 @@
 [package]
 name = "tiny_claw"
-version = "1.8.0"
+version = "1.9.0"
 edition = "2021"
 description = "A minimal implementation of OpenClaw in Rust"
 authors = ["TinyClaw"]
@@ -34,3 +34,4 @@ async-stream = "0.3"
 walkdir = "2"
 glob = "0.3"
 regex = "1"
+rand = "0.8"

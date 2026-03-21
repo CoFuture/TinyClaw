@@ -1943,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "tiny_claw"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1956,6 +1956,7 @@ dependencies = [
  "glob",
  "lazy_static",
  "parking_lot",
+ "rand 0.8.5",
  "ratatui",
  "regex",
  "reqwest",
