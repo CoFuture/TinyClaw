@@ -109,3 +109,84 @@ impl Default for PluginManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_plugin_metadata() {
+        let metadata = PluginMetadata {
+            id: "test-plugin".to_string(),
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Test plugin".to_string(),
+            author: "tester".to_string(),
+        };
+        
+        assert_eq!(metadata.name, "test");
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.id, "test-plugin");
+    }
+
+    #[test]
+    fn test_plugin_metadata_serialization() {
+        let metadata = PluginMetadata {
+            id: "test-plugin".to_string(),
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Test plugin".to_string(),
+            author: "tester".to_string(),
+        };
+        
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("test"));
+        assert!(json.contains("test-plugin"));
+    }
+
+    #[test]
+    fn test_hook_pre_message() {
+        let hook = Hook::PreMessage {
+            session_id: "s1".to_string(),
+            message: "test".to_string(),
+        };
+        let cloned = hook.clone();
+        
+        match cloned {
+            Hook::PreMessage { session_id, message } => {
+                assert_eq!(session_id, "s1");
+                assert_eq!(message, "test");
+            }
+            _ => panic!("Wrong hook type"),
+        }
+    }
+
+    #[test]
+    fn test_hook_post_message() {
+        let hook = Hook::PostMessage {
+            session_id: "s1".to_string(),
+            message: "response".to_string(),
+        };
+        
+        match hook {
+            Hook::PostMessage { message, .. } => assert_eq!(message, "response"),
+            _ => panic!("Wrong hook type"),
+        }
+    }
+
+    #[test]
+    fn test_hook_serialization() {
+        let hook = Hook::SessionCreated {
+            session_id: "s1".to_string(),
+        };
+        let json = serde_json::to_string(&hook).unwrap();
+        assert!(json.contains("SessionCreated"));
+    }
+
+    #[test]
+    fn test_plugin_manager_new() {
+        let manager = PluginManager::new();
+        let plugins = manager.list_plugins();
+        assert!(plugins.is_empty());
+    }
+}

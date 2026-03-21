@@ -189,3 +189,100 @@ impl Default for HistoryManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_user() {
+        let msg = Message::user("Hello");
+        assert_eq!(msg.role, Role::User);
+        assert_eq!(msg.content, "Hello");
+        assert!(msg.tool_call_id.is_none());
+    }
+
+    #[test]
+    fn test_message_assistant() {
+        let msg = Message::assistant("Hi there");
+        assert_eq!(msg.role, Role::Assistant);
+        assert_eq!(msg.content, "Hi there");
+    }
+
+    #[test]
+    fn test_message_tool() {
+        let msg = Message::tool("result", "call_123", "exec");
+        assert_eq!(msg.role, Role::Tool);
+        assert_eq!(msg.content, "result");
+        assert_eq!(msg.tool_call_id, Some("call_123".to_string()));
+        assert_eq!(msg.tool_name, Some("exec".to_string()));
+    }
+
+    #[test]
+    fn test_message_serialization() {
+        let msg = Message::user("test");
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("user"));
+        assert!(json.contains("test"));
+    }
+
+    #[test]
+    fn test_message_deserialization() {
+        let json = r#"{"id": "123", "role": "user", "content": "test", "timestamp": "2024-01-01T00:00:00Z"}"#;
+        let msg: Message = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.role, Role::User);
+        assert_eq!(msg.content, "test");
+    }
+
+    #[test]
+    fn test_session_history_new() {
+        let history = SessionHistory::new("session1");
+        assert_eq!(history.session_id, "session1");
+        assert!(history.messages.is_empty());
+    }
+
+    #[test]
+    fn test_session_history_add_message() {
+        let mut history = SessionHistory::new("session1");
+        history.add_message(Message::user("Hello"));
+        assert_eq!(history.len(), 1);
+    }
+
+    #[test]
+    fn test_session_history_clear() {
+        let mut history = SessionHistory::new("session1");
+        history.add_message(Message::user("Hello"));
+        history.clear();
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn test_history_manager_new() {
+        let manager = HistoryManager::new();
+        let list = manager.list();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_history_manager_get_or_create() {
+        let manager = HistoryManager::new();
+        let history1 = manager.get_or_create("session1");
+        let history2 = manager.get_or_create("session1");
+        
+        // Should be the same session_id
+        let id1 = history1.read().session_id.clone();
+        let id2 = history2.read().session_id.clone();
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_history_manager_remove() {
+        let manager = HistoryManager::new();
+        manager.get_or_create("session1");
+        manager.remove("session1");
+        
+        // After remove, get should return None
+        let history = manager.get("session1");
+        assert!(history.is_none());
+    }
+}

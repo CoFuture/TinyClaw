@@ -188,3 +188,115 @@ pub mod events {
     /// Error event
     pub const ERROR: &str = "error";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_standard_deserialization() {
+        let json = r#"{"id": "1", "method": "ping", "params": {}}"#;
+        let request: Request = serde_json::from_str(json).unwrap();
+        
+        assert_eq!(request.method(), "ping");
+        assert_eq!(request.id(), Some("1"));
+    }
+
+    #[test]
+    fn test_request_notification_deserialization() {
+        let json = r#"{"method": "ping", "params": {}}"#;
+        let request: Request = serde_json::from_str(json).unwrap();
+        
+        assert_eq!(request.method(), "ping");
+        assert_eq!(request.id(), None);
+    }
+
+    #[test]
+    fn test_request_serialization() {
+        let request = Request::Standard(RequestStandard {
+            id: Some("1".to_string()),
+            method: "ping".to_string(),
+            params: serde_json::json!({}),
+        });
+        
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("ping"));
+    }
+
+    #[test]
+    fn test_response_success() {
+        let response = ResponseSuccess::new(Some("1".to_string()), serde_json::json!({"status": "ok"}));
+        let json = serde_json::to_string(&response).unwrap();
+        
+        assert!(json.contains("result"));
+        assert!(json.contains("ok"));
+    }
+
+    #[test]
+    fn test_response_error() {
+        let response = ResponseError::new(Some("1".to_string()), "ERROR_CODE", "Error message");
+        let json = serde_json::to_string(&response).unwrap();
+        
+        assert!(json.contains("error"));
+        assert!(json.contains("ERROR_CODE"));
+        assert!(json.contains("Error message"));
+    }
+
+    #[test]
+    fn test_response_error_with_data() {
+        let response = ResponseError::with_data(
+            Some("1".to_string()),
+            "ERROR_CODE",
+            "Error message",
+            serde_json::json!({"key": "value"}),
+        );
+        let json = serde_json::to_string(&response).unwrap();
+        
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_response_success_without_id() {
+        let response = ResponseSuccess::new(None, serde_json::json!("pong"));
+        let json = serde_json::to_string(&response).unwrap();
+        
+        assert!(!json.contains("id"));
+    }
+
+    #[test]
+    fn test_response_notification() {
+        let response = ResponseNotification {
+            method: "ping".to_string(),
+            params: None,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        
+        assert!(json.contains("ping"));
+    }
+
+    #[test]
+    fn test_methods_constants() {
+        assert_eq!(methods::PING, "ping");
+        assert_eq!(methods::SESSIONS_LIST, "sessions.list");
+        assert_eq!(methods::SESSIONS_SEND, "sessions.send");
+        assert_eq!(methods::AGENT_TURN, "agent.turn");
+        assert_eq!(methods::AGENT_SPAWN, "agent.spawn");
+        assert_eq!(methods::SESSIONS_HISTORY, "sessions.history");
+        assert_eq!(methods::EXEC, "exec");
+        assert_eq!(methods::TOOL_EXECUTE, "tools.execute");
+        assert_eq!(methods::TOOLS_LIST, "tools.list");
+        assert_eq!(methods::CONFIG_GET, "config.get");
+        assert_eq!(methods::CONFIG_PATCH, "config.patch");
+        assert_eq!(methods::STATUS, "status");
+        assert_eq!(methods::SHUTDOWN, "shutdown");
+    }
+
+    #[test]
+    fn test_events_constants() {
+        assert_eq!(events::ASSISTANT_TEXT, "assistant.text");
+        assert_eq!(events::ASSISTANT_TOOL_USE, "assistant.tool_use");
+        assert_eq!(events::TOOL_RESULT, "tool_result");
+        assert_eq!(events::SESSION_ENDED, "session.ended");
+        assert_eq!(events::ERROR, "error");
+    }
+}

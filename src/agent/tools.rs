@@ -413,3 +413,191 @@ impl ToolExecutor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_executor_new() {
+        let executor = ToolExecutor::new();
+        let tools = executor.list_tools();
+        assert!(!tools.is_empty());
+        assert_eq!(tools.len(), 5); // exec, read_file, write_file, list_dir, http_request
+    }
+
+    #[test]
+    fn test_tool_executor_get_tool() {
+        let executor = ToolExecutor::new();
+        let exec_tool = executor.get_tool("exec");
+        assert!(exec_tool.is_some());
+        assert_eq!(exec_tool.unwrap().name, "exec");
+    }
+
+    #[test]
+    fn test_tool_executor_get_nonexistent_tool() {
+        let executor = ToolExecutor::new();
+        let tool = executor.get_tool("nonexistent");
+        assert!(tool.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execute_exec_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("exec", serde_json::json!({
+            "command": "echo hello"
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_exec_failure() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("exec", serde_json::json!({
+            "command": "exit 1"
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_exec_empty_command() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("exec", serde_json::json!({
+            "command": ""
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_read_file_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("read_file", serde_json::json!({
+            "path": "Cargo.toml"
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("[package]"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_read_file_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("read_file", serde_json::json!({
+            "path": "/nonexistent/file.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_read_file_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("read_file", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_write_file_success() {
+        let executor = ToolExecutor::new();
+        let test_path = "/tmp/tiny_claw_test.txt";
+        let result = executor.execute("write_file", serde_json::json!({
+            "path": test_path,
+            "content": "test content"
+        })).await;
+        
+        assert!(result.success);
+        
+        // Cleanup
+        let _ = tokio::fs::remove_file(test_path).await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_write_file_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("write_file", serde_json::json!({
+            "content": "test"
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_list_dir_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("list_dir", serde_json::json!({
+            "path": "."
+        })).await;
+        
+        assert!(result.success);
+        assert!(!result.output.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_list_dir_default_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("list_dir", serde_json::json!({})).await;
+        
+        assert!(result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_http_request_missing_url() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("http_request", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_http_request_unsupported_method() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("http_request", serde_json::json!({
+            "url": "http://example.com",
+            "method": "INVALID"
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_unknown_tool() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("unknown_tool", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_tool_result_serialization() {
+        let result = ToolResult {
+            success: true,
+            output: "test output".to_string(),
+            error: None,
+        };
+        
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("success"));
+        assert!(json.contains("test output"));
+    }
+
+    #[test]
+    fn test_tool_result_with_error() {
+        let result = ToolResult {
+            success: false,
+            output: String::new(),
+            error: Some("error message".to_string()),
+        };
+        
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("error"));
+    }
+}

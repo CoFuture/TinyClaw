@@ -139,3 +139,90 @@ impl Default for SessionManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_new() {
+        let session = Session::new(SessionKind::Main);
+        assert_eq!(session.kind, SessionKind::Main);
+        assert!(!session.id.is_empty());
+    }
+
+    #[test]
+    fn test_session_main() {
+        let session = Session::main();
+        assert_eq!(session.kind, SessionKind::Main);
+        assert!(session.label.is_none());
+    }
+
+    #[test]
+    fn test_session_with_label() {
+        let session = Session::new(SessionKind::Isolated).with_label("test");
+        assert_eq!(session.label, Some("test".to_string()));
+        assert_eq!(session.kind, SessionKind::Isolated);
+    }
+
+    #[test]
+    fn test_session_manager_new() {
+        let manager = SessionManager::new();
+        assert!(manager.list().is_empty());
+    }
+
+    #[test]
+    fn test_session_manager_create() {
+        let manager = SessionManager::new();
+        let _session = manager.create(Session::main());
+        assert!(!manager.list().is_empty());
+    }
+
+    #[test]
+    fn test_session_manager_get() {
+        let manager = SessionManager::new();
+        let created = manager.create(Session::main());
+        let id = created.read().id.clone();
+        
+        let retrieved = manager.get(&id);
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn test_session_manager_get_or_create_main() {
+        let manager = SessionManager::new();
+        let main1 = manager.get_or_create_main();
+        let main2 = manager.get_or_create_main();
+        
+        // Should be the same id
+        let id1 = main1.read().id.clone();
+        let id2 = main2.read().id.clone();
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_session_manager_list() {
+        let manager = SessionManager::new();
+        manager.create(Session::main());
+        manager.create(Session::new(SessionKind::Isolated).with_label("test"));
+        
+        let sessions = manager.list();
+        assert_eq!(sessions.len(), 2);
+    }
+
+    #[test]
+    fn test_session_kind_serialization() {
+        let kind = SessionKind::Main;
+        let json = serde_json::to_string(&kind).unwrap();
+        // SessionKind uses internally tagged serialization
+        assert!(json.contains("Main"));
+    }
+
+    #[test]
+    fn test_session_serialization() {
+        let session = Session::new(SessionKind::Isolated);
+        let json = serde_json::to_string(&session).unwrap();
+        assert!(json.contains("Isolated"));
+        assert!(json.contains("id"));
+    }
+}
