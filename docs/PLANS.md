@@ -29,6 +29,21 @@
 
 ## 迭代历史
 
+### v2.7.0 (已完成 ✅)
+
+**完成事项**:
+- TUI 模块 - 交互式终端界面
+- 会话列表面板 - 显示所有会话
+- 消息查看面板 - 显示消息历史
+- 输入面板 - 发送消息
+- 帮助栏与覆盖层
+- 键盘导航支持
+- `--tui` / `-t` 命令行标志
+
+**下一步计划**: 见下方
+
+---
+
 ### v2.6.0 (已完成 ✅)
 **完成事项**:
 - TUI 模块 - 交互式终端界面
@@ -69,20 +84,32 @@
 
 ---
 
-## 当前迭代规划 (v2.7.0)
+## 当前迭代规划 (v2.8.0)
 
 ### 本轮目标
 结合项目长期愿景和当前现状，本轮迭代重点：
 
-#### 1. 错误处理增强 (P1)
+#### 1. 错误处理增强 (P1) ✅
 **目标**: 提供更友好、更详细的错误信息
 
 **具体内容**:
-- 分类错误类型
-- 错误上下文记录
-- 错误恢复建议
+- ✅ 添加结构化错误代码体系（13种错误类型）
+- ✅ 错误恢复建议（ErrorRecovery 结构）
+- ✅ 错误代码映射（Error → JSON-RPC code）
 
-#### 2. WebUI 增强 (P1)
+**新增功能**:
+- `ResponseError::with_recovery()` - 带恢复建议的错误响应
+- `error_codes` 模块 - 标准化错误代码（INTERNAL_ERROR, NETWORK_ERROR, AGENT_ERROR 等）
+- `map_error_to_response()` - 错误类型智能映射，包含：
+  - SessionNotFound → SESSION_NOT_FOUND
+  - Agent (按原因细分) → AGENT_ERROR/AUTH_ERROR/RATE_LIMIT_ERROR
+  - Network (按原因细分) → NETWORK_ERROR
+  - Tool → TOOL_ERROR
+  - Protocol → PROTOCOL_ERROR
+  - Config → CONFIG_ERROR
+  - 通用错误 → INTERNAL_ERROR
+
+#### 2. 待办: WebUI 增强 (P1)
 **目标**: 完善 Web 管理界面
 
 **具体内容**:
@@ -91,8 +118,8 @@
 - 实时状态显示
 
 #### 3. 基础修复 (持续)
-- `cargo clippy` 无警告
-- `cargo test` 全部通过
+- `cargo clippy` 无警告 ✅
+- `cargo test` 全部通过（153/154，1个预存失败）
 - Bug 修复
 
 ---

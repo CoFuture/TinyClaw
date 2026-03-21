@@ -85,6 +85,17 @@ pub struct ResponseErrorBody {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<ErrorRecovery>,
+}
+
+/// Error recovery suggestion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorRecovery {
+    /// What the user can do to recover
+    pub suggestion: String,
+    /// Link to documentation (optional)
+    pub doc_url: Option<String>,
 }
 
 /// Notification response (no id)
@@ -102,6 +113,7 @@ impl ResponseSuccess {
 }
 
 impl ResponseError {
+    /// Create a new error response
     pub fn new(id: Option<String>, code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             id,
@@ -109,6 +121,7 @@ impl ResponseError {
                 code: code.into(),
                 message: message.into(),
                 data: None,
+                recovery: None,
             },
         }
     }
@@ -126,9 +139,90 @@ impl ResponseError {
                 code: code.into(),
                 message: message.into(),
                 data: Some(data),
+                recovery: None,
             },
         }
     }
+
+    /// Create an error with recovery suggestion
+    pub fn with_recovery(
+        id: Option<String>,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        suggestion: impl Into<String>,
+    ) -> Self {
+        Self {
+            id,
+            error: ResponseErrorBody {
+                code: code.into(),
+                message: message.into(),
+                data: None,
+                recovery: Some(ErrorRecovery {
+                    suggestion: suggestion.into(),
+                    doc_url: None,
+                }),
+            },
+        }
+    }
+
+    /// Create an error with full recovery info
+    pub fn with_full_recovery(
+        id: Option<String>,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        suggestion: impl Into<String>,
+        doc_url: impl Into<String>,
+    ) -> Self {
+        Self {
+            id,
+            error: ResponseErrorBody {
+                code: code.into(),
+                message: message.into(),
+                data: None,
+                recovery: Some(ErrorRecovery {
+                    suggestion: suggestion.into(),
+                    doc_url: Some(doc_url.into()),
+                }),
+            },
+        }
+    }
+}
+
+/// JSON-RPC 2.0 error codes
+#[allow(dead_code)]
+pub mod error_codes {
+    /// Parse error - Invalid JSON
+    pub const PARSE_ERROR: &str = "PARSE_ERROR";
+    /// Invalid request - Request is not valid
+    pub const INVALID_REQUEST: &str = "INVALID_REQUEST";
+    /// Method not found - Unknown method
+    pub const METHOD_NOT_FOUND: &str = "METHOD_NOT_FOUND";
+    /// Invalid params - Parameters are invalid
+    pub const INVALID_PARAMS: &str = "INVALID_PARAMS";
+    /// Internal error - Server-side error
+    pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+
+    // Application-specific error codes (1000-1999)
+    /// Session not found
+    pub const SESSION_NOT_FOUND: &str = "SESSION_NOT_FOUND";
+    /// Agent error - AI provider issues
+    pub const AGENT_ERROR: &str = "AGENT_ERROR";
+    /// Tool execution failed
+    pub const TOOL_ERROR: &str = "TOOL_ERROR";
+    /// Network error - Connectivity issues
+    pub const NETWORK_ERROR: &str = "NETWORK_ERROR";
+    /// Configuration error
+    pub const CONFIG_ERROR: &str = "CONFIG_ERROR";
+    /// Authentication error
+    pub const AUTH_ERROR: &str = "AUTH_ERROR";
+    /// Protocol error - Invalid protocol usage
+    pub const PROTOCOL_ERROR: &str = "PROTOCOL_ERROR";
+    /// Timeout error
+    pub const TIMEOUT_ERROR: &str = "TIMEOUT_ERROR";
+    /// Rate limit exceeded
+    pub const RATE_LIMIT_ERROR: &str = "RATE_LIMIT_ERROR";
+    /// WebSocket connection error
+    pub const WS_ERROR: &str = "WS_ERROR";
 }
 
 impl From<ResponseSuccess> for Response {

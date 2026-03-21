@@ -5,7 +5,7 @@ use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
-use crate::gateway::protocol::*;
+use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
 use crate::agent::Agent;
 use parking_lot::RwLock;
@@ -115,8 +115,151 @@ pub async fn handle_request(
         }
         Err(e) => {
             error!("[{}] <-- {} error: {}", request_id, method, e);
-            let err_response = ResponseError::new(jsonrpc_id, "METHOD_NOT_FOUND", e.to_string());
+            let err_response = map_error_to_response(jsonrpc_id, &e);
             Some(err_response.into())
+        }
+    }
+}
+
+/// Map internal Error to JSON-RPC ResponseError with proper codes and recovery suggestions
+fn map_error_to_response(id: Option<String>, error: &Error) -> ResponseError {
+    match error {
+        Error::SessionNotFound(session_id) => {
+            ResponseError::with_recovery(
+                id,
+                SESSION_NOT_FOUND,
+                format!("Session not found: {}", session_id),
+                "Check the session ID or create a new session using sessions.create",
+            )
+        }
+        Error::Agent(msg) => {
+            // Check for common agent errors and provide specific recovery
+            let (code, recovery) = if msg.contains("API key") || msg.contains("api key") {
+                (
+                    AUTH_ERROR,
+                    "Check your API key configuration. Set the ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.",
+                )
+            } else if msg.contains("rate limit") {
+                (
+                    RATE_LIMIT_ERROR,
+                    "Rate limit exceeded. Wait a moment before retrying or increase the rate limit in config.",
+                )
+            } else if msg.contains("timeout") || msg.contains("Timeout") {
+                (
+                    TIMEOUT_ERROR,
+                    "Request timed out. Try again with a shorter request or check network connectivity.",
+                )
+            } else if msg.contains("model") {
+                (
+                    AGENT_ERROR,
+                    "Model configuration issue. Check the model name in your config and ensure it's available.",
+                )
+            } else {
+                (
+                    AGENT_ERROR,
+                    "An error occurred with the AI agent. Check logs for details and try again.",
+                )
+            };
+            ResponseError::with_recovery(id, code, msg.clone(), recovery)
+        }
+        Error::Tool(msg) => {
+            ResponseError::with_recovery(
+                id,
+                TOOL_ERROR,
+                format!("Tool execution failed: {}", msg),
+                "Check the tool name and parameters. Use tools.list to see available tools.",
+            )
+        }
+        Error::Config(msg) => {
+            ResponseError::with_recovery(
+                id,
+                CONFIG_ERROR,
+                format!("Configuration error: {}", msg),
+                "Check your config.json file and ensure all required fields are present and valid.",
+            )
+        }
+        Error::Network(msg) => {
+            let recovery = if msg.contains("connection") || msg.contains("connect") {
+                "Check your network connection and ensure the API endpoint is reachable."
+            } else if msg.contains("dns") {
+                "DNS resolution failed. Check your network settings and API base URL."
+            } else {
+                "A network error occurred. Check your connection and try again."
+            };
+            ResponseError::with_recovery(id, NETWORK_ERROR, msg.clone(), recovery)
+        }
+        Error::Protocol(msg) => {
+            ResponseError::with_recovery(
+                id,
+                PROTOCOL_ERROR,
+                format!("Protocol error: {}", msg),
+                "Ensure the request follows the JSON-RPC 2.0 specification with correct parameter types.",
+            )
+        }
+        Error::Auth(msg) => {
+            ResponseError::with_recovery(
+                id,
+                AUTH_ERROR,
+                format!("Authentication error: {}", msg),
+                "Check your API keys are correctly configured in the environment or config file.",
+            )
+        }
+        Error::Timeout => {
+            ResponseError::with_recovery(
+                id,
+                TIMEOUT_ERROR,
+                "Request timed out",
+                "The request took too long to complete. Try again or increase the timeout setting.",
+            )
+        }
+        Error::Cancelled => {
+            ResponseError::with_recovery(
+                id,
+                INTERNAL_ERROR,
+                "Request was cancelled",
+                "The request was cancelled. This may be due to a shutdown. Try again if needed.",
+            )
+        }
+        Error::Io(msg) => {
+            ResponseError::with_recovery(
+                id,
+                INTERNAL_ERROR,
+                format!("IO error: {}", msg),
+                "A file system error occurred. Check disk space and file permissions.",
+            )
+        }
+        Error::Json(msg) => {
+            ResponseError::with_recovery(
+                id,
+                INVALID_REQUEST,
+                format!("JSON parsing error: {}", msg),
+                "The request body contains invalid JSON. Check the request format.",
+            )
+        }
+        Error::WebSocket(msg) => {
+            ResponseError::with_recovery(
+                id,
+                WS_ERROR,
+                format!("WebSocket error: {}", msg),
+                "A WebSocket error occurred. Check network connectivity and try reconnecting.",
+            )
+        }
+        Error::Plugin(msg) => {
+            ResponseError::with_recovery(
+                id,
+                INTERNAL_ERROR,
+                format!("Plugin error: {}", msg),
+                "A plugin error occurred. Check plugin configuration and logs.",
+            )
+        }
+        Error::Other(msg) => {
+            // Check for common patterns to give better recovery
+            let recovery = if msg.contains("not configured") {
+                "Required configuration is missing. Check config.json or environment variables."
+            } else {
+                "An unexpected error occurred. Check logs for details."
+            };
+            ResponseError::with_recovery(id, INTERNAL_ERROR, msg.clone(), recovery)
         }
     }
 }
