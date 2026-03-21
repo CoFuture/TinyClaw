@@ -335,6 +335,34 @@
 
 ---
 
-## v1.9.0 待实现
-- 错误处理与重试机制
-- 配置热重载
+## v1.9.0 - 2026-03-21
+
+### Iteration 19: 错误处理增强 + 配置热重载完善
+
+新增功能:
+- [x] 重试机制增强 - 添加 jitter (0-25% 延迟抖动) 防止惊群效应
+- [x] CircuitBreaker 断路器实现
+  - 三态: Closed / Open / HalfOpen
+  - 可配置失败阈值、半开超时、成功阈值
+  - 原子操作保证线程安全
+- [x] 配置热重载完善
+  - 修复 last_modified_map 每个路径独立跟踪
+  - 添加配置验证 (bind、model、retry、hot_reload 设置)
+  - 添加事件通知 (Started, Stopped, Reloaded, ReloadFailed)
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 90 个测试全部通过 (+9 个新测试)
+
+依赖更新:
+- [x] 添加 rand = "0.8" 用于 jitter 生成
+
+### 完成状态: ✅ 已完成并推送
+
+---
+
+## v2.0.0 待规划
+- 分布式支持 (节点发现、状态同步)
+- 插件市场/远程插件加载
+- 高级认证 (OAuth, JWT)
+- 数据库持久化
