@@ -160,7 +160,7 @@ mod tests {
         assert!(manager.get("greeting").is_some());
         assert!(manager.get("nonexistent").is_none());
         
-        let greeting = manager.get("greeting").unwrap();
+        let _greeting = manager.get("greeting").unwrap();
         let mut vars = HashMap::new();
         vars.insert("name".to_string(), "Alice".to_string());
         assert_eq!(manager.render("greeting", &vars), Some("Hello! Alice. How can I help you today?".to_string()));

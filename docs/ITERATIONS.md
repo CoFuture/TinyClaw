@@ -209,10 +209,31 @@
 
 ---
 
+## v1.4.0 - 2026-03-21
+
+### Iteration 14: WebSocket 消息队列优化
+
+新增功能:
+- [x] 异步消息处理架构
+  - 独立的响应写入任务 (writer task)
+  - 并发请求处理 (最多 10 个并发)
+  - 消息 channel 缓冲区
+- [x] 消息队列模块 (gateway/queue.rs)
+  - MessageQueue 结构 - 可配置的消息队列
+  - MessageQueueBuilder - 建造者模式
+  - 背压 (backpressure) 支持
+  - 单元测试覆盖
+- [x] HandlerContext Clone 支持
+- [x] 修复导入路径问题 (ModelConfig)
+
+### 完成状态: ✅ 已完成
+
+---
+
 ## 迭代计划
 
-### v1.4.0 待实现
-- WebSocket 消息队列优化
+### v1.5.0 待实现
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
 - 高级认证 (OAuth, JWT)
+- 流式响应支持

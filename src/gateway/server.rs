@@ -9,9 +9,13 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
+
+/// Maximum concurrent requests per connection
+const MAX_CONCURRENT_REQUESTS: usize = 10;
 
 /// Start the WebSocket server
 pub async fn start_server(
@@ -56,7 +60,19 @@ pub async fn start_server(
     Ok(())
 }
 
-/// Handle a single WebSocket connection
+/// Internal message for the connection handler
+enum ConnectionMessage {
+    /// A text message from the client
+    Text(String),
+    /// Ping received
+    Ping(Vec<u8>),
+    /// Connection closed
+    Close,
+    /// WebSocket error
+    Error(()),
+}
+
+/// Handle a single WebSocket connection with message queue
 async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::HandlerContext) {
     let addr = stream.peer_addr().unwrap_or_else(|_| "unknown".parse().unwrap());
     info!("New connection from: {}", addr);
@@ -71,6 +87,37 @@ async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::Han
 
     let (mut write, mut read) = ws_stream.split();
 
+    // Create a channel for message processing
+    let (msg_tx, mut msg_rx) = mpsc::channel::<ConnectionMessage>(MAX_CONCURRENT_REQUESTS);
+
+    // Spawn the response writer task
+    let writer_handle = tokio::spawn(async move {
+        while let Some(msg) = msg_rx.recv().await {
+            match msg {
+                ConnectionMessage::Text(text) => {
+                    if let Err(e) = write.send(Message::Text(text.into())).await {
+                        error!("Failed to send response: {}", e);
+                        break;
+                    }
+                }
+                ConnectionMessage::Ping(data) => {
+                    if let Err(e) = write.send(Message::Pong(data.into())).await {
+                        error!("Failed to send pong: {}", e);
+                        break;
+                    }
+                }
+                ConnectionMessage::Close => {
+                    let _ = write.close().await;
+                    break;
+                }
+                ConnectionMessage::Error(_) => {
+                    // These don't produce responses
+                }
+            }
+        }
+    });
+
+    // Process messages from the client
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
@@ -81,15 +128,18 @@ async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::Han
 
                 match request {
                     Ok(request) => {
-                        // Handle the request
-                        if let Some(response) = handle_request(&ctx, request).await {
-                            // Send response
-                            let response_json = serde_json::to_string(&response).unwrap();
-                            if let Err(e) = write.send(Message::Text(response_json.into())).await {
-                                error!("Failed to send response: {}", e);
-                                break;
+                        let ctx = ctx.clone();
+                        let msg_tx = msg_tx.clone();
+                        
+                        // Handle request asynchronously
+                        tokio::spawn(async move {
+                            let response = handle_request(&ctx, request).await;
+                            
+                            if let Some(response) = response {
+                                let response_json = serde_json::to_string(&response).unwrap();
+                                let _ = msg_tx.send(ConnectionMessage::Text(response_json)).await;
                             }
-                        }
+                        });
                     }
                     Err(e) => {
                         error!("Failed to parse request: {}", e);
@@ -99,23 +149,18 @@ async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::Han
                             format!("Invalid JSON: {}", e),
                         );
                         let response_json = serde_json::to_string(&error_response).unwrap();
-                        if let Err(e) = write.send(Message::Text(response_json.into())).await {
-                            error!("Failed to send error: {}", e);
-                            break;
-                        }
+                        let _ = msg_tx.send(ConnectionMessage::Text(response_json)).await;
                     }
                 }
             }
             Ok(Message::Close(_)) => {
                 info!("Connection closed by client");
+                let _ = msg_tx.send(ConnectionMessage::Close).await;
                 break;
             }
             Ok(Message::Ping(data)) => {
-                // Automatically respond with Pong
-                if let Err(e) = write.send(Message::Pong(data)).await {
-                    error!("Failed to send pong: {}", e);
-                    break;
-                }
+                // Respond with Pong
+                let _ = msg_tx.send(ConnectionMessage::Ping(data.to_vec())).await;
             }
             Ok(Message::Pong(_)) => {
                 // Ignore pong
@@ -128,10 +173,14 @@ async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::Han
             }
             Err(e) => {
                 error!("WebSocket error: {}", e);
+                let _ = msg_tx.send(ConnectionMessage::Error(())).await;
                 break;
             }
         }
     }
+
+    // Wait for writer to finish
+    let _ = writer_handle.await;
 
     info!("Connection closed: {}", addr);
 }

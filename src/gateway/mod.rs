@@ -5,6 +5,7 @@ pub mod history;
 pub mod messages;
 pub mod persistence;
 pub mod protocol;
+pub mod queue;
 pub mod server;
 pub mod session;
 pub mod auth;

@@ -18,6 +18,7 @@ lazy_static::lazy_static! {
 }
 
 /// Message handler context
+#[derive(Clone)]
 pub struct HandlerContext {
     pub session_manager: Arc<SessionManager>,
     pub history_manager: Arc<HistoryManager>,
