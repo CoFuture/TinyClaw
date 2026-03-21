@@ -136,48 +136,35 @@
 
 ---
 
-## 当前迭代规划 (v3.1.0)
+## 当前迭代规划 (v3.3.0)
 
 ### 本轮目标
-结合 PLANS.md 优先级指引和项目现状，本轮迭代重点：**TUI 完善 (P0)**
-
-#### 1. TUI Gateway 集成 (P0)
-**目标**: TUI 连接 Gateway 进行实时对话
+**TUI 多 Session 支持** (P0)
 
 **已完成** ✅:
-- **TUI Gateway Client** - 新增 WebSocket 客户端模块 (`src/tui/gateway_client.rs`)
-  - 支持连接到本地 Gateway (ws://127.0.0.1:18790)
-  - 完整的 JSON-RPC 协议支持
-  - 事件订阅机制实时接收网关事件
-  - 异步消息发送与接收
-- **TUI 应用集成** - 更新 `src/tui/app.rs` 和 `src/tui/state.rs`
-  - 连接状态追踪与显示
-  - 用户消息通过 WebSocket 发送给 Agent
-  - 实时显示 Agent 回复、工具调用等事件
-  - 错误提示与重连支持
-- **UI 增强**
-  - 连接状态指示器 (●/○)
-  - 加载状态显示
-  - 错误消息覆盖层
-  - 新增 `:r` 命令重连网关
-
-**使用方式**:
-1. 先启动 TinyClaw 主程序 (`cargo run`)
-2. 再启动 TUI (`cargo run -- --tui` 或 `cargo run -t`)
-3. TUI 会自动连接到 Gateway WebSocket
+- **Gateway agent.spawn 处理** - 新增 `handle_agent_spawn` 处理函数 (`src/gateway/messages.rs`)
+  - 支持创建新的 isolated session
+  - 可选 label 参数命名会话
+  - 自动注册到 SessionManager 和 HistoryManager
+- **TUI 会话列表同步** - TUI 连接 Gateway 时自动获取会话列表
+  - `SessionsList` 事件类型 - 接收并解析网关返回的会话列表
+  - `SessionCreated` 事件类型 - 监听新会话创建事件
+  - 连接成功后自动调用 `sessions.list` 获取现有会话
+- **TUI 新建会话命令** - 新增 `:n` 命令创建新会话
+  - 在 TUI 中输入 `:n` 即可创建新的 isolated session
+  - 创建后自动切换到新会话
+- **TUI 会话管理 UI** - 会话列表自动更新反映网关状态
+  - 显示所有活跃会话 ID
+  - 新会话创建后自动出现在列表中
+- **会话历史初始化** - 新会话自动初始化空的历史记录
 
 **下一步**: 
-- 多 Session 支持 (在 TUI 中创建/切换会话)
 - TUI 持久化消息历史
+- 会话删除功能
 
-#### 2. 基础修复 (持续)
-- `cargo clippy` 无警告
+#### 基础修复 (持续)
+- `cargo clippy` 无警告 (1 minor warning: SessionInfo fields for future use)
 - `cargo test` 全部通过 (168 tests)
-
-#### 2. 基础修复 (持续)
-- `cargo clippy` 无警告
-- `cargo test` 全部通过
-- Bug 修复
 
 ---
 
@@ -194,6 +181,7 @@
 - [x] Terminal UI (TUI) ✅ v2.6.0
 - [x] 实时反馈 (SSE 事件流) ✅ v3.1.0
 - [x] TUI Gateway 集成 ✅ v3.2.0
+- [x] TUI 多 Session 支持 ✅ v3.3.0
 - [ ] 命令行客户端
 
 ### 稳定性
@@ -207,6 +195,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.3.0 | TUI 多 Session 支持 - agent.spawn 处理器、会话列表同步、:n 新建会话 |
 | v3.2.0 | TUI Gateway 集成 - WebSocket 客户端、实时对话、连接状态显示 |
 | v3.1.0 | 实时反馈系统 (SSE) + 新事件类型 + WebUI 实时事件面板 |
 | v3.0.0 | Skill 系统核心 + 技能注入 + WebUI 技能面板 |
@@ -220,4 +209,4 @@
 
 ---
 
-*更新时间: 2026-03-21 23:35*
+*更新时间: 2026-03-22 00:32*

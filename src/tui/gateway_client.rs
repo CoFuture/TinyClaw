@@ -46,6 +46,18 @@ pub enum TuiGatewayEvent {
     ConnectionError(String),
     /// Ping response
     Pong,
+    /// Sessions list received
+    SessionsList(Vec<SessionInfo>),
+    /// New session created
+    SessionCreated { session_id: String, label: Option<String> },
+}
+
+/// Session info from gateway
+#[derive(Debug, Clone)]
+pub struct SessionInfo {
+    pub id: String,
+    pub label: Option<String>,
+    pub kind: String,
 }
 
 /// Connection status
@@ -194,16 +206,38 @@ impl TuiGatewayClient {
             Response::Success(resp) => {
                 // Handle different result types
                 if let Some(result_obj) = resp.result.as_object() {
+                    // Check if this is a sessions.list response
+                    if let Some(sessions) = result_obj.get("sessions") {
+                        if let Some(sessions_arr) = sessions.as_array() {
+                            let session_infos: Vec<SessionInfo> = sessions_arr
+                                .iter()
+                                .filter_map(|s| {
+                                    let obj = s.as_object()?;
+                                    let id = obj.get("id")?.as_str()?.to_string();
+                                    let label = obj.get("label").and_then(|v| v.as_str()).map(String::from);
+                                    let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                                    Some(SessionInfo { id, label, kind })
+                                })
+                                .collect();
+                            let _ = event_tx.send(TuiGatewayEvent::SessionsList(session_infos));
+                            return;
+                        }
+                    }
+                    // Check if this is an agent.spawn response
+                    if let Some(session_id) = result_obj.get("session_id") {
+                        let label = result_obj.get("label").and_then(|v| v.as_str()).map(String::from);
+                        let _ = event_tx.send(TuiGatewayEvent::SessionCreated {
+                            session_id: session_id.to_string(),
+                            label,
+                        });
+                        return;
+                    }
                     // Check if this is a turn response
                     if let Some(text) = result_obj.get("text") {
                         let _ = event_tx.send(TuiGatewayEvent::AssistantText(text.to_string()));
                     }
                     if let Some(response_text) = result_obj.get("response") {
                         let _ = event_tx.send(TuiGatewayEvent::TurnEnded(response_text.to_string()));
-                    }
-                    // Check for session_id
-                    if let Some(session_id) = result_obj.get("session_id") {
-                        debug!("Turn response session_id: {}", session_id);
                     }
                 } else if resp.result.is_string() {
                     // Pong response
@@ -277,9 +311,9 @@ impl TuiGatewayClient {
         Ok(())
     }
 
-    /// List available sessions
-    #[allow(dead_code)]
-    pub async fn list_sessions(&self) -> Result<Vec<serde_json::Value>, String> {
+    /// List available sessions - sends request and returns immediately
+    /// Sessions are delivered via the event channel as TuiGatewayEvent::SessionsList
+    pub async fn list_sessions(&self) -> Result<(), String> {
         let request = Request::Standard(RequestStandard {
             id: Some("tui-list-sessions".to_string()),
             method: methods::SESSIONS_LIST.to_string(),
@@ -288,15 +322,12 @@ impl TuiGatewayClient {
 
         let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
         self.send_tx.send(json).await.map_err(|e| e.to_string())?;
-        
-        // For simplicity, we'll just return an empty list here
-        // The actual response will come through the event channel
-        Ok(vec![])
+        Ok(())
     }
 
-    /// Create a new session
-    #[allow(dead_code)]
-    pub async fn create_session(&self) -> Result<String, String> {
+    /// Create a new session - sends request and returns immediately
+    /// Session creation result is delivered via the event channel as TuiGatewayEvent::SessionCreated
+    pub async fn create_session(&self) -> Result<(), String> {
         let request = Request::Standard(RequestStandard {
             id: Some(format!("tui-create-session-{}", uuid::Uuid::new_v4())),
             method: methods::AGENT_SPAWN.to_string(),
@@ -305,7 +336,7 @@ impl TuiGatewayClient {
 
         let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
         self.send_tx.send(json).await.map_err(|e| e.to_string())?;
-        Ok("new-session".to_string())
+        Ok(())
     }
 
     /// Check if connected

@@ -102,6 +102,7 @@ pub async fn handle_request(
         methods::SESSIONS_SEND => handle_sessions_send(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::SESSIONS_HISTORY => handle_sessions_history(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
+        methods::AGENT_SPAWN => handle_agent_spawn(ctx, jsonrpc_id.clone(), params).await,
         methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::TOOLS_LIST => handle_tools_list(jsonrpc_id.clone()).await,
         methods::TOOL_EXECUTE => handle_tool_execute(request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -447,6 +448,43 @@ async fn handle_agent_turn(
 
     Ok(serde_json::json!({
         "text": response
+    }))
+}
+
+/// Handle agent.spawn (create a new isolated session)
+async fn handle_agent_spawn(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    use crate::gateway::session::{Session, SessionKind};
+
+    // Extract optional label from params
+    let label = params
+        .get("label")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    // Create new isolated session
+    let mut session = Session::new(SessionKind::Isolated);
+    if let Some(ref l) = label {
+        session = session.with_label(l);
+    }
+
+    let session_id = session.id.clone();
+
+    // Register session with session manager
+    ctx.session_manager.create(session);
+
+    // Ensure history manager has an entry for this session
+    let _ = ctx.history_manager.get_or_create(&session_id);
+
+    info!("Created new session: {}", session_id);
+
+    Ok(serde_json::json!({
+        "session_id": session_id,
+        "label": label,
+        "kind": "isolated"
     }))
 }
 

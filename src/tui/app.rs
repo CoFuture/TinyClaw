@@ -130,6 +130,11 @@ impl TuiApp {
                 self.state.set_connected(true);
                 self.state.gateway_status = TuiGatewayStatus::Connected;
                 info!("TUI connected to gateway");
+                
+                // Request sessions list after successful connection
+                if let Err(e) = client.list_sessions().await {
+                    error!("Failed to request sessions list: {}", e);
+                }
             }
             Ok(Err(e)) => {
                 error!("Failed to connect to gateway: {}", e);
@@ -155,6 +160,14 @@ impl TuiApp {
                 self.state.set_connected(true);
                 self.state.gateway_status = TuiGatewayStatus::Connected;
                 self.state.set_error(None);
+                // Request sessions list when connected
+                let client = self.gateway_client.clone();
+                tokio::spawn(async move {
+                    let client = client.read().await;
+                    if let Err(e) = client.list_sessions().await {
+                        error!("Failed to request sessions list: {}", e);
+                    }
+                });
             }
             TuiGatewayEvent::Disconnected => {
                 info!("TUI received disconnected event");
@@ -230,6 +243,39 @@ impl TuiApp {
             }
             TuiGatewayEvent::Pong => {
                 debug!("Received pong");
+            }
+            TuiGatewayEvent::SessionsList(sessions) => {
+                info!("Received sessions list: {} sessions", sessions.len());
+                // Update sessions in state
+                self.state.sessions.clear();
+                self.state.session_histories.clear();
+                for session in sessions {
+                    let session_id = session.id.clone();
+                    self.state.sessions.push(session_id.clone());
+                    self.state.session_histories.insert(
+                        session_id.clone(),
+                        crate::types::SessionHistory::new(session_id),
+                    );
+                }
+                // Set current session to first one if available and not set
+                if self.state.current_session_id.is_none() {
+                    if let Some(first) = self.state.sessions.first() {
+                        self.state.set_current_session(first.clone());
+                    }
+                }
+            }
+            TuiGatewayEvent::SessionCreated { session_id, label } => {
+                info!("New session created: {} ({:?})", session_id, label);
+                // Add the new session to state
+                if !self.state.sessions.contains(&session_id) {
+                    self.state.sessions.push(session_id.clone());
+                    self.state.session_histories.insert(
+                        session_id.clone(),
+                        crate::types::SessionHistory::new(session_id.clone()),
+                    );
+                }
+                // Switch to the new session
+                self.state.set_current_session(session_id);
             }
         }
     }
@@ -315,6 +361,16 @@ impl TuiApp {
                                 // Reconnect
                                 self.state.set_error(None);
                                 self.state.set_connected(false);
+                            }
+                            KeyCode::Char('n') => {
+                                // Create new session
+                                let client = self.gateway_client.clone();
+                                tokio::spawn(async move {
+                                    let client = client.read().await;
+                                    if let Err(e) = client.create_session().await {
+                                        error!("Failed to create session: {}", e);
+                                    }
+                                });
                             }
                             _ => {}
                         }
@@ -512,6 +568,7 @@ impl TuiApp {
             Line::from(" Ctrl+C - Cancel operation"),
             Line::from(" :q - Quit"),
             Line::from(" :r - Reconnect gateway"),
+            Line::from(" :n - Create new session"),
             Line::from(" :h - Toggle this help"),
             Line::from(""),
             Line::from(" Press any key to close "),
