@@ -4,11 +4,29 @@
 
 TinyClaw 是一个轻量级 AI Agent Gateway，实现从对话到工具执行的完整闭环。
 
+它是 OpenClaw 的 Rust 实现子集，参考了 OpenClaw 的核心架构设计。
+
+## OpenClaw 背景
+
+> "OpenClaw is a personal AI assistant you run on your own devices.
+> It answers you on the channels you already use."
+
+OpenClaw 是一个跨平台的个人 AI 助手，支持：
+- **多渠道**：WhatsApp, Telegram, Slack, Discord, Signal, iMessage 等
+- **多设备**：macOS, iOS, Android
+- **语音**：支持语音唤醒和对话
+- **视觉**：Live Canvas 可视化工作区
+
+OpenClaw 的核心架构：
+- **Gateway**：WS 控制平面，管理会话、渠道、工具、事件
+- **Agent Runtime**：Pi agent runtime，支持工具流和块流
+- **Session Model**：main 用于直接聊天，group isolation 用于群组隔离
+
 ## 设计原则
 
 1. **最小化** - 只实现必要的功能
 2. **稳定性** - 代码简洁，易于维护
-3. **安全性** - 最小依赖，内存安全
+3. **安全性** - Rust 内存安全
 
 ## 系统架构
 
@@ -76,7 +94,7 @@ TinyClaw 是一个轻量级 AI Agent Gateway，实现从对话到工具执行的
 
 ### 3. HTTP Server
 
-**职责**: REST API 和 Web 管理界面
+**职责**: REST API 和 Web 管理界面（含交互式聊天）
 
 **关键文件**:
 - `routes.rs` - HTTP 路由
@@ -104,6 +122,19 @@ Agent Runtime:
 返回结果给客户端
 ```
 
+## 与 OpenClaw 的差异
+
+| 特性 | OpenClaw | TinyClaw |
+|------|----------|----------|
+| 语言 | TypeScript/Node.js | Rust |
+| 渠道 | 20+ 消息渠道 | 仅 WebSocket |
+| 语音 | 支持 | 不支持 |
+| Canvas | 支持 | 不支持 |
+| 技能 | 支持 | 不支持 |
+| 复杂度 | 高 | 低 |
+| 性能 | 中 | 高 |
+| 内存安全 | 依赖 Node.js | 原生 Rust |
+
 ## 安全性
 
 1. **速率限制** - 防止滥用
@@ -115,21 +146,4 @@ Agent Runtime:
 
 1. **异步 I/O** - Tokio 异步运行时
 2. **并发控制** - Arc + RwLock
-3. **消息队列** - 异步消息处理
-
-## 设计决策
-
-### 为什么只保留核心模块?
-- 简化维护
-- 减少依赖
-- 提高稳定性
-
-### 为什么不用插件系统?
-- 增加了复杂性
-- 当前不需要动态扩展
-- 可以后续按需添加
-
-### 为什么不用 TUI?
-- 需要终端环境
-- Web UI 更通用
-- 可以后续按需添加
+3. **最小依赖** - Rust 编译优化

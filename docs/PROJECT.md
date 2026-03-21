@@ -4,7 +4,35 @@
 
 **TinyClaw** - OpenClaw 的 Rust 实现子集，一个小而精的生产级 AI Agent Gateway。
 
-**设计目标**: 保留 OpenClaw 核心功能，实现一个稳定可用的 AI Agent 产品。
+### OpenClaw 是什么？
+
+> OpenClaw is a personal AI assistant you run on your own devices.
+> It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, IRC, Microsoft Teams, Matrix, Feishu, LINE, Mattermost, Nextcloud Talk, Nostr, Synology Chat, Tlon, Twitch, Zalo, WebChat).
+
+**OpenClaw** 是一个运行在你自有设备上的个人 AI 助手，支持多种消息渠道，具备语音和听力能力，可以渲染 Live Canvas。
+
+### TinyClaw 的定位
+
+TinyClaw 是 OpenClaw 的 Rust 实现子集：
+- **目标**：小而精，保留核心功能
+- **语言**：Rust（高性能、内存安全）
+- **架构**：Gateway 控制平面 + Agent Runtime
+
+## OpenClaw 完整功能 vs TinyClaw 子集
+
+| OpenClaw 功能 | TinyClaw 状态 |
+|--------------|---------------|
+| **Gateway WS 控制平面** | ✅ 已实现 |
+| **多渠道收件箱** | ❌ 未实现 (WhatsApp, Telegram 等) |
+| **多智能体路由** | ❌ 未实现 |
+| **Pi Agent Runtime** | ✅ 已实现 (简化版) |
+| **会话模型** (main/isolation) | ✅ 已实现 |
+| **工具系统** | ✅ 已实现 |
+| **语音支持** | ❌ 未实现 |
+| **Live Canvas** | ❌ 未实现 |
+| **技能系统** | ❌ 未实现 |
+| **伴侣应用** (macOS/iOS/Android) | ❌ 未实现 |
+| **Node 节点** | ❌ 未实现 |
 
 ## 核心架构
 
@@ -46,12 +74,7 @@
 ### http/ - HTTP 服务器
 | 文件 | 职责 |
 |------|------|
-| routes.rs | REST API + Web 管理界面 |
-
-### ratelimit/ - 速率限制
-| 文件 | 职责 |
-|------|------|
-| limiter.rs | 令牌桶速率限制 |
+| routes.rs | REST API + Web 管理界面 + 交互式聊天 |
 
 ## 完整链路
 
@@ -149,11 +172,21 @@
 | 内置工具 | ✅ |
 | 速率限制 | ✅ |
 | Web 管理界面 | ✅ |
-| 插件系统 | ❌ (已移除冗余) |
-| TUI | ❌ (已移除冗余) |
+| 交互式聊天 UI | ✅ |
+| 多渠道 (WhatsApp/Telegram/Discord) | ❌ |
+| 语音支持 | ❌ |
+| Live Canvas | ❌ |
+| 技能系统 | ❌ |
+
+## 设计原则
+
+1. **小而精** - 只实现必要的核心功能
+2. **稳定性** - 代码简洁，易于维护
+3. **安全性** - Rust 内存安全，最小依赖
 
 ## 参考
 
 - [OpenClaw](https://github.com/openclaw/openclaw)
+- [OpenClaw Docs](https://docs.openclaw.ai)
 - [Tokio](https://tokio.rs)
 - [Axum](https://docs.rs/axum)
