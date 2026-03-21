@@ -136,28 +136,24 @@
 
 ---
 
-## 当前迭代规划 (v3.4.0)
+## 当前迭代规划 (v3.5.0)
 
 ### 本轮目标
-**TUI 会话历史加载 + 会话删除** (P0)
+**WebUI Chat 多会话切换** (P0)
 
 **已完成** ✅:
-- **TUI 会话历史加载** - 连接网关后自动加载会话历史
-  - `SessionHistoryLoaded` 事件类型 - 接收并解析网关返回的会话历史
-  - `get_history(session_id)` 方法 - TUI Gateway Client 支持获取会话历史
-  - 连接成功后自动获取所有会话的历史记录
-  - 历史消息缓存在 TUI 本地状态中
-- **TUI 会话删除功能** - 支持删除不需要的会话
-  - `sessions.delete` WebSocket 方法 - 网关支持删除会话
-  - `DELETE /api/sessions/{id}` HTTP API - REST API 删除会话
-  - `SessionDeleted` 事件类型 - 删除完成后通知客户端
-  - `:d` 命令 - TUI 中删除当前会话（不能删除 main）
-  - 删除后自动切换到其他会话
-- **防止误删 main 会话** - main 会话无法被删除
+- **WebUI Chat Session Switching** - 管理界面聊天面板支持多会话切换
+  - 会话选择下拉框 - 在聊天面板中选择目标会话
+  - `sessionKey` 参数传递 - 发送消息时携带正确的会话 ID
+  - 实时消息缓存 - per-session 消息历史本地缓存
+  - 会话历史加载 - 切换会话时自动从网关加载历史记录
+  - SSE 实时更新 - 实时事件流中过滤并更新当前会话消息
+  - WebSocket 通知处理 - 处理 `assistant.text` 等实时推送消息
+  - 加载状态指示 - 切换会话时显示加载中状态
 
 **下一步**: 
 - TUI 消息历史持久化到本地
-- WebUI 会话管理面板
+- WebUI 会话管理面板（创建/删除会话）
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告 (1 minor warning: SessionInfo fields for future use)
@@ -181,6 +177,7 @@
 - [x] TUI 多 Session 支持 ✅ v3.3.0
 - [x] TUI 会话历史加载 ✅ v3.4.0
 - [x] TUI 会话删除功能 ✅ v3.4.0
+- [x] WebUI Chat 多会话切换 ✅ v3.5.0
 - [ ] 命令行客户端
 
 ### 稳定性
@@ -194,6 +191,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.5.0 | WebUI Chat 多会话切换 - 会话下拉选择、sessionKey 传递、历史加载、SSE 实时更新 |
 | v3.4.0 | TUI 会话历史加载 + 会话删除 - 自动加载历史、:d 删除会话、防止删除 main |
 | v3.3.0 | TUI 多 Session 支持 - agent.spawn 处理器、会话列表同步、:n 新建会话 |
 | v3.2.0 | TUI Gateway 集成 - WebSocket 客户端、实时对话、连接状态显示 |
@@ -209,4 +207,4 @@
 
 ---
 
-*更新时间: 2026-03-22 01:02*
+*更新时间: 2026-03-22 01:32*

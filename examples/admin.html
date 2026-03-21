@@ -635,12 +635,14 @@
             font-size: 12px;
             margin-bottom: 10px;
             color: #888;
+            flex-wrap: wrap;
         }
         .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: #ff4757;
+            flex-shrink: 0;
         }
         .status-dot.connected {
             background: #00ff88;
@@ -657,6 +659,29 @@
             padding: 4px 10px;
             font-size: 11px;
             margin-left: auto;
+        }
+        .chat-session-select {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 4px;
+            color: #eee;
+            padding: 3px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .chat-session-select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .chat-session-select option {
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .chat-loading-indicator {
+            color: #00d9ff;
+            font-size: 11px;
+            margin-left: 8px;
         }
         .chat-messages {
             flex: 1;
@@ -994,6 +1019,7 @@
                 // Fetch sessions
                 const sessions = await fetchJSON(API_BASE + '/api/sessions');
                 renderSessions(sessions.sessions || []);
+                updateChatSessionSelector(sessions.sessions || []);
                 
                 // Fetch tools list
                 try {
@@ -1453,6 +1479,11 @@
         let chatMessageId = 1;
         let chatReconnectAttempts = 0;
         const maxChatReconnectAttempts = 5;
+        let chatCurrentSession = 'main';
+        // Per-session message histories (loaded from gateway)
+        const chatMessageHistories = {};
+        // Pending history request IDs
+        const chatPendingHistoryReqs = new Set();
 
         function initChat() {
             // Inject chat HTML - insert before the grid
@@ -1464,6 +1495,10 @@
                 <div class="chat-status">
                     <span class="status-dot" id="chatWsStatus"></span>
                     <span id="chatWsStatusText">连接中...</span>
+                    <select id="chatSessionSelect" class="chat-session-select" onchange="onChatSessionChange()">
+                        <option value="main">main (默认)</option>
+                    </select>
+                    <span id="chatLoadingIndicator" class="chat-loading-indicator" style="display:none;">加载中...</span>
                     <button class="btn btn-small" onclick="initChatWebSocket()" style="margin-left: auto; padding: 4px 8px; font-size: 11px;">重连</button>
                 </div>
                 <div class="chat-messages" id="chatMessages">
@@ -1543,12 +1578,61 @@
         }
 
         function handleChatMessage(data) {
+            // Handle JSON-RPC Notification (no id, has method)
+            if (data.method) {
+                handleChatNotification(data);
+                return;
+            }
+            
+            // Check if this is a response to a history request
+            if (data.id && chatPendingHistoryReqs.has(data.id)) {
+                chatPendingHistoryReqs.delete(data.id);
+                if (data.result && data.result.messages) {
+                    // Cache messages per session
+                    const sessionId = chatCurrentSession;
+                    chatMessageHistories[sessionId] = data.result.messages.map(m => ({
+                        role: m.role,
+                        content: m.content,
+                        timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
+                    }));
+                    if (document.getElementById('chatSessionSelect').value === sessionId) {
+                        renderChatHistory(sessionId);
+                    }
+                }
+                showChatLoading(false);
+                return;
+            }
+            
             if (data.error) {
                 addChatMessage('错误: ' + data.error.message, 'error');
             } else if (data.result) {
                 const text = data.result.text || JSON.stringify(data.result, null, 2);
                 if (text) {
+                    // Cache in session history
+                    addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: text });
                     addChatMessage(text, 'assistant');
+                }
+            }
+        }
+        
+        /// Handle WebSocket JSON-RPC notifications (no id)
+        function handleChatNotification(data) {
+            const method = data.method;
+            const params = data.params || {};
+            
+            if (method === 'assistant.text' && params.text) {
+                const text = params.text;
+                // Cache in session history (check session match)
+                const msgSession = params.session_id || chatCurrentSession;
+                if (msgSession === chatCurrentSession) {
+                    addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: text });
+                    addChatMessage(text, 'assistant');
+                }
+            } else if (method === 'assistant.tool_use' && params.tool) {
+                // Show tool use in chat as a notice
+                const msgSession = params.session_id || chatCurrentSession;
+                if (msgSession === chatCurrentSession) {
+                    addChatMessage('[调用工具: ' + params.tool + ']', 'notice');
                 }
             }
         }
@@ -1592,18 +1676,157 @@
                 return;
             }
             
-            // Add user message
+            // Add user message to local history
+            addChatMessageToHistory(chatCurrentSession, { role: 'user', content: message });
             addChatMessage(message, 'user');
             input.value = '';
             
-            // Send to server
+            // Send to server with session key
             const request = {
                 id: String(chatMessageId++),
                 method: 'agent.turn',
-                params: { message: message }
+                params: { message: message, sessionKey: chatCurrentSession }
             };
             
             chatWs.send(JSON.stringify(request));
+        }
+        
+        /// Add a message to per-session local history cache
+        function addChatMessageToHistory(sessionId, msg) {
+            if (!chatMessageHistories[sessionId]) {
+                chatMessageHistories[sessionId] = [];
+            }
+            chatMessageHistories[sessionId].push({
+                ...msg,
+                timestamp: Date.now()
+            });
+        }
+        
+        /// Handle session change in the chat dropdown
+        function onChatSessionChange() {
+            const select = document.getElementById('chatSessionSelect');
+            const newSession = select.value;
+            
+            if (newSession === chatCurrentSession) return;
+            
+            chatCurrentSession = newSession;
+            
+            // Clear chat display
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = '';
+            
+            // Show loading
+            showChatLoading(true);
+            
+            // Load history for the new session
+            loadChatSessionHistory(newSession);
+        }
+        
+        /// Load chat history for a session via WebSocket
+        function loadChatSessionHistory(sessionId) {
+            if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
+                showChatLoading(false);
+                return;
+            }
+            
+            // If we have cached history, show it immediately
+            if (chatMessageHistories[sessionId] && chatMessageHistories[sessionId].length > 0) {
+                renderChatHistory(sessionId);
+                showChatLoading(false);
+                return;
+            }
+            
+            // Request history from gateway
+            const reqId = String(chatMessageId++);
+            chatPendingHistoryReqs.add(reqId);
+            
+            const request = {
+                id: reqId,
+                method: 'sessions.history',
+                params: { sessionKey: sessionId }
+            };
+            
+            chatWs.send(JSON.stringify(request));
+            
+            // Timeout fallback: if no response in 3s, just show empty
+            setTimeout(() => {
+                chatPendingHistoryReqs.delete(reqId);
+                if (document.getElementById('chatSessionSelect').value === sessionId) {
+                    showChatLoading(false);
+                    // Show notice that no history was loaded
+                    const container = document.getElementById('chatMessages');
+                    if (container.children.length === 0) {
+                        container.innerHTML = '<div class="message notice">会话 ' + escapeHtml(sessionId) + ' 的历史记录为空。开始对话吧！</div>';
+                    }
+                }
+            }, 3000);
+        }
+        
+        /// Render cached history for a session into the chat panel
+        function renderChatHistory(sessionId) {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = '';
+            
+            const history = chatMessageHistories[sessionId] || [];
+            
+            if (history.length === 0) {
+                container.innerHTML = '<div class="message notice">会话 ' + escapeHtml(sessionId) + ' 的历史记录为空。开始对话吧！</div>';
+                return;
+            }
+            
+            history.forEach(msg => {
+                const type = msg.role === 'user' ? 'user' : 'assistant';
+                addChatMessage(msg.content, type);
+            });
+        }
+        
+        function showChatLoading(show) {
+            const indicator = document.getElementById('chatLoadingIndicator');
+            if (indicator) {
+                indicator.style.display = show ? 'inline' : 'none';
+            }
+        }
+        
+        /// Handle SSE events to update chat panel in real-time
+        function handleSseChatEvent(eventType, data) {
+            const eventSessionId = data.session_id;
+            
+            // Only process if this event is for the currently viewed chat session
+            if (eventSessionId && eventSessionId !== chatCurrentSession) {
+                return; // Ignore events for other sessions
+            }
+            
+            if (eventType === 'assistant.text' && data.text) {
+                // Add to history cache
+                addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: data.text });
+                // Show in chat panel (only if it matches current session)
+                addChatMessage(data.text, 'assistant');
+            } else if (eventType === 'turn.started' && data.message) {
+                // User message from SSE - add to history
+                addChatMessageToHistory(chatCurrentSession, { role: 'user', content: data.message });
+            }
+        }
+        
+        /// Update the chat session selector with current sessions list
+        function updateChatSessionSelector(sessions) {
+            const select = document.getElementById('chatSessionSelect');
+            if (!select) return;
+            
+            const currentValue = select.value;
+            select.innerHTML = '';
+            
+            sessions.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = (s.label || s.id) + ' (' + s.kind + ')';
+                if (s.id === currentValue) opt.selected = true;
+                select.appendChild(opt);
+            });
+            
+            // Restore current if not in list
+            if (!sessions.find(s => s.id === currentValue)) {
+                chatCurrentSession = sessions.length > 0 ? sessions[0].id : 'main';
+            }
         }
 
         // SSE Event Stream
@@ -1653,6 +1876,9 @@
                                 session_id: data.session_id || null,
                                 content: data
                             });
+                            
+                            // Also update chat panel in real-time for assistant.text events
+                            handleSseChatEvent(type, data);
                             
                             // Update session filter dropdown if we see a new session
                             if (data.session_id) {
