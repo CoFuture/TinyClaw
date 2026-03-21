@@ -103,14 +103,16 @@ TinyClaw 核心:
 ## 开发规范
 
 ### 每次迭代前
-1. 阅读本文档
-2. 检查当前代码：`cargo clippy`
-3. 确认本轮迭代目标：基础修复 + 核心功能
+1. **阅读本文档 (PRINCIPLES.md)**
+2. **阅读 PLANS.md** - 了解上一次的迭代规划和长期愿景
+3. 检查当前代码：`cargo clippy`
+4. 确认本轮迭代目标：基础修复 + 核心功能
 
 ### 每次迭代后 (必须执行)
-1. `git add .` - 暂存所有更改
-2. `git commit -m "..."` - 提交更改（符合上述触发条件时）
-3. **`git push origin master`** - 推送到 GitHub
+1. 更新 **PLANS.md** - 记录本轮完成事项与下一步规划
+2. `git add .` - 暂存所有更改
+3. `git commit -m "..."` - 提交更改（符合上述触发条件时）
+4. **`git push origin master`** - 推送到 GitHub
 
 ### 添加新功能前
 1. 确认功能是**必须**的

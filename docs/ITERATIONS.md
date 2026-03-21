@@ -561,6 +561,42 @@ Bug 修复:
 
 ---
 
+## v2.5.0 - 2026-03-21
+
+### Iteration 28: Context Management Enhancement
+
+**目标**: 添加上下文管理，支持上下文截断，防止长对话超出模型 token 限制
+
+新增功能:
+- [x] `context_manager.rs` 模块
+  - `ContextManager` - 上下文管理器
+  - `ContextOptions` - 上下文配置选项
+  - `TokenEstimate` - Token 估算结果
+  - `estimate_tokens()` - 基于字符数估算 token (约4字符=1 token)
+  - `estimate_message_tokens()` - 估算单条消息 token
+  - `estimate_messages_tokens()` - 估算多条消息总 token
+  - `needs_truncation()` - 检查是否需要截断
+  - `truncate_to_fit()` - 智能截断策略（保留系统消息、最近N条消息）
+  - `format_for_anthropic()` - Anthropic API 格式转换
+  - `format_for_openai()` - OpenAI API 格式转换
+  - `format_for_ollama()` - Ollama API 格式转换
+
+- [x] `RuntimeConfig` 增强
+  - 新增 `context_options` 字段
+  - 支持配置最大 context tokens 和预留 output tokens
+  - 默认: 180k input tokens, 4k output tokens
+
+- [x] `runtime.rs` 集成
+  - 在 `get_model_response()` 中应用上下文截断
+  - 检测到上下文过长时自动截断
+  - 修复 `await_holding_lock` 问题
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 124 个测试通过 (+9 新测试)
+
+---
+
 ## v2.4.0 - 2026-03-21
 
 ### Iteration 27: 会话管理增强 + 工具输入验证

@@ -4,6 +4,7 @@
 
 use crate::agent::client::Agent;
 use crate::agent::context::{AgentContext, ExecutionState};
+use crate::agent::context_manager::{ContextManager, ContextOptions};
 use crate::agent::tools::{ToolExecutor, ToolResult};
 use crate::common::Result;
 use crate::gateway::events::{Event, EventEmitter};
@@ -50,6 +51,8 @@ pub struct RuntimeConfig {
     pub emit_events: bool,
     /// Tool call timeout in seconds
     pub tool_timeout_secs: u64,
+    /// Context manager options
+    pub context_options: ContextOptions,
 }
 
 impl Default for RuntimeConfig {
@@ -58,6 +61,7 @@ impl Default for RuntimeConfig {
             max_turns: 10,
             emit_events: true,
             tool_timeout_secs: 30,
+            context_options: ContextOptions::default(),
         }
     }
 }
@@ -68,16 +72,20 @@ pub struct AgentRuntime {
     config: RwLock<RuntimeConfig>,
     tool_executor: Arc<ToolExecutor>,
     event_emitter: Option<Arc<EventEmitter>>,
+    context_manager: RwLock<ContextManager>,
 }
 
 #[allow(dead_code)]
 impl AgentRuntime {
     /// Create a new agent runtime
     pub fn new(tool_executor: Arc<ToolExecutor>) -> Self {
+        let config = RuntimeConfig::default();
+        let context_manager = ContextManager::new(config.context_options.clone());
         Self {
-            config: RwLock::new(RuntimeConfig::default()),
+            config: RwLock::new(config),
             tool_executor,
             event_emitter: None,
+            context_manager: RwLock::new(context_manager),
         }
     }
 
@@ -89,6 +97,8 @@ impl AgentRuntime {
 
     /// Update configuration
     pub fn set_config(&self, config: RuntimeConfig) {
+        let context_manager = ContextManager::new(config.context_options.clone());
+        *self.context_manager.write() = context_manager;
         *self.config.write() = config;
     }
 
@@ -217,15 +227,32 @@ impl AgentRuntime {
 
     /// Get response from the model
     async fn get_model_response(&self, context: &AgentContext) -> Result<ModelResponse> {
-        // For now, just call the agent directly
-        // In a full implementation, this would format the conversation history
-        // and parse tool calls from the response
-        
+        // Get conversation history
         let history = context.get_history();
-        let last_message = history.last()
+        
+        // Apply context management (truncation if needed)
+        // Note: we drop the lock guard before any await point
+        let truncated_history = {
+            let cm = self.context_manager.read();
+            if cm.needs_truncation(&history) {
+                let truncated = cm.truncate_to_fit(&history);
+                tracing::debug!(
+                    "Context truncated: {} messages -> {} messages",
+                    history.len(),
+                    truncated.len()
+                );
+                truncated
+            } else {
+                history.clone()
+            }
+        }; // Lock guard dropped here
+        
+        // Get last user message for the agent
+        let last_message = truncated_history.last()
             .map(|m| m.content.clone())
             .unwrap_or_default();
         
+        // Send to agent (agent handles API formatting internally)
         let response_text = context.agent.send_message(&context.session_id, &last_message).await?;
         
         Ok(ModelResponse {
@@ -272,5 +299,25 @@ impl AgentRuntime {
 impl Default for AgentRuntime {
     fn default() -> Self {
         Self::new(Arc::new(ToolExecutor::new()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runtime_config_default() {
+        let config = RuntimeConfig::default();
+        assert_eq!(config.max_turns, 10);
+        assert_eq!(config.tool_timeout_secs, 30);
+        assert!(config.emit_events);
+    }
+
+    #[test]
+    fn test_runtime_with_context_manager() {
+        let runtime = AgentRuntime::new(Arc::new(ToolExecutor::new()));
+        let config = runtime.get_config();
+        assert_eq!(config.max_turns, 10);
     }
 }
