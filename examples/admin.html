@@ -273,6 +273,147 @@
             grid-column: 1 / -1;
         }
         
+        /* Tools Panel */
+        .tools-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .tool-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        .tool-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            gap: 10px;
+        }
+        .tool-header:hover {
+            background: rgba(0,217,255,0.1);
+        }
+        .tool-name {
+            font-weight: bold;
+            color: #00d9ff;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .tool-desc {
+            color: #888;
+            font-size: 12px;
+            flex: 1;
+        }
+        .tool-toggle {
+            color: #666;
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+        .tool-toggle.expanded {
+            transform: rotate(90deg);
+        }
+        .tool-schema {
+            display: none;
+            padding: 12px 14px;
+            background: rgba(0,0,0,0.3);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .tool-schema.active {
+            display: block;
+        }
+        .tool-schema pre {
+            margin: 0;
+            font-size: 12px;
+            color: #ccc;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'SF Mono', Consolas, monospace;
+        }
+        .schema-title {
+            color: #888;
+            font-size: 11px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        .tool-count-badge {
+            background: rgba(0,217,255,0.2);
+            color: #00d9ff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        
+        /* Config Editor */
+        .config-editor {
+            margin-top: 10px;
+        }
+        .config-textarea {
+            width: 100%;
+            min-height: 200px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 12px;
+            color: #eee;
+            font-size: 12px;
+            font-family: 'SF Mono', Consolas, monospace;
+            resize: vertical;
+        }
+        .config-textarea:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .config-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .config-success {
+            color: #00ff88;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .config-error {
+            color: #ff4757;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        
+        /* Tool call display in chat */
+        .tool-call-msg {
+            background: rgba(0,217,255,0.08);
+            border: 1px solid rgba(0,217,255,0.2);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .tool-call-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #00d9ff;
+            margin-bottom: 6px;
+        }
+        .tool-call-name {
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .tool-call-args {
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 12px;
+            color: #aaa;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
         /* Chat functionality */
         .chat-card {
             height: 520px;
@@ -507,6 +648,28 @@
             </div>
         </div>
         
+        <!-- Agent Tools Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🛠️ 可用工具 <span class="tool-count-badge" id="toolCount">-</span></h2>
+            <div class="tools-panel" id="toolsPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+        
+        <!-- Config Editor -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>⚡ 配置编辑器</h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">在线编辑配置。修改后将即时生效。</p>
+            <div class="config-editor">
+                <textarea class="config-textarea" id="configEditor" placeholder="加载配置..."></textarea>
+                <div class="config-actions">
+                    <button class="btn" onclick="saveConfig()">💾 保存配置</button>
+                    <button class="btn btn-secondary" onclick="reloadConfig()">🔄 重载配置</button>
+                    <span id="configStatus"></span>
+                </div>
+            </div>
+        </div>
+        
         <div class="card full-width" style="margin-top: 20px;">
             <h2>📈 性能监控</h2>
             <div class="tabs">
@@ -586,6 +749,14 @@
                 const sessions = await fetchJSON(API_BASE + '/api/sessions');
                 renderSessions(sessions.sessions || []);
                 
+                // Fetch tools list
+                try {
+                    const toolsData = await fetchJSON(API_BASE + '/api/tools');
+                    renderTools(toolsData.tools || []);
+                } catch (e) {
+                    // Tools API might not be available
+                }
+                
                 document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
                 
                 // Update charts
@@ -623,6 +794,106 @@
             } else {
                 tbody.innerHTML = '<tr><td colspan="6">暂无会话</td></tr>';
             }
+        }
+        
+        function renderTools(tools) {
+            const panel = document.getElementById('toolsPanel');
+            const countBadge = document.getElementById('toolCount');
+            countBadge.textContent = tools.length;
+            
+            if (!tools.length) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无工具</div>';
+                return;
+            }
+            
+            panel.innerHTML = tools.map(t => `
+                <div class="tool-item">
+                    <div class="tool-header" onclick="toggleToolSchema(this)">
+                        <span class="tool-toggle">▶</span>
+                        <span class="tool-name">${escapeHtml(t.name)}</span>
+                        <span class="tool-desc">${escapeHtml(t.description || '-')}</span>
+                    </div>
+                    <div class="tool-schema">
+                        <div class="schema-title">输入参数</div>
+                        <pre>${escapeHtml(JSON.stringify(t.input_schema, null, 2))}</pre>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function toggleToolSchema(headerEl) {
+            const item = headerEl.parentElement;
+            const schema = item.querySelector('.tool-schema');
+            const toggle = headerEl.querySelector('.tool-toggle');
+            schema.classList.toggle('active');
+            toggle.classList.toggle('expanded');
+        }
+        
+        async function loadConfig() {
+            try {
+                const resp = await fetch(API_BASE + '/api/config');
+                const data = await resp.json();
+                document.getElementById('configEditor').value = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('configEditor').value = '// 加载失败: ' + e.message;
+            }
+        }
+        
+        async function saveConfig() {
+            const statusEl = document.getElementById('configStatus');
+            const configText = document.getElementById('configEditor').value;
+            statusEl.textContent = '';
+            statusEl.className = '';
+            
+            try {
+                const configJson = JSON.parse(configText);
+                const resp = await fetch(API_BASE + '/api/config', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(configJson)
+                });
+                
+                if (resp.ok) {
+                    statusEl.textContent = '✅ 配置已保存';
+                    statusEl.className = 'config-success';
+                } else {
+                    statusEl.textContent = '❌ 保存失败: ' + resp.status;
+                    statusEl.className = 'config-error';
+                }
+            } catch (e) {
+                statusEl.textContent = '❌ JSON 解析失败: ' + e.message;
+                statusEl.className = 'config-error';
+            }
+            
+            // Clear status after 3s
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+        
+        async function reloadConfig() {
+            const statusEl = document.getElementById('configStatus');
+            statusEl.textContent = '';
+            statusEl.className = '';
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/config/reload', {
+                    method: 'POST'
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    await loadConfig();
+                    statusEl.textContent = '✅ 配置已重载';
+                    statusEl.className = 'config-success';
+                } else {
+                    statusEl.textContent = '❌ 重载失败: ' + data.message;
+                    statusEl.className = 'config-error';
+                }
+            } catch (e) {
+                statusEl.textContent = '❌ 重载失败: ' + e.message;
+                statusEl.className = 'config-error';
+            }
+            
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
         
         function filterSessions() {
@@ -805,6 +1076,7 @@
         // Initial load
         refreshData();
         startAutoRefresh();
+        loadConfig();
         
         // Handle window resize
         window.addEventListener('resize', () => {

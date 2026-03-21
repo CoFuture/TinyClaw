@@ -3629,11 +3629,11 @@ mod tests {
     #[tokio::test]
     async fn test_execute_hash_sha256_success() {
         let executor = ToolExecutor::new();
-        let path = "/tmp/tiny_claw_hash_test.txt";
-        tokio::fs::write(path, "hello world").await.unwrap();
+        let path = format!("/tmp/tiny_claw_hash_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "hello world").await.unwrap();
 
         let result = executor.execute("hash", serde_json::json!({
-            "path": path,
+            "path": &path,
             "algorithm": "sha256"
         })).await;
 
@@ -3642,33 +3642,33 @@ mod tests {
         let hash_part = result.output.split_whitespace().next().unwrap_or("");
         assert_eq!(hash_part.len(), 64, "SHA256 should be 64 hex chars");
         assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "Should be valid hex");
-        assert!(result.output.contains(path));
+        assert!(result.output.contains(&path));
 
-        tokio::fs::remove_file(path).await.unwrap();
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_execute_hash_default_algorithm() {
         let executor = ToolExecutor::new();
-        let path = "/tmp/tiny_claw_hash_test.txt";
-        tokio::fs::write(path, "test").await.unwrap();
+        let path = format!("/tmp/tiny_claw_hash_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "test").await.unwrap();
 
         let result = executor.execute("hash", serde_json::json!({
-            "path": path
+            "path": &path
         })).await;
 
         assert!(result.success); // defaults to sha256
-        tokio::fs::remove_file(path).await.unwrap();
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_execute_hash_unsupported_algorithm() {
         let executor = ToolExecutor::new();
-        let path = "/tmp/tiny_claw_hash_test.txt";
-        tokio::fs::write(path, "test").await.unwrap();
+        let path = format!("/tmp/tiny_claw_hash_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "test").await.unwrap();
 
         let result = executor.execute("hash", serde_json::json!({
-            "path": path,
+            "path": &path,
             "algorithm": "blake3"
         })).await;
 
@@ -3676,7 +3676,7 @@ mod tests {
         assert!(result.error.is_some());
 
         // Cleanup
-        let _ = tokio::fs::remove_file(path).await;
+        let _ = tokio::fs::remove_file(&path).await;
     }
 
     #[tokio::test]
@@ -3704,28 +3704,28 @@ mod tests {
     #[tokio::test]
     async fn test_execute_wc_default() {
         let executor = ToolExecutor::new();
-        let path = "/tmp/tiny_claw_wc_test.txt";
-        tokio::fs::write(path, "hello world\nsecond line\nthird line").await.unwrap();
+        let path = format!("/tmp/tiny_claw_wc_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "hello world\nsecond line\nthird line").await.unwrap();
 
         let result = executor.execute("wc", serde_json::json!({
-            "path": path
+            "path": &path
         })).await;
 
         assert!(result.success);
         assert!(result.output.contains("3")); // 3 lines
-        assert!(result.output.contains(path));
+        assert!(result.output.contains(&path));
 
-        tokio::fs::remove_file(path).await.unwrap();
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_execute_wc_specific_flags() {
         let executor = ToolExecutor::new();
-        let path = "/tmp/tiny_claw_wc_test.txt";
-        tokio::fs::write(path, "hello world\nsecond line").await.unwrap();
+        let path = format!("/tmp/tiny_claw_wc_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "hello world\nsecond line").await.unwrap();
 
         let result = executor.execute("wc", serde_json::json!({
-            "path": path,
+            "path": &path,
             "lines": true,
             "words": true
         })).await;
@@ -3739,7 +3739,7 @@ mod tests {
         // Contains word count  
         assert!(result.output.contains("4"));
 
-        tokio::fs::remove_file(path).await.unwrap();
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 
     #[tokio::test]

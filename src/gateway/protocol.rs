@@ -165,27 +165,6 @@ impl ResponseError {
         }
     }
 
-    /// Create an error with full recovery info
-    pub fn with_full_recovery(
-        id: Option<String>,
-        code: impl Into<String>,
-        message: impl Into<String>,
-        suggestion: impl Into<String>,
-        doc_url: impl Into<String>,
-    ) -> Self {
-        Self {
-            id,
-            error: ResponseErrorBody {
-                code: code.into(),
-                message: message.into(),
-                data: None,
-                recovery: Some(ErrorRecovery {
-                    suggestion: suggestion.into(),
-                    doc_url: Some(doc_url.into()),
-                }),
-            },
-        }
-    }
 }
 
 /// JSON-RPC 2.0 error codes

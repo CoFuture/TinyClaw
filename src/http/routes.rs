@@ -474,6 +474,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{id}/messages", get(session_messages))
         .route("/api/sessions/{id}/export", get(session_export))
         .route("/api/sessions/import", post(session_import))
+        .route("/api/tools", get(tools_list))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
 }
@@ -504,4 +505,33 @@ async fn session_messages(
     };
 
     Json(serde_json::json!({ "messages": messages, "sessionId": session_id }))
+}
+
+/// Tools list response
+#[derive(Serialize)]
+pub struct ToolsListResponse {
+    pub tools: Vec<ToolInfo>,
+}
+
+/// Tool info
+#[derive(Serialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
+/// Tools list handler
+async fn tools_list(State(state): State<Arc<HttpState>>) -> Json<ToolsListResponse> {
+    let tools = state.agent.list_tools();
+    let tool_infos: Vec<ToolInfo> = tools
+        .into_iter()
+        .map(|t| ToolInfo {
+            name: t.name,
+            description: t.description,
+            input_schema: t.input_schema,
+        })
+        .collect();
+
+    Json(ToolsListResponse { tools: tool_infos })
 }
