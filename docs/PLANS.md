@@ -136,14 +136,18 @@
 
 ---
 
-## 当前迭代规划 (v4.5.0)
+## 当前迭代规划 (v4.6.0)
 
 ### 本轮目标
-**交互体验持续打磨**
+**Agent 能力提升 + 交互体验优化**
 
 **计划完成**:
-- [x] WebUI 配置编辑器增强
-- [ ] TUI 功能完善
+- [x] TUI 命令帮助系统增强
+  - 结构化命令元数据 (TuiCommandMeta)：名称、别名、描述、分类
+  - 命令分类：Session (n/new, d/delete)、Connection (r/reconnect)、Navigation (q/quit, h/help)
+  - Tab 补全支持所有命令别名
+  - 帮助面板重构：按分类展示命令，带颜色高亮
+- [ ] 交互体验持续打磨
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -164,7 +168,7 @@
 - cargo clippy 0 警告
 - cargo test 176 tests
 
-**下一步**: TUI 功能完善
+**下一步**: Agent 能力提升、交互体验优化
 
 ---
 
@@ -198,6 +202,7 @@
 - [x] WebUI 聊天 Markdown + 代码高亮 ✅ v4.2.0
 - [x] TUI Tab 命令补全 ✅ v4.3.0
 - [x] TUI 视觉优化 (彩色角色标签+时间戳) ✅ v4.4.0
+- [x] TUI 命令帮助系统增强 ✅ v4.6.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -210,6 +215,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.6.0 | TUI 命令帮助系统增强 - 结构化命令元数据(TuiCommandMeta)：名称、别名、描述、分类；命令分类：Session/Connection/Navigation；Tab补全支持所有命令别名；帮助面板重构：按分类展示命令、颜色高亮；cargo clippy 0 警告；cargo test 176 tests |
 | v4.5.0 | WebUI 配置编辑器增强 - JSON/YAML 格式切换、语法验证（绿/红边框反馈）、一键重置默认配置、复制到剪贴板；cargo clippy 0 警告；cargo test 176 tests |
 | v4.4.0 | TUI 视觉优化 - 消息面板增强：角色标签颜色区分 (User=绿, Assistant=青, System=黄, Tool=紫)、每条消息显示时间戳 (HH:MM:SS)、多行内容正确缩进；输入区域优化：命令模式标题变化 (:前缀显示为"Command")、字符计数显示；标题栏增强：连接状态和当前 session 名称使用不同颜色区分；cargo clippy 0 警告；cargo test 176 tests |
 | v4.3.0 | YAML 配置支持 + TUI Tab 命令补全 - 添加 serde_yaml 依赖，配置文件支持 .yaml/.yml 格式自动检测和加载；TUI 新增 Tab 键命令补全功能，支持 :q/:quit, :r/:reconnect, :n/:new, :d/:delete, :h/:help/:? 等命令补全；Shift+Tab 反向循环；输入普通文本时支持 Session ID 补全；cargo clippy 0 警告；cargo test 176 tests |
@@ -236,4 +242,4 @@
 
 ---
 
-*更新时间: 2026-03-22 06:32*
+*更新时间: 2026-03-22 07:02*

@@ -61,19 +61,76 @@ impl CompletionState {
     }
 }
 
-/// Available TUI commands for completion
-pub const TUI_COMMANDS: &[&str] = &[
-    ":q",
-    ":quit",
-    ":r",
-    ":reconnect",
-    ":n",
-    ":new",
-    ":d",
-    ":delete",
-    ":h",
-    ":help",
-    ":?",
+/// Command category
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandCategory {
+    /// Session management commands
+    Session,
+    /// Connection commands
+    Connection,
+    /// Navigation commands
+    Navigation,
+}
+
+/// TUI command metadata
+#[derive(Debug, Clone)]
+pub struct TuiCommandMeta {
+    /// Full command with colon (e.g., ":q")
+    pub full_name: &'static str,
+    /// Command aliases (e.g., ["quit"])
+    pub aliases: &'static [&'static str],
+    /// Brief description
+    pub description: &'static str,
+    /// Command category
+    pub category: CommandCategory,
+}
+
+impl TuiCommandMeta {
+    /// Get all variations of the command (for completion matching)
+    pub fn all_variations(&self) -> Vec<String> {
+        let mut variations = vec![self.full_name.to_string()];
+        for alias in self.aliases {
+            variations.push(format!(":{}", alias));
+        }
+        variations
+    }
+}
+
+/// Available TUI commands with metadata
+pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
+    // Session commands
+    TuiCommandMeta {
+        full_name: ":n",
+        aliases: &["new"],
+        description: "Create a new session",
+        category: CommandCategory::Session,
+    },
+    TuiCommandMeta {
+        full_name: ":d",
+        aliases: &["delete"],
+        description: "Delete current session",
+        category: CommandCategory::Session,
+    },
+    // Connection commands
+    TuiCommandMeta {
+        full_name: ":r",
+        aliases: &["reconnect"],
+        description: "Reconnect to gateway",
+        category: CommandCategory::Connection,
+    },
+    // Navigation commands
+    TuiCommandMeta {
+        full_name: ":q",
+        aliases: &["quit"],
+        description: "Quit TinyClaw",
+        category: CommandCategory::Navigation,
+    },
+    TuiCommandMeta {
+        full_name: ":h",
+        aliases: &["help", "?"],
+        description: "Show/hide help",
+        category: CommandCategory::Navigation,
+    },
 ];
 
 /// Application state for TUI
@@ -187,11 +244,14 @@ impl AppState {
         // If input starts with ':', complete command names
         if input.starts_with(':') {
             let prefix = input.to_lowercase();
-            return TUI_COMMANDS
+            let mut candidates: Vec<String> = TUI_COMMANDS
                 .iter()
-                .filter(|cmd| cmd.to_lowercase().starts_with(&prefix))
-                .map(|s| s.to_string())
+                .flat_map(|cmd| cmd.all_variations())
+                .filter(|v| v.to_lowercase().starts_with(&prefix))
                 .collect();
+            candidates.sort();
+            candidates.dedup();
+            return candidates;
         }
         
         // For regular input, could add skill names or other completions

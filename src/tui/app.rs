@@ -717,27 +717,134 @@ impl TuiApp {
 
     fn draw_help_overlay(&self, f: &mut ratatui::Frame<'_>) {
         use ratatui::widgets::Clear;
+        use ratatui::style::{Color, Modifier, Style};
+        use ratatui::text::Span;
+        use crate::tui::state::{CommandCategory, TuiCommandMeta, TUI_COMMANDS};
 
         let size = f.area();
         
-        let help_content: Vec<Line> = vec![
-            Line::from(" TinyClaw TUI Help "),
-            Line::from(""),
-            Line::from(" Tab - Switch panel"),
-            Line::from(" ↑/↓ - Navigate messages / scroll"),
-            Line::from(" Enter - Send message"),
-            Line::from(" Backspace - Delete character"),
-            Line::from(" Ctrl+D - Clear input"),
-            Line::from(" Ctrl+C - Cancel operation"),
-            Line::from(" :q - Quit"),
-            Line::from(" :r - Reconnect gateway"),
-            Line::from(" :n - Create new session"),
-            Line::from(" :d - Delete current session"),
-            Line::from(" :h - Toggle this help"),
-            Line::from(""),
-            Line::from(" Press any key to close "),
-        ];
-
+        // Build structured help content using vec! macro
+        let help_content: Vec<Line> = {
+            let mut lines = vec![
+                Line::from(vec![
+                    Span::styled(" TinyClaw v", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(self.version.as_str()),
+                    Span::raw(" Help "),
+                ]),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("Keyboard Shortcuts", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                ]),
+                Line::from(vec![
+                    Span::raw("  Tab "),
+                    Span::styled("-", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Switch panel "),
+                    Span::styled("|", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" ↑/↓ - Navigate/scroll"),
+                ]),
+                Line::from(vec![
+                    Span::raw("  Enter "),
+                    Span::styled("-", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Send message "),
+                    Span::styled("|", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Backspace - Delete"),
+                ]),
+                Line::from(vec![
+                    Span::raw("  Ctrl+D "),
+                    Span::styled("-", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Clear input "),
+                    Span::styled("|", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Ctrl+C - Cancel"),
+                ]),
+                Line::from(vec![
+                    Span::raw("  Esc "),
+                    Span::styled("-", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Close/dismiss "),
+                    Span::styled("|", Style::default().fg(Color::DarkGray)),
+                    Span::raw(" Shift+Tab - Previous completion"),
+                ]),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("Commands", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                ]),
+            ];
+            
+            // Group commands by category
+            let session_cmds: Vec<&TuiCommandMeta> = TUI_COMMANDS
+                .iter()
+                .filter(|c| c.category == CommandCategory::Session)
+                .collect();
+            let conn_cmds: Vec<&TuiCommandMeta> = TUI_COMMANDS
+                .iter()
+                .filter(|c| c.category == CommandCategory::Connection)
+                .collect();
+            let nav_cmds: Vec<&TuiCommandMeta> = TUI_COMMANDS
+                .iter()
+                .filter(|c| c.category == CommandCategory::Navigation)
+                .collect();
+            
+            // Session commands
+            lines.push(Line::from(vec![
+                Span::styled("  Session:", Style::default().fg(Color::Cyan)),
+            ]));
+            for cmd in session_cmds {
+                let aliases_str = if cmd.aliases.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{}", cmd.aliases.join("/"))
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(format!("{}{}", cmd.full_name, aliases_str), Style::default().fg(Color::Green)),
+                    Span::raw(" - "),
+                    Span::raw(cmd.description),
+                ]));
+            }
+            
+            // Connection commands
+            lines.push(Line::from(vec![
+                Span::styled("  Connection:", Style::default().fg(Color::Cyan)),
+            ]));
+            for cmd in conn_cmds {
+                let aliases_str = if cmd.aliases.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{}", cmd.aliases.join("/"))
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(format!("{}{}", cmd.full_name, aliases_str), Style::default().fg(Color::Green)),
+                    Span::raw(" - "),
+                    Span::raw(cmd.description),
+                ]));
+            }
+            
+            // Navigation commands
+            lines.push(Line::from(vec![
+                Span::styled("  Navigation:", Style::default().fg(Color::Cyan)),
+            ]));
+            for cmd in nav_cmds {
+                let aliases_str = if cmd.aliases.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{}", cmd.aliases.join("/"))
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(format!("{}{}", cmd.full_name, aliases_str), Style::default().fg(Color::Green)),
+                    Span::raw(" - "),
+                    Span::raw(cmd.description),
+                ]));
+            }
+            
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled(" Press Esc or any key to close ", Style::default().fg(Color::DarkGray)),
+            ]));
+            
+            lines
+        };
+        
         let block = Block::default()
             .title(" Help ")
             .borders(Borders::ALL);
