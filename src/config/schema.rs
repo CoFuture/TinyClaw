@@ -313,11 +313,67 @@ fn default_poll_interval_ms() -> u64 {
     5000
 }
 
-/// Load configuration from file
+/// Load configuration from file (supports both JSON and YAML formats)
 pub fn load_config(path: &std::path::Path) -> anyhow::Result<Config> {
     let content = std::fs::read_to_string(path)?;
-    let config: Config = serde_json::from_str(&content)?;
+
+    // Detect format by file extension
+    let config = match path.extension().and_then(|e| e.to_str()) {
+        Some("yaml") | Some("yml") => {
+            // YAML format
+            serde_yaml::from_str(&content)
+                .map_err(|e| anyhow::anyhow!("YAML parse error: {}", e))?
+        }
+        Some("json") | None => {
+            // JSON format (default) or no extension
+            serde_json::from_str(&content)
+                .map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))?
+        }
+        Some(ext) => {
+            return Err(anyhow::anyhow!(
+                "Unsupported config file extension: .{} (supported: .json, .yaml, .yml)",
+                ext
+            ));
+        }
+    };
+
     Ok(config)
+}
+
+/// Parse configuration from string (supports both JSON and YAML)
+///
+/// # Arguments
+/// * `content` - The configuration string
+/// * `format` - Either "json" or "yaml"
+#[allow(dead_code)]
+pub fn parse_config(content: &str, format: &str) -> anyhow::Result<Config> {
+    match format.to_lowercase().as_str() {
+        "yaml" | "yml" => {
+            serde_yaml::from_str(content)
+                .map_err(|e| anyhow::anyhow!("YAML parse error: {}", e))
+        }
+        _ => {
+            // Default to JSON for any other format
+            serde_json::from_str(content)
+                .map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))
+        }
+    }
+}
+
+/// Serialize configuration to string (supports both JSON and YAML)
+#[allow(dead_code)]
+pub fn serialize_config(config: &Config, format: &str) -> anyhow::Result<String> {
+    match format.to_lowercase().as_str() {
+        "yaml" | "yml" => {
+            serde_yaml::to_string(config)
+                .map_err(|e| anyhow::anyhow!("YAML serialize error: {}", e))
+        }
+        _ => {
+            // Default to JSON for any other format
+            serde_json::to_string_pretty(config)
+                .map_err(|e| anyhow::anyhow!("JSON serialize error: {}", e))
+        }
+    }
 }
 
 /// Get default config path
@@ -359,7 +415,7 @@ mod tests {
             base_url: None,
             max_tokens: 2048,
         };
-        
+
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("openai"));
         assert!(json.contains("gpt-4"));
@@ -369,7 +425,7 @@ mod tests {
     fn test_model_config_deserialization() {
         let json = r#"{"provider": "openai", "name": "gpt-4", "api_key": "sk-test", "max_tokens": 2048}"#;
         let config: ModelConfig = serde_json::from_str(json).unwrap();
-        
+
         assert_eq!(config.provider, ModelProvider::OpenAI);
         assert_eq!(config.name, "gpt-4");
         assert_eq!(config.api_key, Some("sk-test".to_string()));
@@ -414,5 +470,37 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("gateway"));
         assert!(json.contains("agent"));
+    }
+
+    #[test]
+    fn test_parse_yaml_config() {
+        let yaml = r#"
+gateway:
+  bind: "127.0.0.1:19999"
+  verbose: true
+agent:
+  model: "test-model"
+  api_base: "https://test.example.com"
+"#;
+        let config = parse_config(yaml, "yaml").unwrap();
+        assert_eq!(config.gateway.bind, "127.0.0.1:19999");
+        assert!(config.gateway.verbose);
+        assert_eq!(config.agent.model, "test-model");
+    }
+
+    #[test]
+    fn test_serialize_yaml_config() {
+        let config = Config::default();
+        let yaml = serialize_config(&config, "yaml").unwrap();
+        assert!(yaml.contains("gateway"));
+        assert!(yaml.contains("agent"));
+    }
+
+    #[test]
+    fn test_parse_json_config() {
+        let json = r#"{"agent": {"model": "gpt-4"}, "gateway": {"bind": "0.0.0.0:9000"}}"#;
+        let config = parse_config(json, "json").unwrap();
+        assert_eq!(config.agent.model, "gpt-4");
+        assert_eq!(config.gateway.bind, "0.0.0.0:9000");
     }
 }

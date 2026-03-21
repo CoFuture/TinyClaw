@@ -77,23 +77,47 @@ pub fn draw_input_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect,
         .title(" Input ")
         .borders(Borders::ALL);
 
-    let text = if state.current_session_id.is_none() {
-        " (select a session first) "
+    let (text, hint) = if state.current_session_id.is_none() {
+        (" (select a session first) ".to_string(), None)
     } else if state.input_buffer.is_empty() {
-        " Type your message... "
+        (" Type your message... ".to_string(), None)
     } else {
-        state.input_buffer.as_str()
+        let hint = if state.completion.active && state.completion.candidates.len() > 1 {
+            let all_candidates: Vec<_> = state.completion.candidates.iter().enumerate()
+                .map(|(i, c)| if i == state.completion.index { format!("[{}]", c) } else { c.clone() })
+                .collect();
+            Some(all_candidates.join(" "))
+        } else {
+            None
+        };
+        (state.input_buffer.clone(), hint)
     };
 
-    let paragraph = Paragraph::new(text)
+    let paragraph = Paragraph::new(text.as_str())
         .block(block);
 
     f.render_widget(paragraph, area);
+
+    // Show completion hint if active
+    if let Some(hint_text) = hint {
+        // Draw hint below input panel
+        let hint_area = ratatui::layout::Rect {
+            y: area.y + area.height,
+            x: area.x + 2,
+            width: area.width.saturating_sub(4),
+            height: 1,
+        };
+        if hint_area.y < f.area().height.saturating_sub(1) {
+            let hint_paragraph = Paragraph::new(hint_text.as_str())
+                .alignment(Alignment::Left);
+            f.render_widget(hint_paragraph, hint_area);
+        }
+    }
 }
 
 /// Draw the help bar at the bottom
 pub fn draw_help_bar(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect) {
-    let help_text = " ↑↓ Navigate | Tab Switch panel | Enter Send | :q Quit | :h Help ";
+    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help ";
     
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center);

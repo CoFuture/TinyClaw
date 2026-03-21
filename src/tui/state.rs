@@ -4,6 +4,78 @@ use crate::types::{Message, SessionHistory};
 use crate::tui::gateway_client::TuiGatewayStatus;
 use std::collections::HashMap;
 
+/// Completion candidates for tab completion
+#[derive(Debug, Clone, Default)]
+pub struct CompletionState {
+    /// Whether completion is active
+    pub active: bool,
+    /// Available completion candidates
+    pub candidates: Vec<String>,
+    /// Current selected candidate index
+    pub index: usize,
+    /// The prefix being completed
+    pub prefix: String,
+}
+
+impl CompletionState {
+    /// Reset completion state
+    pub fn reset(&mut self) {
+        self.active = false;
+        self.candidates.clear();
+        self.index = 0;
+        self.prefix.clear();
+    }
+
+    /// Activate completion with candidates
+    pub fn activate(&mut self, prefix: &str, candidates: Vec<String>) {
+        if candidates.is_empty() {
+            self.reset();
+            return;
+        }
+        self.active = true;
+        self.prefix = prefix.to_string();
+        self.candidates = candidates;
+        self.index = 0;
+    }
+
+    /// Cycle to next candidate (tab)
+    pub fn next(&mut self) {
+        if !self.candidates.is_empty() {
+            self.index = (self.index + 1) % self.candidates.len();
+        }
+    }
+
+    /// Cycle to previous candidate (shift-tab)
+    pub fn prev(&mut self) {
+        if !self.candidates.is_empty() {
+            self.index = self.index.saturating_sub(1);
+            if self.index == 0 && self.candidates.len() > 1 {
+                self.index = self.candidates.len() - 1;
+            }
+        }
+    }
+
+    /// Get current completion
+    pub fn current(&self) -> Option<&str> {
+        self.candidates.get(self.index).map(|s| s.as_str())
+    }
+}
+
+/// Available TUI commands for completion
+pub const TUI_COMMANDS: &[&str] = &[
+    ":q",
+    ":quit",
+    ":r",
+    ":reconnect",
+    ":n",
+    ":new",
+    ":d",
+    ":delete",
+    ":h",
+    ":help",
+    ":?",
+];
+
 /// Application state for TUI
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -31,6 +103,8 @@ pub struct AppState {
     pub error_message: Option<String>,
     /// Connection retry count
     pub retry_count: u32,
+    /// Tab completion state
+    pub completion: CompletionState,
 }
 
 impl Default for AppState {
@@ -48,6 +122,7 @@ impl Default for AppState {
             loading: false,
             error_message: None,
             retry_count: 0,
+            completion: CompletionState::default(),
         }
     }
 }
@@ -103,5 +178,29 @@ impl AppState {
     #[allow(dead_code)]
     pub fn increment_retry(&mut self) {
         self.retry_count += 1;
+    }
+
+    /// Get completion candidates for the current input
+    pub fn get_completion_candidates(&self) -> Vec<String> {
+        let input = &self.input_buffer;
+        
+        // If input starts with ':', complete command names
+        if input.starts_with(':') {
+            let prefix = input.to_lowercase();
+            return TUI_COMMANDS
+                .iter()
+                .filter(|cmd| cmd.to_lowercase().starts_with(&prefix))
+                .map(|s| s.to_string())
+                .collect();
+        }
+        
+        // For regular input, could add skill names or other completions
+        // For now, return session IDs as candidates
+        let prefix = input.to_lowercase();
+        self.sessions
+            .iter()
+            .filter(|s| s.to_lowercase().starts_with(&prefix))
+            .cloned()
+            .collect()
     }
 }

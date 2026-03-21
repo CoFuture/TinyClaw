@@ -393,7 +393,36 @@ impl TuiApp {
 
             match key.code {
                 KeyCode::Tab => {
-                    self.state.active_panel = (self.state.active_panel + 1) % 3;
+                    if self.state.active_panel == 2 {
+                        // Tab completion in input panel
+                        if self.state.completion.active {
+                            // Cycle to next completion
+                            self.state.completion.next();
+                            // Update input with current completion
+                            self.state.input_buffer = self.state.completion.current()
+                                .unwrap_or(&self.state.input_buffer).to_string();
+                        } else {
+                            // Start completion
+                            let candidates = self.state.get_completion_candidates();
+                            if !candidates.is_empty() {
+                                self.state.completion.activate(&self.state.input_buffer, candidates);
+                                self.state.input_buffer = self.state.completion.current()
+                                    .unwrap_or(&self.state.input_buffer).to_string();
+                            }
+                        }
+                    } else {
+                        // Switch panel
+                        self.state.active_panel = (self.state.active_panel + 1) % 3;
+                    }
+                    return Ok(true);
+                }
+                KeyCode::BackTab => {
+                    // Shift+Tab - previous completion
+                    if self.state.active_panel == 2 && self.state.completion.active {
+                        self.state.completion.prev();
+                        self.state.input_buffer = self.state.completion.current()
+                            .unwrap_or(&self.state.input_buffer).to_string();
+                    }
                     return Ok(true);
                 }
                 KeyCode::Up => {
@@ -496,11 +525,13 @@ impl TuiApp {
                 KeyCode::Char('d') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                     // Ctrl+D - clear input
                     self.state.input_buffer.clear();
+                    self.state.completion.reset();
                     return Ok(true);
                 }
                 KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                     // Ctrl+C - cancel current operation
                     self.state.input_buffer.clear();
+                    self.state.completion.reset();
                     self.state.set_loading(false);
                     return Ok(true);
                 }
@@ -516,12 +547,14 @@ impl TuiApp {
                         }
                     } else if self.state.active_panel == 2 {
                         self.state.input_buffer.push('c');
+                        self.state.completion.reset();
                     }
                     return Ok(true);
                 }
                 KeyCode::Char(c) => {
                     if self.state.active_panel == 2 {
                         self.state.input_buffer.push(c);
+                        self.state.completion.reset();
                     } else if self.state.active_panel == 0 {
                         // Session selection with number keys
                         if let Some(idx) = c.to_digit(10) {
@@ -537,6 +570,7 @@ impl TuiApp {
                 KeyCode::Backspace => {
                     if self.state.active_panel == 2 {
                         self.state.input_buffer.pop();
+                        self.state.completion.reset();
                     }
                     return Ok(true);
                 }
