@@ -136,14 +136,13 @@
 
 ---
 
-## 当前迭代规划 (v4.2.0)
+## 当前迭代规划 (v4.3.0)
 
 ### 本轮目标
 **Agent 能力增强 + 交互体验优化** (P0)
 
 **计划完成**:
 - [ ] Agent 配置文件支持 (YAML/JSON 格式)
-- [ ] WebUI 聊天增强 (markdown 渲染、代码高亮)
 - [ ] TUI 命令补全
 
 #### 基础修复 (持续)
@@ -172,6 +171,7 @@
 - [x] WebUI Chat 多会话切换 ✅ v3.5.0
 - [x] TUI 消息历史持久化 ✅ v3.6.0
 - [x] 命令行客户端 ✅ v3.8.0
+- [x] WebUI 聊天 Markdown + 代码高亮 ✅ v4.2.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -184,6 +184,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.2.0 | WebUI 聊天增强 (Markdown + 代码高亮) - 集成 marked.js 和 highlight.js，支持 Markdown 渲染（标题、列表、代码块、表格、链接等）；用户消息和 AI 回复均支持 Markdown 格式；代码块自动语法高亮；会话详情面板同样支持 Markdown 渲染；cargo clippy 0 警告；cargo test 173 tests |
 | v4.1.0 | WebUI 监控面板增强 + 结构化日志 - WebUI 监控面板集成 `/api/metrics` 端点，新增请求速率、响应时间、错误数、WS 连接数等统计；新增图表标签页（请求/响应/错误）；端点统计表格展示 Top 10 API 端点；Agent/Gateway 日志改为 structured fields 格式；cargo clippy 0 警告；cargo test 173 tests |
 | v4.0.0 | Skill 持久化 - 自定义技能自动保存到 JSON 文件，重启后自动加载；内置技能保护（无法删除/覆盖）；移除无用的 metrics_middleware dead code；cargo clippy 0 警告；cargo test 173 tests |
 | v3.9.0 | 监控指标增强 - HTTP Metrics 中间件、请求 timing 采集、clippy warning 修复 |
@@ -206,4 +207,4 @@
 
 ---
 
-*更新时间: 2026-03-22 04:32*
+*更新时间: 2026-03-22 05:02*

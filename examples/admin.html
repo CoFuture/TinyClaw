@@ -785,6 +785,59 @@
             cursor: not-allowed;
         }
     </style>
+    <!-- Markdown + Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Markdown rendering in chat messages */
+        .msg-content { font-size: 14px; line-height: 1.6; }
+        .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 { margin: 0.5em 0; color: #00d9ff; }
+        .msg-content h1 { font-size: 1.3em; }
+        .msg-content h2 { font-size: 1.2em; }
+        .msg-content h3 { font-size: 1.1em; }
+        .msg-content p { margin: 0.5em 0; }
+        .msg-content ul, .msg-content ol { margin: 0.5em 0; padding-left: 1.5em; }
+        .msg-content li { margin: 0.25em 0; }
+        .msg-content code {
+            background: rgba(0,0,0,0.4);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+        }
+        .msg-content pre {
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 0.6em 0;
+            overflow-x: auto;
+        }
+        .msg-content pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .msg-content blockquote {
+            border-left: 3px solid #00d9ff;
+            margin: 0.5em 0;
+            padding-left: 1em;
+            color: #aaa;
+        }
+        .msg-content a { color: #00d9ff; }
+        .msg-content a:hover { text-decoration: underline; }
+        .msg-content table { border-collapse: collapse; margin: 0.5em 0; }
+        .msg-content th, .msg-content td { border: 1px solid rgba(255,255,255,0.2); padding: 0.4em 0.8em; }
+        .msg-content th { background: rgba(0,217,255,0.1); }
+        .msg-content hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1em 0; }
+        .msg-content img { max-width: 100%; border-radius: 4px; }
+        .msg-content strong { color: #fff; }
+        .msg-content em { color: #ccc; }
+        /* Inline code in user messages */
+        .message.user .msg-content code { background: rgba(0,0,0,0.3); }
+        .message.user .msg-content pre { background: rgba(0,0,0,0.4); }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -1471,6 +1524,20 @@
             refreshData();
         }
         
+        /// Render markdown content safely (escape HTML first, then parse markdown)
+        function renderMarkdownContent(text) {
+            if (!text) return escapeHtml(text || '(empty)');
+            const safeText = escapeHtml(text);
+            if (typeof marked !== 'undefined') {
+                try {
+                    return marked.parse(safeText);
+                } catch (e) {
+                    return safeText.replace(/\n/g, '<br>');
+                }
+            }
+            return safeText.replace(/\n/g, '<br>');
+        }
+        
         async function showSessionDetails(sessionId) {
             const details = document.getElementById('sessionDetails');
             details.classList.toggle('active');
@@ -1488,7 +1555,7 @@
                             messagesPanel.innerHTML = data.messages.map(m => `
                                 <div class="message-item">
                                     <span class="message-role">${m.role || 'unknown'}:</span>
-                                    <div class="message-content">${escapeHtml(m.content || '(empty)')}</div>
+                                    <div class="message-content">${renderMarkdownContent(m.content)}</div>
                                 </div>
                             `).join('');
                         } else {
@@ -1862,11 +1929,48 @@
             const role = roleNames[type] || '系统';
             const time = new Date().toLocaleTimeString();
             
+            // Configure marked for security + code highlighting
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true,
+                    highlight: function(code, lang) {
+                        if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+                            try {
+                                return hljs.highlight(code, { language: lang }).value;
+                            } catch (e) {}
+                        }
+                        // Fallback: auto-detect or plain text
+                        if (typeof hljs !== 'undefined') {
+                            try {
+                                return hljs.highlightAuto(code).value;
+                            } catch (e) {}
+                        }
+                        return escapeHtml(code);
+                    }
+                });
+            }
+            
             // Format content for display
-            let displayContent = content;
+            let displayContent;
             if (typeof content === 'string') {
-                // Escape HTML and convert newlines
-                displayContent = escapeHtml(content).replace(/\n/g, '<br>');
+                if (type === 'error' || type === 'system' || type === 'notice') {
+                    // Plain text for system/error messages
+                    displayContent = escapeHtml(content).replace(/\n/g, '<br>');
+                } else {
+                    // Markdown rendering for user/assistant messages
+                    // First escape HTML, then render markdown
+                    const safeText = escapeHtml(content);
+                    if (typeof marked !== 'undefined') {
+                        try {
+                            displayContent = marked.parse(safeText);
+                        } catch (e) {
+                            displayContent = safeText.replace(/\n/g, '<br>');
+                        }
+                    } else {
+                        displayContent = safeText.replace(/\n/g, '<br>');
+                    }
+                }
             } else {
                 displayContent = JSON.stringify(content, null, 2).replace(/\n/g, '<br>');
             }
