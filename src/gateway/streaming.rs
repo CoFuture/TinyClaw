@@ -99,6 +99,7 @@ impl StreamingResponse {
     }
 
     /// Send a chunk of content
+    #[allow(dead_code)]
     pub async fn send_chunk(&self, content: &str, done: bool) -> Result<(), String> {
         if let Some(ref sender) = self.sender {
             sender
@@ -114,6 +115,7 @@ impl StreamingResponse {
     }
 
     /// Send tool start event
+    #[allow(dead_code)]
     pub async fn send_tool_start(&self, tool: &str, call_id: &str) -> Result<(), String> {
         if let Some(ref sender) = self.sender {
             sender
@@ -129,6 +131,7 @@ impl StreamingResponse {
     }
 
     /// Send tool result event
+    #[allow(dead_code)]
     pub async fn send_tool_result(&self, call_id: &str, result: &str) -> Result<(), String> {
         if let Some(ref sender) = self.sender {
             sender
@@ -144,6 +147,7 @@ impl StreamingResponse {
     }
 
     /// Send end event
+    #[allow(dead_code)]
     pub async fn send_end(&self, tokens: Option<u32>) -> Result<(), String> {
         if let Some(ref sender) = self.sender {
             sender
@@ -156,6 +160,7 @@ impl StreamingResponse {
     }
 
     /// Send error event
+    #[allow(dead_code)]
     pub async fn send_error(&self, message: &str) -> Result<(), String> {
         if let Some(ref sender) = self.sender {
             sender
@@ -180,28 +185,33 @@ pub struct StreamingManager {
 
 impl StreamingManager {
     /// Create a new streaming manager
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Register a new streaming response
+    #[allow(dead_code)]
     pub fn register(&self, request_id: String, response: StreamingResponse) {
         debug!("Registering stream for request: {}", request_id);
         self.streams.write().insert(request_id, Arc::new(RwLock::new(response)));
     }
 
     /// Get a streaming response by request ID
+    #[allow(dead_code)]
     pub fn get(&self, request_id: &str) -> Option<Arc<RwLock<StreamingResponse>>> {
         self.streams.read().get(request_id).cloned()
     }
 
     /// Remove a streaming response
+    #[allow(dead_code)]
     pub fn unregister(&self, request_id: &str) {
         debug!("Unregistering stream for request: {}", request_id);
         self.streams.write().remove(request_id);
     }
 
     /// Get count of active streams
+    #[allow(dead_code)]
     pub fn active_count(&self) -> usize {
         self.streams.read().len()
     }
