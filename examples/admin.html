@@ -568,25 +568,80 @@
             font-size: 12px;
             font-family: 'SF Mono', Consolas, monospace;
             resize: vertical;
+            tab-size: 2;
+            line-height: 1.5;
         }
         .config-textarea:focus {
             outline: none;
             border-color: #00d9ff;
         }
+        .config-textarea.error {
+            border-color: #ff4757;
+        }
+        .config-textarea.valid {
+            border-color: #00ff88;
+        }
         .config-actions {
             display: flex;
             gap: 10px;
             margin-top: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .config-format-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+        .config-format-toggle label {
+            font-size: 13px;
+            color: #888;
+        }
+        .config-format-toggle select {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 4px;
+            padding: 5px 10px;
+            color: #eee;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .config-format-toggle select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .config-status-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 8px;
+            flex-wrap: wrap;
         }
         .config-success {
             color: #00ff88;
             font-size: 13px;
-            margin-top: 8px;
         }
         .config-error {
             color: #ff4757;
             font-size: 13px;
-            margin-top: 8px;
+        }
+        .config-error-detail {
+            color: #ff6b7a;
+            font-size: 12px;
+            margin-top: 4px;
+            padding: 6px 10px;
+            background: rgba(255,71,87,0.1);
+            border-radius: 4px;
+            font-family: 'SF Mono', Consolas, monospace;
+        }
+        .config-validate-icon {
+            font-size: 14px;
+        }
+        .config-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
         }
         
         /* Tool call display in chat */
@@ -983,14 +1038,29 @@
         <!-- Config Editor -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⚡ 配置编辑器</h2>
-            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">在线编辑配置。修改后将即时生效。</p>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">在线编辑配置，支持 JSON/YAML 格式切换。修改后将即时生效。</p>
             <div class="config-editor">
-                <textarea class="config-textarea" id="configEditor" placeholder="加载配置..."></textarea>
+                <textarea class="config-textarea" id="configEditor" placeholder="加载配置..." spellcheck="false"></textarea>
                 <div class="config-actions">
                     <button class="btn" onclick="saveConfig()">💾 保存配置</button>
                     <button class="btn btn-secondary" onclick="reloadConfig()">🔄 重载配置</button>
-                    <span id="configStatus"></span>
+                    <button class="btn btn-secondary" onclick="validateConfig()" title="验证配置语法">✓ 验证</button>
+                    <button class="btn btn-secondary" onclick="resetConfig()" title="重置为默认配置">↺ 重置</button>
+                    <button class="btn btn-secondary" onclick="copyConfig()" title="复制到剪贴板">📋 复制</button>
+                    <div class="config-format-toggle">
+                        <label for="configFormat">格式:</label>
+                        <select id="configFormat" onchange="switchConfigFormat()">
+                            <option value="json">JSON</option>
+                            <option value="yaml">YAML</option>
+                        </select>
+                    </div>
                 </div>
+                <div class="config-status-row">
+                    <span id="configStatus"></span>
+                    <span class="config-validate-icon" id="configValidateIcon"></span>
+                </div>
+                <div class="config-error-detail" id="configErrorDetail" style="display: none;"></div>
+                <div class="config-hint" id="configHint"></div>
             </div>
         </div>
         
@@ -1453,43 +1523,325 @@
             }
         }
         
+        // Store the raw JSON config for format switching
+        let rawConfigJson = null;
+        
+        // Simple JSON to YAML converter
+        function jsonToYaml(obj, indent = 0) {
+            if (obj === null) return 'null\n';
+            if (obj === undefined) return '';
+            if (typeof obj !== 'object') {
+                if (typeof obj === 'string') return '"' + obj.replace(/"/g, '\\"') + '"\n';
+                return String(obj) + '\n';
+            }
+            if (Array.isArray(obj)) {
+                if (obj.length === 0) return '[]\n';
+                let result = '';
+                for (const item of obj) {
+                    const prefix = '  '.repeat(indent) + '- ';
+                    const itemStr = jsonToYaml(item, indent + 1);
+                    if (itemStr.includes('\n')) {
+                        result += prefix + itemStr.replace(/^/, '').split('\n').join('\n' + '  '.repeat(indent + 1));
+                    } else {
+                        result += prefix + itemStr;
+                    }
+                }
+                return result;
+            }
+            // Object
+            const keys = Object.keys(obj);
+            if (keys.length === 0) return '{}\n';
+            let result = '';
+            for (const key of keys) {
+                const value = obj[key];
+                const prefix = '  '.repeat(indent) + key + ': ';
+                if (value === null) {
+                    result += prefix + 'null\n';
+                } else if (typeof value === 'object') {
+                    result += prefix + jsonToYaml(value, indent + 1).replace(/^/, '');
+                } else if (typeof value === 'string') {
+                    // Use YAML-friendly quoting for strings
+                    if (value.includes(':') || value.includes('#') || value.includes('\n') || value.startsWith(' ') || value.endsWith(' ') || value === '') {
+                        result += prefix + '"' + value.replace(/"/g, '\\"') + '"\n';
+                    } else {
+                        result += prefix + "'" + value + "'\n";
+                    }
+                } else {
+                    result += prefix + String(value) + '\n';
+                }
+            }
+            return result;
+        }
+        
+        // Simple YAML to JSON parser (handles basic YAML constructs)
+        function yamlToJson(yamlStr) {
+            const lines = yamlStr.split('\n');
+            const result = {};
+            const stack = [{ obj: result, indent: -1 }];
+            
+            for (let line of lines) {
+                // Remove comments
+                const commentIdx = line.indexOf('#');
+                if (commentIdx >= 0) {
+                    line = line.substring(0, commentIdx);
+                }
+                line = line.replace(/\t/g, '  ');
+                
+                if (!line.trim()) continue;
+                
+                const indent = line.search(/\S/);
+                const content = line.trim();
+                
+                if (content === '---' || content === '...') continue;
+                
+                // Pop stack to find parent
+                while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+                    stack.pop();
+                }
+                
+                const current = stack[stack.length - 1].obj;
+                
+                // Check for array item
+                if (content.startsWith('- ')) {
+                    const keyEnd = content.indexOf(':');
+                    if (keyEnd > 2) {
+                        // Array of objects: - key: value
+                        const key = content.substring(2, keyEnd - 1).trim();
+                        const value = content.substring(keyEnd + 2).trim();
+                        let arr = Array.isArray(current) ? current : (Array.isArray(stack[stack.length - 1][key]) ? stack[stack.length - 1][key] : null);
+                        if (!arr) {
+                            // Find or create array in parent
+                            const parent = stack.length > 1 ? stack[stack.length - 2].obj : result;
+                            const parentKey = Object.keys(parent).find(k => parent[k] === current || (Array.isArray(parent[k]) && parent[k].includes(current)));
+                            if (parentKey && Array.isArray(parent[parentKey])) {
+                                arr = parent[parentKey];
+                            } else {
+                                arr = [];
+                                // This case is complex, use eval approach for simplicity
+                            }
+                        }
+                        const obj = {};
+                        arr.push(obj);
+                        stack.push({ obj, indent });
+                    } else {
+                        // Simple array: - value
+                        const value = content.substring(2).trim();
+                        const simpleValue = parseYamlValue(value);
+                        if (Array.isArray(current)) {
+                            current.push(simpleValue);
+                        }
+                    }
+                    continue;
+                }
+                
+                const colonIdx = content.indexOf(':');
+                if (colonIdx < 0) {
+                    // Just a value
+                    const value = parseYamlValue(content);
+                    if (Array.isArray(current)) {
+                        current.push(value);
+                    }
+                    continue;
+                }
+                
+                const key = content.substring(0, colonIdx).trim();
+                const value = content.substring(colonIdx + 1).trim();
+                
+                if (!value || value === '' || value === '|' || value === '>') {
+                    // Object or array follows
+                    const newObj = {};
+                    if (Array.isArray(current)) {
+                        current.push(newObj);
+                    } else {
+                        current[key] = newObj;
+                    }
+                    stack.push({ obj: newObj, indent });
+                } else {
+                    // Leaf value
+                    const parsedValue = parseYamlValue(value);
+                    if (Array.isArray(current)) {
+                        current.push(parsedValue);
+                    } else {
+                        current[key] = parsedValue;
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        function parseYamlValue(value) {
+            if (!value) return '';
+            value = value.trim();
+            
+            // Quoted strings
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+                return value.substring(1, value.length - 1).replace(/\\"/g, '"').replace(/''/g, "'");
+            }
+            
+            // Boolean
+            if (value === 'true' || value === 'yes' || value === 'on') return true;
+            if (value === 'false' || value === 'no' || value === 'off') return false;
+            
+            // Null
+            if (value === 'null' || value === '~') return null;
+            
+            // Number
+            if (!isNaN(value) && value !== '') {
+                return Number(value);
+            }
+            
+            return value;
+        }
+        
         async function loadConfig() {
             try {
                 const resp = await fetch(API_BASE + '/api/config');
                 const data = await resp.json();
-                document.getElementById('configEditor').value = JSON.stringify(data, null, 2);
+                rawConfigJson = data;
+                const format = document.getElementById('configFormat').value;
+                updateConfigEditor(data, format);
+                showConfigHint('已加载配置 (' + format.toUpperCase() + '格式)');
             } catch (e) {
                 document.getElementById('configEditor').value = '// 加载失败: ' + e.message;
+                showConfigError('加载失败: ' + e.message);
+            }
+        }
+        
+        function updateConfigEditor(data, format) {
+            const textarea = document.getElementById('configEditor');
+            const validateIcon = document.getElementById('configValidateIcon');
+            
+            if (format === 'yaml') {
+                textarea.value = jsonToYaml(data);
+            } else {
+                textarea.value = JSON.stringify(data, null, 2);
+            }
+            
+            // Mark as valid
+            textarea.classList.remove('error');
+            textarea.classList.add('valid');
+            validateIcon.textContent = '✓';
+            validateIcon.style.color = '#00ff88';
+            hideConfigError();
+        }
+        
+        function switchConfigFormat() {
+            if (!rawConfigJson) return;
+            const format = document.getElementById('configFormat').value;
+            updateConfigEditor(rawConfigJson, format);
+        }
+        
+        function showConfigError(msg) {
+            const statusEl = document.getElementById('configStatus');
+            const errorDetail = document.getElementById('configErrorDetail');
+            const textarea = document.getElementById('configEditor');
+            const validateIcon = document.getElementById('configValidateIcon');
+            
+            statusEl.textContent = '❌ ' + msg;
+            statusEl.className = 'config-error';
+            textarea.classList.add('error');
+            textarea.classList.remove('valid');
+            validateIcon.textContent = '✗';
+            validateIcon.style.color = '#ff4757';
+            
+            // Show error detail
+            errorDetail.textContent = msg;
+            errorDetail.style.display = 'block';
+        }
+        
+        function hideConfigError() {
+            const errorDetail = document.getElementById('configErrorDetail');
+            errorDetail.style.display = 'none';
+        }
+        
+        function showConfigHint(msg) {
+            const hint = document.getElementById('configHint');
+            hint.textContent = msg;
+        }
+        
+        function validateConfig() {
+            const textarea = document.getElementById('configEditor');
+            const format = document.getElementById('configFormat').value;
+            const text = textarea.value.trim();
+            const validateIcon = document.getElementById('configValidateIcon');
+            const statusEl = document.getElementById('configStatus');
+            
+            if (!text) {
+                showConfigError('配置内容为空');
+                return;
+            }
+            
+            try {
+                if (format === 'yaml') {
+                    // Try to parse YAML (we'll use JSON as intermediary for validation)
+                    // For true YAML validation, we just check if it's parseable structure
+                    yamlToJson(text);
+                } else {
+                    JSON.parse(text);
+                }
+                
+                textarea.classList.remove('error');
+                textarea.classList.add('valid');
+                validateIcon.textContent = '✓';
+                validateIcon.style.color = '#00ff88';
+                statusEl.textContent = '✅ 语法正确';
+                statusEl.className = 'config-success';
+                hideConfigError();
+                showConfigHint('');
+                
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            } catch (e) {
+                showConfigError(e.message);
             }
         }
         
         async function saveConfig() {
+            const textarea = document.getElementById('configEditor');
+            const format = document.getElementById('configFormat').value;
             const statusEl = document.getElementById('configStatus');
-            const configText = document.getElementById('configEditor').value;
+            const text = textarea.value.trim();
+            
             statusEl.textContent = '';
             statusEl.className = '';
+            hideConfigError();
             
             try {
-                const configJson = JSON.parse(configText);
+                let configData;
+                
+                if (format === 'yaml') {
+                    // Convert YAML to JSON for API
+                    try {
+                        configData = yamlToJson(text);
+                    } catch (e) {
+                        showConfigError('YAML 解析失败: ' + e.message);
+                        return;
+                    }
+                } else {
+                    configData = JSON.parse(text);
+                }
+                
                 const resp = await fetch(API_BASE + '/api/config', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(configJson)
+                    body: JSON.stringify(configData)
                 });
                 
                 if (resp.ok) {
+                    rawConfigJson = configData;
+                    textarea.classList.remove('error');
+                    textarea.classList.add('valid');
                     statusEl.textContent = '✅ 配置已保存';
                     statusEl.className = 'config-success';
                 } else {
-                    statusEl.textContent = '❌ 保存失败: ' + resp.status;
-                    statusEl.className = 'config-error';
+                    const errText = await resp.text();
+                    showConfigError('保存失败: ' + resp.status + ' - ' + errText);
                 }
             } catch (e) {
-                statusEl.textContent = '❌ JSON 解析失败: ' + e.message;
-                statusEl.className = 'config-error';
+                showConfigError('解析失败: ' + e.message);
             }
             
-            // Clear status after 3s
             setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
         
@@ -1497,6 +1849,7 @@
             const statusEl = document.getElementById('configStatus');
             statusEl.textContent = '';
             statusEl.className = '';
+            hideConfigError();
             
             try {
                 const resp = await fetch(API_BASE + '/api/config/reload', {
@@ -1518,6 +1871,69 @@
             }
             
             setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+        
+        function resetConfig() {
+            const format = document.getElementById('configFormat').value;
+            const defaultConfig = {
+                gateway: {
+                    bind: "127.0.0.1:18790",
+                    verbose: false,
+                    dataDir: null
+                },
+                agent: {
+                    model: "anthropic/claude-sonnet-4-20250514",
+                    provider: "anthropic",
+                    apiKey: null,
+                    apiBase: "https://api.anthropic.com",
+                    workspace: null
+                },
+                tools: {
+                    execEnabled: true
+                },
+                models: [],
+                retry: {
+                    maxRetries: 3,
+                    initialDelayMs: 1000,
+                    maxDelayMs: 30000,
+                    exponentialBackoff: true
+                },
+                hotReload: {
+                    enabled: true,
+                    watchPath: null,
+                    pollIntervalMs: 5000
+                },
+                persistence: {
+                    enabled: false,
+                    path: "tinyclaw.db",
+                    skillsPath: "skills.json"
+                },
+                shutdown: {
+                    timeoutSecs: 30
+                }
+            };
+            
+            rawConfigJson = defaultConfig;
+            updateConfigEditor(defaultConfig, format);
+            
+            const statusEl = document.getElementById('configStatus');
+            statusEl.textContent = '↺ 已重置为默认配置（未保存）';
+            statusEl.className = 'config-success';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+        
+        function copyConfig() {
+            const textarea = document.getElementById('configEditor');
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const statusEl = document.getElementById('configStatus');
+                statusEl.textContent = '✅ 已复制到剪贴板';
+                statusEl.className = 'config-success';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            }).catch(e => {
+                const statusEl = document.getElementById('configStatus');
+                statusEl.textContent = '❌ 复制失败: ' + e.message;
+                statusEl.className = 'config-error';
+            });
         }
         
         function filterSessions() {

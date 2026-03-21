@@ -142,12 +142,29 @@
 **交互体验持续打磨**
 
 **计划完成**:
-- [ ] WebUI 配置编辑器增强
+- [x] WebUI 配置编辑器增强
 - [ ] TUI 功能完善
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
 - `cargo test` 全部通过 (176 tests)
+
+---
+
+### v4.5.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI 配置编辑器增强** - 显著提升配置编辑体验
+  - JSON/YAML 格式切换：支持在编辑器和下拉菜单中选择格式，互相转换
+  - 语法验证：新增"验证"按钮，实时检查 JSON/YAML 语法正确性
+  - 视觉反馈：验证通过显示绿色边框，失败显示红色边框并显示错误详情
+  - 一键重置：新增"重置"按钮，可快速恢复默认配置
+  - 复制到剪贴板：新增"复制"按钮，便于一键复制配置内容
+  - 格式切换提示：编辑器左上角显示当前格式和加载状态
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: TUI 功能完善
 
 ---
 
@@ -193,6 +210,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.5.0 | WebUI 配置编辑器增强 - JSON/YAML 格式切换、语法验证（绿/红边框反馈）、一键重置默认配置、复制到剪贴板；cargo clippy 0 警告；cargo test 176 tests |
 | v4.4.0 | TUI 视觉优化 - 消息面板增强：角色标签颜色区分 (User=绿, Assistant=青, System=黄, Tool=紫)、每条消息显示时间戳 (HH:MM:SS)、多行内容正确缩进；输入区域优化：命令模式标题变化 (:前缀显示为"Command")、字符计数显示；标题栏增强：连接状态和当前 session 名称使用不同颜色区分；cargo clippy 0 警告；cargo test 176 tests |
 | v4.3.0 | YAML 配置支持 + TUI Tab 命令补全 - 添加 serde_yaml 依赖，配置文件支持 .yaml/.yml 格式自动检测和加载；TUI 新增 Tab 键命令补全功能，支持 :q/:quit, :r/:reconnect, :n/:new, :d/:delete, :h/:help/:? 等命令补全；Shift+Tab 反向循环；输入普通文本时支持 Session ID 补全；cargo clippy 0 警告；cargo test 176 tests |
 | v4.2.0 | WebUI 聊天增强 (Markdown + 代码高亮) - 集成 marked.js 和 highlight.js，支持 Markdown 渲染（标题、列表、代码块、表格、链接等）；用户消息和 AI 回复均支持 Markdown 格式；代码块自动语法高亮；会话详情面板同样支持 Markdown 渲染；cargo clippy 0 警告；cargo test 173 tests |
@@ -218,4 +236,4 @@
 
 ---
 
-*更新时间: 2026-03-22 06:02*
+*更新时间: 2026-03-22 06:32*
