@@ -136,6 +136,15 @@ impl HistoryManager {
             store.shutdown();
         }
     }
+
+    /// Import a session directly (for session restore/import)
+    pub fn import_session(&self, session_id: &str, history: SessionHistory) {
+        let history_arc = Arc::new(RwLock::new(history));
+        let mut histories = self.histories.write();
+        histories.insert(session_id.to_string(), history_arc);
+        drop(histories);
+        self.sync_to_sqlite(session_id);
+    }
 }
 
 impl Default for HistoryManager {

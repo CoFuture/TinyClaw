@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/CoFuture/TinyClaw">
-    <img src="https://img.shields.io/badge/version-2.2.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-2.4.0-blue.svg" alt="Version">
   </a>
   <a href="https://github.com/CoFuture/TinyClaw/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -214,6 +214,7 @@ TinyClaw/
 
 See [docs/ITERATIONS.md](docs/ITERATIONS.md) for detailed version history.
 
+- **v2.4.0** - 会话导入导出 + 连接状态API + 工具schema验证
 - **v2.3.0** - 工具增强 (find, tail, exec 超时修复)
 - **v2.2.0** - 批量执行 + env/diff 工具
 - **v2.1.0** - 增强文件工具 + 路径规范化

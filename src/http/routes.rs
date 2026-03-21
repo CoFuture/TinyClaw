@@ -2,18 +2,21 @@
 
 use crate::config::{Config, default_config_path};
 use crate::gateway::session::SessionManager;
+use crate::gateway::server::ServerState;
 use crate::agent::Agent;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::ratelimit::RateLimiter;
+use crate::types::{SessionHistory, Role};
 use axum::{
     extract::State,
     http::StatusCode,
     response::Json,
-    routing::get,
+    routing::{get, post},
     Router,
 };
+use chrono::Utc;
 use parking_lot::RwLock;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
@@ -32,6 +35,7 @@ pub struct HttpState {
     pub start_time: Instant,
     pub metrics: Arc<MetricsCollector>,
     pub rate_limiter: Arc<RateLimiter>,
+    pub server_state: ServerState,
 }
 
 /// Health check response
@@ -74,6 +78,38 @@ pub struct ToolsStatus {
     pub exec_enabled: bool,
 }
 
+/// Active connections response
+#[derive(Serialize)]
+pub struct ConnectionsResponse {
+    pub active_connections: usize,
+    pub shutdown_timeout_secs: u64,
+}
+
+/// Session export response
+#[derive(Serialize)]
+pub struct SessionExportResponse {
+    pub session_id: String,
+    pub exported_at: String,
+    pub message_count: usize,
+    pub data: SessionHistory,
+}
+
+/// Session import request
+#[derive(Deserialize)]
+pub struct SessionImportRequest {
+    pub session_id: String,
+    pub data: SessionHistory,
+}
+
+/// Session import response
+#[derive(Serialize)]
+pub struct SessionImportResponse {
+    pub success: bool,
+    pub session_id: String,
+    pub message_count: usize,
+    pub error: Option<String>,
+}
+
 /// Health check handler
 async fn health(State(state): State<Arc<HttpState>>) -> Json<HealthResponse> {
     let sessions = state.session_manager.list().len();
@@ -109,6 +145,83 @@ async fn status(State(state): State<Arc<HttpState>>) -> Json<StatusResponse> {
             exec_enabled: config.tools.exec_enabled,
         },
     })
+}
+
+/// Active connections handler
+async fn connections(State(state): State<Arc<HttpState>>) -> Json<ConnectionsResponse> {
+    Json(ConnectionsResponse {
+        active_connections: state.server_state.active_connections.load(std::sync::atomic::Ordering::SeqCst),
+        shutdown_timeout_secs: state.server_state.shutdown_timeout_secs,
+    })
+}
+
+/// Session export handler - export session history as JSON
+async fn session_export(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<SessionExportResponse> {
+    if let Some(history) = state.history_manager.get(&session_id) {
+        let history = history.read();
+        let message_count = history.messages.len();
+        Json(SessionExportResponse {
+            session_id: session_id.clone(),
+            exported_at: Utc::now().to_rfc3339(),
+            message_count,
+            data: (*history).clone(),
+        })
+    } else {
+        Json(SessionExportResponse {
+            session_id,
+            exported_at: Utc::now().to_rfc3339(),
+            message_count: 0,
+            data: SessionHistory::default(),
+        })
+    }
+}
+
+/// Session import handler - import session history from JSON
+async fn session_import(
+    State(state): State<Arc<HttpState>>,
+    Json(request): Json<SessionImportRequest>,
+) -> (StatusCode, Json<SessionImportResponse>) {
+    // Validate that the session_id matches
+    if request.data.session_id != request.session_id {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(SessionImportResponse {
+                success: false,
+                session_id: request.session_id,
+                message_count: 0,
+                error: Some("Session ID mismatch between URL and payload".to_string()),
+            }),
+        );
+    }
+
+    // Validate messages have valid roles
+    for msg in &request.data.messages {
+        if !matches!(msg.role, Role::User | Role::Assistant | Role::System | Role::Tool) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(SessionImportResponse {
+                    success: false,
+                    session_id: request.session_id,
+                    message_count: 0,
+                    error: Some(format!("Invalid message role: {:?}", msg.role)),
+                }),
+            );
+        }
+    }
+
+    // Import the session
+    let message_count = request.data.messages.len();
+    state.history_manager.import_session(&request.session_id, request.data);
+
+    (StatusCode::OK, Json(SessionImportResponse {
+        success: true,
+        session_id: request.session_id,
+        message_count,
+        error: None,
+    }))
 }
 
 /// Config get handler - returns public config only (no secrets)
@@ -350,6 +463,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/admin.html", get(root_redirect))
         .route("/health", get(health))
         .route("/api/status", get(status))
+        .route("/api/connections", get(connections))
         .route("/api/metrics", get(metrics))
         .route("/api/ratelimit/{client_id}", get(rate_limit_check))
         .route("/api/config", get(config_get))
@@ -358,6 +472,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/shutdown", axum::routing::post(shutdown))
         .route("/api/sessions", get(sessions_list))
         .route("/api/sessions/{id}/messages", get(session_messages))
+        .route("/api/sessions/{id}/export", get(session_export))
+        .route("/api/sessions/import", post(session_import))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
 }

@@ -97,15 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
-    // Create handler context for WebSocket
-    let _ws_ctx = HandlerContext::new(
-        session_manager.clone(),
-        history_manager.clone(),
-        event_emitter.clone(),
-        config.clone(),
-        agent.clone(),
-        shutdown_tx.clone(),
-    );
+    // Create server state for graceful shutdown
+    let server_state = server::ServerState::new(config.read().shutdown.timeout_secs);
 
     // Create HTTP state with start time
     let http_state = Arc::new(HttpState {
@@ -117,14 +110,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         start_time,
         metrics: metrics.clone(),
         rate_limiter: rate_limiter.clone(),
+        server_state: server_state.clone(),
     });
 
     // Create the main session
     session_manager.get_or_create_main();
     info!("Main session created");
-
-    // Create server state for graceful shutdown
-    let server_state = server::ServerState::new(config.read().shutdown.timeout_secs);
 
     // Spawn WebSocket server
     let server_config = config.clone();

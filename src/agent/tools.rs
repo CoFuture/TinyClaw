@@ -115,10 +115,9 @@ impl ToolExecutor {
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to the directory"
+                            "description": "Path to the directory (defaults to current directory)"
                         }
-                    },
-                    "required": ["path"]
+                    }
                 }),
             },
         );
@@ -436,8 +435,17 @@ impl ToolExecutor {
         self.tools.get(name)
     }
 
-    /// Execute a tool
+    /// Execute a tool with schema validation
     pub async fn execute(&self, name: &str, input: serde_json::Value) -> ToolResult {
+        // First validate input against schema
+        if let Some(validation_error) = self.validate_input(name, &input) {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(validation_error),
+            };
+        }
+
         match name {
             "exec" => self.execute_exec(input).await,
             "read_file" => self.execute_read_file(input).await,
@@ -461,6 +469,54 @@ impl ToolExecutor {
                 error: Some(format!("Unknown tool: {}", name)),
             },
         }
+    }
+
+    /// Validate tool input against its schema
+    fn validate_input(&self, name: &str, input: &serde_json::Value) -> Option<String> {
+        let tool = self.tools.get(name)?;
+
+        // Get the input_schema
+        let schema = tool.input_schema.get("properties")?.as_object()?;
+
+        // Get required fields
+        let required = tool.input_schema.get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+            .unwrap_or_default();
+
+        // Check each required field is present
+        let input_obj = input.as_object()?;
+
+        for field in required {
+            if !input_obj.contains_key(field) {
+                return Some(format!("Missing required field '{}' for tool '{}'", field, name));
+            }
+        }
+
+        // Type validation for present fields
+        for (field, expected_type) in schema {
+            if let Some(value) = input_obj.get(field) {
+                if let Some(type_str) = expected_type.get("type").and_then(|t| t.as_str()) {
+                    let valid = match type_str {
+                        "string" => value.is_string(),
+                        "number" => value.is_number(),
+                        "boolean" => value.is_boolean(),
+                        "object" => value.is_object(),
+                        "array" => value.is_array(),
+                        "null" => value.is_null(),
+                        _ => true, // Unknown type, skip validation
+                    };
+                    if !valid {
+                        return Some(format!(
+                            "Invalid type for field '{}': expected {}, got {:?}",
+                            field, type_str, value
+                        ));
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Normalize a path by expanding ~ to home directory and $VAR env vars.

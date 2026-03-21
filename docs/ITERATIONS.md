@@ -561,6 +561,44 @@ Bug 修复:
 
 ---
 
+## v2.4.0 - 2026-03-21
+
+### Iteration 27: 会话管理增强 + 工具输入验证
+
+**目标**: 增强会话API，添加工具输入schema验证
+
+新增功能:
+- [x] 会话导出API - `GET /api/sessions/:id/export`
+  - 导出会话历史为JSON格式
+  - 包含session_id、exported_at、message_count和完整消息数据
+
+- [x] 会话导入API - `POST /api/sessions/import`
+  - 从JSON导入会话历史
+  - 验证session_id匹配
+  - 验证消息role有效性
+
+- [x] 活动连接API - `GET /api/connections`
+  - 显示当前活动的WebSocket连接数
+  - 显示关闭超时配置
+
+- [x] 工具输入schema验证
+  - 执行前验证required字段是否存在
+  - 验证字段类型是否匹配 (string/number/boolean/object/array)
+  - 提供明确的错误信息
+
+- [x] HistoryManager.import_session() - 批量导入会话
+
+Bug修复:
+- [x] list_dir工具schema修复
+  - 之前: path字段标记为required但实现支持默认值
+  - 现在: 移除required标记，与实现一致
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 115 个测试通过
+
+---
+
 ## v2.0.0 待规划 (完整功能)
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
