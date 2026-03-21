@@ -641,17 +641,30 @@ impl TuiApp {
     }
 
     fn draw_title_bar(&self, f: &mut ratatui::Frame<'_>, area: Rect) {
-        let connection_status = if self.state.connected { "●" } else { "○" };
-        let loading_indicator = if self.state.loading { " [loading...]" } else { "" };
-        let title = format!(
-            " TinyClaw v{} {} | Session: {:?}{} ",
-            self.version,
-            connection_status,
-            self.state.current_session_id.as_deref().unwrap_or("None"),
-            loading_indicator
-        );
+        use ratatui::{style::{Color, Style}, text::{Line, Span}};
         
-        let paragraph = Paragraph::new(title.as_str())
+        let connection_str = if self.state.connected { 
+            "● Connected" 
+        } else { 
+            "○ Disconnected" 
+        };
+        let connection_color = if self.state.connected { Color::Green } else { Color::Red };
+        
+        let session_str = self.state.current_session_id.as_deref()
+            .map(|s| if s == "main" { "main" } else { s })
+            .unwrap_or("none");
+        
+        // Build title line with styled spans
+        let spans: Vec<Span> = vec![
+            Span::raw(" TinyClaw v"),
+            Span::raw(&self.version),
+            Span::raw(" | "),
+            Span::styled(connection_str, Style::default().fg(connection_color)),
+            Span::raw(" | Session: "),
+            Span::styled(session_str, Style::default().fg(Color::Cyan)),
+        ];
+        
+        let paragraph = Paragraph::new(Line::from(spans))
             .alignment(Alignment::Center);
 
         f.render_widget(paragraph, area);

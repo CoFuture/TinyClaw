@@ -1,13 +1,17 @@
 //! TUI UI components
 
+use crate::tui::state::AppState;
 use ratatui::{
     layout::Alignment,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph},
+    Frame,
 };
-use crate::tui::state::AppState;
 
 /// Draw the session list panel
-pub fn draw_sessions_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, state: &AppState) {
+pub fn draw_sessions_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let connection_indicator = if state.connected { "●" } else { "○" };
     let block = Block::default()
         .title(format!(" Sessions {} ", connection_indicator))
@@ -16,28 +20,33 @@ pub fn draw_sessions_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Re
     let items: Vec<ListItem> = if state.sessions.is_empty() {
         vec![ListItem::new(" No sessions ")]
     } else {
-        state.sessions.iter().map(|s| {
-            let prefix = if Some(s.as_str()) == state.current_session_id.as_deref() {
-                "● "
-            } else {
-                "  "
-            };
-            let display_name = if s == "main" { "Main" } else { s.as_str() };
-            ListItem::new(format!("{}{}", prefix, display_name))
-        }).collect()
+        state.sessions.iter()
+            .map(|s| {
+                let prefix = if Some(s.as_str()) == state.current_session_id.as_deref() {
+                    "● "
+                } else {
+                    "  "
+                };
+                let display_name = if s == "main" { "Main" } else { s.as_str() };
+                let style = if Some(s.as_str()) == state.current_session_id.as_deref() {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(format!("{}{}", prefix, display_name)).style(style)
+            })
+            .collect()
     };
 
-    let list = List::new(items)
-        .block(block);
-
+    let list = List::new(items).block(block);
     f.render_widget(list, area);
 }
 
-/// Draw the message view panel
-pub fn draw_messages_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, state: &AppState) {
-    let title_text = state.current_session_id.as_deref().map(|s| {
-        if s == "main" { " Main Session " } else { s }
-    }).unwrap_or(" Messages - No session ");
+/// Draw the message view panel with enhanced formatting
+pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = state.current_session_id.as_deref()
+        .map(|s| if s == "main" { " Main Session " } else { s })
+        .unwrap_or(" Messages - No session ");
     
     let block = Block::default()
         .title(title_text)
@@ -45,63 +54,164 @@ pub fn draw_messages_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Re
 
     let messages = state.get_current_messages();
     
-    let content: String = if messages.is_empty() {
-        "No messages yet. Select a session and start chatting!".to_string()
+    let lines: Vec<Line> = if messages.is_empty() {
+        vec![Line::from(vec![
+            Span::raw("No messages yet. "),
+            Span::styled("Select a session", Style::default().fg(Color::Cyan)),
+            Span::raw(" and start chatting!"),
+        ])]
     } else {
-        messages.iter().skip(state.scroll_offset).map(|msg| {
-            let role_str = match msg.role {
-                crate::types::Role::User => "User",
-                crate::types::Role::Assistant => "Assistant",
-                crate::types::Role::System => "System",
-                crate::types::Role::Tool => "Tool",
-            };
-            let content_str = msg.content.trim();
-            if content_str.is_empty() {
-                format!("[{}] (empty)", role_str)
-            } else {
-                format!("[{}] {}", role_str, content_str)
+        let mut result: Vec<Line> = Vec::new();
+        
+        for msg in messages.iter().skip(state.scroll_offset) {
+            // Get timestamp - clone to avoid lifetime issues
+            let ts = msg.timestamp.format("%H:%M:%S").to_string();
+            
+            // Get role styling
+            match msg.role {
+                crate::types::Role::User => {
+                    let content = msg.content.trim();
+                    let content_lines: Vec<&str> = content.split('\n').collect();
+                    let first_line = content_lines.first().unwrap_or(&"").to_string();
+                    result.push(Line::from(vec![
+                        Span::raw("["),
+                        Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                        Span::raw("] "),
+                        Span::styled("User", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        Span::raw(": "),
+                        Span::raw(first_line),
+                    ]));
+                    for line in content_lines.iter().skip(1) {
+                        result.push(Line::from(vec![
+                            Span::raw("          "),
+                            Span::raw(line.to_string()),
+                        ]));
+                    }
+                }
+                crate::types::Role::Assistant => {
+                    let content = msg.content.trim();
+                    let content_lines: Vec<&str> = content.split('\n').collect();
+                    let first_line = content_lines.first().unwrap_or(&"").to_string();
+                    result.push(Line::from(vec![
+                        Span::raw("["),
+                        Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                        Span::raw("] "),
+                        Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::raw(": "),
+                        Span::raw(first_line),
+                    ]));
+                    for line in content_lines.iter().skip(1) {
+                        result.push(Line::from(vec![
+                            Span::raw("          "),
+                            Span::raw(line.to_string()),
+                        ]));
+                    }
+                }
+                crate::types::Role::System => {
+                    let content = msg.content.trim();
+                    let content_lines: Vec<&str> = content.split('\n').collect();
+                    let first_line = content_lines.first().unwrap_or(&"").to_string();
+                    result.push(Line::from(vec![
+                        Span::raw("["),
+                        Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                        Span::raw("] "),
+                        Span::styled("System", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                        Span::raw(": "),
+                        Span::raw(first_line),
+                    ]));
+                    for line in content_lines.iter().skip(1) {
+                        result.push(Line::from(vec![
+                            Span::raw("          "),
+                            Span::raw(line.to_string()),
+                        ]));
+                    }
+                }
+                crate::types::Role::Tool => {
+                    let tool_name = msg.tool_name.as_deref().unwrap_or("tool").to_string();
+                    let content = msg.content.trim().to_string();
+                    result.push(Line::from(vec![
+                        Span::raw("["),
+                        Span::styled(ts, Style::default().fg(Color::DarkGray)),
+                        Span::raw("] "),
+                        Span::styled("Tool", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                        Span::raw(" "),
+                        Span::styled(tool_name, Style::default().fg(Color::Magenta)),
+                        Span::raw(": "),
+                        Span::raw(content),
+                    ]));
+                }
             }
-        }).collect::<Vec<_>>().join("\n")
+        }
+        
+        // Add loading indicator if active
+        if state.loading {
+            result.push(Line::from(vec![
+                Span::styled("typing...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+        }
+        
+        result
     };
 
-    let paragraph = Paragraph::new(content.as_str())
+    let paragraph = Paragraph::new(Text::from(lines))
         .block(block)
-        .alignment(Alignment::Left);
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
 
     f.render_widget(paragraph, area);
 }
 
-/// Draw the input panel
-pub fn draw_input_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, state: &AppState) {
+/// Draw the input panel with enhanced features
+pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title = if state.input_buffer.starts_with(':') {
+        " Command "
+    } else {
+        " Input "
+    };
+    
     let block = Block::default()
-        .title(" Input ")
+        .title(title)
         .borders(Borders::ALL);
 
-    let (text, hint) = if state.current_session_id.is_none() {
-        (" (select a session first) ".to_string(), None)
+    let display_text: String;
+    let hint: Option<String>;
+    
+    if state.current_session_id.is_none() {
+        display_text = " (select a session first) ".to_string();
+        hint = None;
     } else if state.input_buffer.is_empty() {
-        (" Type your message... ".to_string(), None)
+        display_text = " Type your message... ".to_string();
+        hint = None;
     } else {
-        let hint = if state.completion.active && state.completion.candidates.len() > 1 {
-            let all_candidates: Vec<_> = state.completion.candidates.iter().enumerate()
-                .map(|(i, c)| if i == state.completion.index { format!("[{}]", c) } else { c.clone() })
+        display_text = if state.input_buffer.starts_with(':') {
+            format!(":{}", &state.input_buffer[1..])
+        } else {
+            state.input_buffer.clone()
+        };
+        
+        hint = if state.completion.active && state.completion.candidates.len() > 1 {
+            let all_candidates: Vec<String> = state.completion.candidates.iter()
+                .enumerate()
+                .map(|(i, c)| if i == state.completion.index { 
+                    format!("[{}]", c) 
+                } else { 
+                    c.clone() 
+                })
                 .collect();
             Some(all_candidates.join(" "))
         } else {
             None
         };
-        (state.input_buffer.clone(), hint)
     };
 
-    let paragraph = Paragraph::new(text.as_str())
+    let paragraph = Paragraph::new(display_text.as_str())
         .block(block);
 
     f.render_widget(paragraph, area);
 
     // Show completion hint if active
     if let Some(hint_text) = hint {
-        // Draw hint below input panel
-        let hint_area = ratatui::layout::Rect {
+        let hint_area = Rect {
             y: area.y + area.height,
             x: area.x + 2,
             width: area.width.saturating_sub(4),
@@ -109,18 +219,36 @@ pub fn draw_input_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect,
         };
         if hint_area.y < f.area().height.saturating_sub(1) {
             let hint_paragraph = Paragraph::new(hint_text.as_str())
-                .alignment(Alignment::Left);
+                .alignment(Alignment::Left)
+                .style(Style::default().fg(Color::DarkGray));
             f.render_widget(hint_paragraph, hint_area);
         }
+    }
+    
+    // Show char count in bottom-right of input area
+    let char_count = state.input_buffer.len();
+    if char_count > 0 {
+        let count_text = format!("{} chars", char_count);
+        let count_area = Rect {
+            x: area.x + area.width.saturating_sub(count_text.len() as u16 + 2),
+            y: area.y + area.height - 1,
+            width: count_text.len() as u16 + 2,
+            height: 1,
+        };
+        let count_paragraph = Paragraph::new(count_text.as_str())
+            .alignment(Alignment::Right)
+            .style(Style::default().fg(Color::DarkGray));
+        f.render_widget(count_paragraph, count_area);
     }
 }
 
 /// Draw the help bar at the bottom
-pub fn draw_help_bar(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect) {
+pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect) {
     let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help ";
     
     let paragraph = Paragraph::new(help_text)
-        .alignment(Alignment::Center);
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
 
     f.render_widget(paragraph, area);
 }

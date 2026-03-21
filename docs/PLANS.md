@@ -136,18 +136,25 @@
 
 ---
 
-## 当前迭代规划 (v4.4.0)
+## 当前迭代规划 (v4.5.0)
 
 ### 本轮目标
 **交互体验持续打磨**
 
 **计划完成**:
-- [ ] WebUI 配置编辑器改进
-- [ ] TUI 视觉优化
+- [ ] WebUI 配置编辑器增强
+- [ ] TUI 功能完善
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
 - `cargo test` 全部通过 (176 tests)
+
+---
+
+## 待办事项池
+
+### Agent 能力增强
+- [x] 上下文管理机制 (Context struct + 压缩策略) ✅ v3.7.0
 
 ---
 
@@ -173,6 +180,7 @@
 - [x] 命令行客户端 ✅ v3.8.0
 - [x] WebUI 聊天 Markdown + 代码高亮 ✅ v4.2.0
 - [x] TUI Tab 命令补全 ✅ v4.3.0
+- [x] TUI 视觉优化 (彩色角色标签+时间戳) ✅ v4.4.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -185,6 +193,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.4.0 | TUI 视觉优化 - 消息面板增强：角色标签颜色区分 (User=绿, Assistant=青, System=黄, Tool=紫)、每条消息显示时间戳 (HH:MM:SS)、多行内容正确缩进；输入区域优化：命令模式标题变化 (:前缀显示为"Command")、字符计数显示；标题栏增强：连接状态和当前 session 名称使用不同颜色区分；cargo clippy 0 警告；cargo test 176 tests |
 | v4.3.0 | YAML 配置支持 + TUI Tab 命令补全 - 添加 serde_yaml 依赖，配置文件支持 .yaml/.yml 格式自动检测和加载；TUI 新增 Tab 键命令补全功能，支持 :q/:quit, :r/:reconnect, :n/:new, :d/:delete, :h/:help/:? 等命令补全；Shift+Tab 反向循环；输入普通文本时支持 Session ID 补全；cargo clippy 0 警告；cargo test 176 tests |
 | v4.2.0 | WebUI 聊天增强 (Markdown + 代码高亮) - 集成 marked.js 和 highlight.js，支持 Markdown 渲染（标题、列表、代码块、表格、链接等）；用户消息和 AI 回复均支持 Markdown 格式；代码块自动语法高亮；会话详情面板同样支持 Markdown 渲染；cargo clippy 0 警告；cargo test 173 tests |
 | v4.1.0 | WebUI 监控面板增强 + 结构化日志 - WebUI 监控面板集成 `/api/metrics` 端点，新增请求速率、响应时间、错误数、WS 连接数等统计；新增图表标签页（请求/响应/错误）；端点统计表格展示 Top 10 API 端点；Agent/Gateway 日志改为 structured fields 格式；cargo clippy 0 警告；cargo test 173 tests |
@@ -209,4 +218,4 @@
 
 ---
 
-*更新时间: 2026-03-22 05:32*
+*更新时间: 2026-03-22 06:02*
