@@ -1,6 +1,7 @@
 //! TUI application state
 
 use crate::types::{Message, SessionHistory};
+use crate::tui::gateway_client::TuiGatewayStatus;
 use std::collections::HashMap;
 
 /// Application state for TUI
@@ -20,6 +21,16 @@ pub struct AppState {
     pub show_help: bool,
     /// Current panel (0=sessions, 1=messages, 2=input)
     pub active_panel: usize,
+    /// Gateway connection status
+    pub gateway_status: TuiGatewayStatus,
+    /// Whether gateway is connected
+    pub connected: bool,
+    /// Loading indicator for pending agent response
+    pub loading: bool,
+    /// Error message to display
+    pub error_message: Option<String>,
+    /// Connection retry count
+    pub retry_count: u32,
 }
 
 impl Default for AppState {
@@ -32,6 +43,11 @@ impl Default for AppState {
             scroll_offset: 0,
             show_help: false,
             active_panel: 1,
+            gateway_status: TuiGatewayStatus::Disconnected,
+            connected: false,
+            loading: false,
+            error_message: None,
+            retry_count: 0,
         }
     }
 }
@@ -63,8 +79,29 @@ impl AppState {
             self.sessions.push(session_id.clone());
             self.session_histories.insert(
                 session_id.clone(),
-                SessionHistory::new(session_id),
+                SessionHistory::new(session_id.clone()),
             );
         }
+    }
+
+    pub fn set_loading(&mut self, loading: bool) {
+        self.loading = loading;
+    }
+
+    pub fn set_error(&mut self, msg: Option<String>) {
+        self.error_message = msg;
+    }
+
+    pub fn set_connected(&mut self, connected: bool) {
+        self.connected = connected;
+        if connected {
+            self.retry_count = 0;
+            self.error_message = None;
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn increment_retry(&mut self) {
+        self.retry_count += 1;
     }
 }

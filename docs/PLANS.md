@@ -139,21 +139,40 @@
 ## 当前迭代规划 (v3.1.0)
 
 ### 本轮目标
-结合 PLANS.md 优先级指引和项目现状，本轮迭代重点：**实时反馈 (P1)**
+结合 PLANS.md 优先级指引和项目现状，本轮迭代重点：**TUI 完善 (P0)**
 
-#### 1. 实时反馈 (SSE) (P1)
-**目标**: 实现 Server-Sent Events 端点，支持实时推送事件到客户端
+#### 1. TUI Gateway 集成 (P0)
+**目标**: TUI 连接 Gateway 进行实时对话
 
 **已完成** ✅:
-- SSE 端点 `/api/events` - HTTP 服务器推送事件流
-- 新事件类型: TurnStarted, TurnThinking, TurnEnded, Heartbeat
-- 事件过滤 - 支持按 session_id 过滤事件
-- 心跳保活 - 每15秒发送心跳保持连接
-- WebUI 实时事件面板 - admin.html 中展示实时事件流
+- **TUI Gateway Client** - 新增 WebSocket 客户端模块 (`src/tui/gateway_client.rs`)
+  - 支持连接到本地 Gateway (ws://127.0.0.1:18790)
+  - 完整的 JSON-RPC 协议支持
+  - 事件订阅机制实时接收网关事件
+  - 异步消息发送与接收
+- **TUI 应用集成** - 更新 `src/tui/app.rs` 和 `src/tui/state.rs`
+  - 连接状态追踪与显示
+  - 用户消息通过 WebSocket 发送给 Agent
+  - 实时显示 Agent 回复、工具调用等事件
+  - 错误提示与重连支持
+- **UI 增强**
+  - 连接状态指示器 (●/○)
+  - 加载状态显示
+  - 错误消息覆盖层
+  - 新增 `:r` 命令重连网关
+
+**使用方式**:
+1. 先启动 TinyClaw 主程序 (`cargo run`)
+2. 再启动 TUI (`cargo run -- --tui` 或 `cargo run -t`)
+3. TUI 会自动连接到 Gateway WebSocket
 
 **下一步**: 
-- 持久化技能配置
-- TUI 完善
+- 多 Session 支持 (在 TUI 中创建/切换会话)
+- TUI 持久化消息历史
+
+#### 2. 基础修复 (持续)
+- `cargo clippy` 无警告
+- `cargo test` 全部通过 (168 tests)
 
 #### 2. 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -174,6 +193,7 @@
 - [x] WebUI 技能管理面板 ✅ v3.0.0
 - [x] Terminal UI (TUI) ✅ v2.6.0
 - [x] 实时反馈 (SSE 事件流) ✅ v3.1.0
+- [x] TUI Gateway 集成 ✅ v3.2.0
 - [ ] 命令行客户端
 
 ### 稳定性
@@ -187,6 +207,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.2.0 | TUI Gateway 集成 - WebSocket 客户端、实时对话、连接状态显示 |
 | v3.1.0 | 实时反馈系统 (SSE) + 新事件类型 + WebUI 实时事件面板 |
 | v3.0.0 | Skill 系统核心 + 技能注入 + WebUI 技能面板 |
 | v2.9.0 | WebUI 增强 (工具面板、配置编辑器)、测试冲突修复 |

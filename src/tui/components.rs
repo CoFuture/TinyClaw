@@ -8,8 +8,9 @@ use crate::tui::state::AppState;
 
 /// Draw the session list panel
 pub fn draw_sessions_panel(f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, state: &AppState) {
+    let connection_indicator = if state.connected { "●" } else { "○" };
     let block = Block::default()
-        .title(" Sessions ")
+        .title(format!(" Sessions {} ", connection_indicator))
         .borders(Borders::ALL);
 
     let items: Vec<ListItem> = if state.sessions.is_empty() {
