@@ -136,14 +136,15 @@
 
 ---
 
-## 当前迭代规划 (v4.1.0)
+## 当前迭代规划 (v4.2.0)
 
 ### 本轮目标
-**WebUI 监控面板 + 结构化日志增强** (P1)
+**Agent 能力增强 + 交互体验优化** (P0)
 
 **计划完成**:
-- 结构化日志增强 (tracing fields)
-- WebUI 监控面板可视化
+- [ ] Agent 配置文件支持 (YAML/JSON 格式)
+- [ ] WebUI 聊天增强 (markdown 渲染、代码高亮)
+- [ ] TUI 命令补全
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -174,7 +175,7 @@
 
 ### 稳定性
 - [ ] 错误处理增强
-- [ ] 日志优化 (结构化日志)
+- [x] 日志优化 (结构化日志) ✅ v4.1.0
 - [x] 监控指标 ✅ v3.9.0
 
 ---
@@ -183,6 +184,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.1.0 | WebUI 监控面板增强 + 结构化日志 - WebUI 监控面板集成 `/api/metrics` 端点，新增请求速率、响应时间、错误数、WS 连接数等统计；新增图表标签页（请求/响应/错误）；端点统计表格展示 Top 10 API 端点；Agent/Gateway 日志改为 structured fields 格式；cargo clippy 0 警告；cargo test 173 tests |
 | v4.0.0 | Skill 持久化 - 自定义技能自动保存到 JSON 文件，重启后自动加载；内置技能保护（无法删除/覆盖）；移除无用的 metrics_middleware dead code；cargo clippy 0 警告；cargo test 173 tests |
 | v3.9.0 | 监控指标增强 - HTTP Metrics 中间件、请求 timing 采集、clippy warning 修复 |
 | v3.8.0 | 交互体验优化 - HTTP API 会话创建、WebUI 会话管理面板增强、交互式 CLI 聊天客户端 |
@@ -204,4 +206,4 @@
 
 ---
 
-*更新时间: 2026-03-22 04:02*
+*更新时间: 2026-03-22 04:32*

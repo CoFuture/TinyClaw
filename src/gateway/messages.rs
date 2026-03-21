@@ -90,10 +90,10 @@ pub async fn handle_request(
     let params = request.params().clone();
 
     info!(
-        "[{}] --> {} request: method={}",
-        request_id,
-        method,
-        jsonrpc_id.as_deref().unwrap_or("none")
+        request_id = %request_id,
+        method = %method,
+        jsonrpc_id = %jsonrpc_id.as_deref().unwrap_or("none"),
+        "Incoming JSON-RPC request"
     );
 
     let result = match method.as_str() {
@@ -115,11 +115,11 @@ pub async fn handle_request(
 
     match result {
         Ok(value) => {
-            info!("[{}] <-- {} success", request_id, method);
+            info!(request_id = %request_id, method = %method, "JSON-RPC request succeeded");
             Some(ResponseSuccess::new(jsonrpc_id, value).into())
         }
         Err(e) => {
-            error!("[{}] <-- {} error: {}", request_id, method, e);
+            error!(request_id = %request_id, method = %method, error = %e, "JSON-RPC request failed");
             let err_response = map_error_to_response(jsonrpc_id, &e);
             Some(err_response.into())
         }
@@ -383,7 +383,7 @@ async fn handle_sessions_delete(
     // Remove history for this session
     ctx.history_manager.remove(&session_key);
 
-    info!("Deleted session: {}", session_key);
+    info!(session_id = %session_key, "Deleted session");
 
     Ok(serde_json::json!({
         "deleted": true,
@@ -515,7 +515,7 @@ async fn handle_agent_spawn(
     // Ensure history manager has an entry for this session
     let _ = ctx.history_manager.get_or_create(&session_id);
 
-    info!("Created new session: {}", session_id);
+    info!(session_id = %session_id, kind = "isolated", "Created new session");
 
     Ok(serde_json::json!({
         "session_id": session_id,
@@ -540,7 +540,7 @@ async fn handle_exec(
         .and_then(|v| v.as_u64())
         .unwrap_or(30000);
 
-    info!("[{}] Exec: {} (timeout={}ms)", request_id, command, timeout);
+    info!(request_id = %request_id, command = %command, timeout_ms = %timeout, "Executing command");
 
     // Execute command using tokio
     let output = tokio::process::Command::new("sh")
@@ -606,7 +606,7 @@ async fn handle_shutdown(
     ctx: &HandlerContext,
     _id: Option<String>,
 ) -> Result<serde_json::Value> {
-    info!("Shutting down");
+    info!("Gateway shutdown requested");
     let _ = ctx.shutdown_tx.send(());
     Ok(serde_json::json!({ "shuttingDown": true }))
 }

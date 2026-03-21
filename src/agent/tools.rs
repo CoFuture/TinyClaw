@@ -829,7 +829,7 @@ impl ToolExecutor {
             .and_then(|v| v.as_u64())
             .unwrap_or(30000); // Default 30 second timeout
 
-        info!("Executing command: {} (timeout: {}ms)", command, timeout_ms);
+        info!(command = %command, timeout_ms = %timeout_ms, "Executing command");
 
         let command = command.to_string();
         let future = async {

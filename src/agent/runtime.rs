@@ -113,7 +113,7 @@ impl AgentRuntime {
         context: &AgentContext,
         user_message: &str,
     ) -> Result<String> {
-        info!("Starting agent turn for session: {}", context.session_id);
+        info!(session_id = %context.session_id, "Starting agent turn");
         
         // Reset state
         context.reset_turns();
@@ -127,7 +127,7 @@ impl AgentRuntime {
             context.increment_turn();
             
             if context.max_turns_reached() {
-                warn!("Max turns reached, stopping loop");
+                warn!(session_id = %context.session_id, "Max turns reached, stopping loop");
                 context.set_state(ExecutionState::Finished);
                 return Ok("Maximum turns reached. I need to stop here.".to_string());
             }
@@ -290,7 +290,7 @@ impl AgentRuntime {
 
     /// Execute a tool
     async fn execute_tool(&self, tool_name: &str, arguments: &serde_json::Value) -> Result<ToolResult> {
-        info!("Executing tool: {} with args: {:?}", tool_name, arguments);
+        info!(tool_name = %tool_name, args = ?arguments, "Executing tool");
         
         // Add any required fields to arguments
         let args = arguments.clone();
@@ -298,7 +298,7 @@ impl AgentRuntime {
         let result = self.tool_executor.execute(tool_name, args).await;
         
         if !result.success {
-            warn!("Tool {} failed: {:?}", tool_name, result.error);
+            warn!(tool_name = %tool_name, error = ?result.error, "Tool execution failed");
         }
         
         Ok(result)
