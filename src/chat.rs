@@ -15,26 +15,20 @@ use tracing::error;
 
 /// Chat client state
 pub struct ChatClient {
-    /// Gateway WebSocket URL
-    url: String,
     /// Current session ID
     session_id: String,
     /// Running flag
     running: Arc<AtomicBool>,
-    /// Event receiver from gateway
-    event_rx: broadcast::Receiver<crate::tui::TuiGatewayEvent>,
     /// Send channel for outgoing messages
     send_tx: mpsc::Sender<String>,
 }
 
 impl ChatClient {
     /// Create a new chat client
-    pub fn new(url: &str, gateway_event_rx: broadcast::Receiver<crate::tui::TuiGatewayEvent>, send_tx: mpsc::Sender<String>) -> Self {
+    pub fn new(send_tx: mpsc::Sender<String>) -> Self {
         Self {
-            url: url.to_string(),
             session_id: "main".to_string(),
             running: Arc::new(AtomicBool::new(true)),
-            event_rx: gateway_event_rx,
             send_tx,
         }
     }
@@ -151,7 +145,7 @@ pub async fn run_chat(url: &str) -> Result<(), Box<dyn std::error::Error + Send 
     let (event_tx, mut event_rx) = broadcast::channel::<crate::tui::TuiGatewayEvent>(100);
     
     // Create chat client
-    let mut client = ChatClient::new(url, event_tx.subscribe(), send_tx.clone());
+    let mut client = ChatClient::new(send_tx.clone());
     
     // Spawn combined read/write task
     let write_handle = tokio::spawn(async move {

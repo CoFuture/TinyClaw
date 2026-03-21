@@ -159,29 +159,21 @@
 
 ---
 
-## 当前迭代规划 (v3.8.0)
+## 当前迭代规划 (v3.9.0)
 
 ### 本轮目标
-**交互体验优化** (P0)
+**监控指标增强** (P1)
 
 **已完成** ✅:
-- **HTTP API 会话创建** - 新增 `POST /api/sessions` 端点
-  - 支持可选的 label 参数创建带标签的会话
-  - 返回新创建的会话 ID、类型等信息
-- **WebUI 会话管理增强**
-  - 添加"新建会话"按钮和创建会话表单
-  - 添加会话删除按钮（非 main 会话）
-  - 会话创建/删除后自动刷新列表
-- **交互式 CLI 聊天客户端**
-  - 新增 `--chat` / `-c` 命令行标志
-  - 支持 `--url` / `-u` 指定网关地址
-  - 支持命令: `:sessions`, `:new [label]`, `:switch <id>`, `:delete <id>`, `:quit`
-  - 通过 WebSocket 与网关交互，实时显示工具调用和响应
-- **修复 clippy warnings**
+- **HTTP Metrics 中间件** - 新增请求指标收集中间件
+  - `MetricsLayer` / `metrics_middleware` - Tower 中间件，记录每个 HTTP 请求的 timing
+  - 自动记录所有 API 端点的请求量、平均响应时间、错误率
+  - `/api/metrics` 端点现在返回真实采集的 per-endpoint 数据
+- **修复 clippy warning** - 移除 `ChatClient` 中未使用的 `url` 和 `event_rx` 字段
 
 **下一步**: 
-- 日志优化 (结构化日志)
-- 监控指标
+- 结构化日志增强 (tracing fields)
+- WebUI 监控面板
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -212,7 +204,7 @@
 ### 稳定性
 - [ ] 错误处理增强
 - [ ] 日志优化 (结构化日志)
-- [ ] 监控指标
+- [x] 监控指标 ✅ v3.9.0
 
 ---
 
@@ -220,6 +212,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.9.0 | 监控指标增强 - HTTP Metrics 中间件、请求 timing 采集、clippy warning 修复 |
 | v3.8.0 | 交互体验优化 - HTTP API 会话创建、WebUI 会话管理面板增强、交互式 CLI 聊天客户端 |
 | v3.7.0 | Agent 上下文管理修复 - send_message_with_history 实现、历史上下文传递到 AI API、Tool 消息编码修复 |
 | v3.6.0 | TUI 消息历史持久化 - SQLite 本地存储、会话恢复、优雅降级 |
@@ -239,4 +232,4 @@
 
 ---
 
-*更新时间: 2026-03-22 02:32*
+*更新时间: 2026-03-22 03:32*

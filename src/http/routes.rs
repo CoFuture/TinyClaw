@@ -428,7 +428,7 @@ pub struct EndpointMetricsResponse {
 }
 
 /// Metrics handler
-async fn metrics(State(state): State<Arc<HttpState>>) -> Json<MetricsResponse> {
+async fn metrics_handler(State(state): State<Arc<HttpState>>) -> Json<MetricsResponse> {
     let system = state.metrics.get_system_metrics();
     let endpoints = state.metrics.get_endpoint_metrics();
     
@@ -628,6 +628,8 @@ async fn sse_events(
 
 /// Create the router with static files and API routes
 pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
+    let metrics_collector = state.metrics.clone();
+    
     Router::new()
         .nest_service("/admin", ServeDir::new(static_dir))
         .route("/", get(root_redirect))
@@ -635,7 +637,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/health", get(health))
         .route("/api/status", get(status))
         .route("/api/connections", get(connections))
-        .route("/api/metrics", get(metrics))
+        .route("/api/metrics", get(metrics_handler))
         .route("/api/ratelimit/{client_id}", get(rate_limit_check))
         .route("/api/config", get(config_get))
         .route("/api/config", axum::routing::patch(config_patch))
@@ -662,6 +664,28 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
+        .layer(axum::middleware::from_fn(move |req: http::Request<axum::body::Body>, next: axum::middleware::Next| {
+            let metrics = metrics_collector.clone();
+            Box::pin(async move {
+                let start = std::time::Instant::now();
+                let method = req.method().to_string();
+                let path = req.uri().path().to_string();
+
+                // Call the next middleware/handler
+                let response = next.run(req).await;
+
+                // Record metrics
+                let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+                let endpoint = format!("{} {}", method, path);
+                
+                // Check if response is an error (5xx)
+                let is_error = response.status().is_server_error();
+                
+                metrics.record_request(&endpoint, elapsed_ms, is_error);
+
+                response
+            })
+        }))
         .with_state(state)
 }
 
