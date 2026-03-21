@@ -136,26 +136,26 @@
 
 ---
 
-## 当前迭代规划 (v3.6.0)
+## 当前迭代规划 (v3.7.0)
 
 ### 本轮目标
-**TUI 消息历史持久化** (P0)
+**Agent 上下文管理增强** (P0)
 
 **已完成** ✅:
-- **TUI Message History Persistence** - TUI 消息历史持久化到本地 SQLite 数据库
-  - `TuiPersistence` 结构 - 轻量级 SQLite 持久化管理器
-  - 自动保存 - 消息添加时自动持久化（用户消息、助手回复、工具调用）
-  - 会话恢复 - TUI 启动时自动从本地恢复历史记录
-  - 优雅降级 - 持久化失败时不影响正常功能
-  - 修复 bug - 用户消息现在正确添加到会话历史（之前被丢弃）
-- 数据库路径: `~/.local/share/tiny_claw/tui_history.db`
+- **Agent 上下文管理修复** - 修复 Agent 无法获取对话历史的严重 bug
+  - `send_message_with_history` 实现 - 真正的对话历史传递到 AI API
+  - 历史消息自动转换为 Anthropic/OpenAI API 格式
+  - Tool 消息正确编码（包含 tool_call_id 和 tool_name）
+  - `get_model_response` 现在传递完整的历史上下文给 AI 模型
+  - 保留向后兼容 - 原有 `send_message` 调用不受影响
+- 修复 clippy warning: SessionInfo 未使用字段
 
 **下一步**: 
 - WebUI 会话管理面板（创建/删除会话）
 - 命令行客户端
 
 #### 基础修复 (持续)
-- `cargo clippy` 无警告 (1 minor warning: SessionInfo fields for future use)
+- `cargo clippy` 无警告
 - `cargo test` 全部通过 (170 tests)
 
 ---
@@ -163,7 +163,7 @@
 ## 待办事项池
 
 ### Agent 能力增强
-- [ ] 上下文管理机制 (Context struct + 压缩策略)
+- [x] 上下文管理机制 (Context struct + 压缩策略) ✅ v3.7.0
 - [x] Skill 机制 (轻量级工具集) ✅ v3.0.0
 - [ ] 工具扩展 (更多内置工具)
 - [ ] Agent 配置文件支持
@@ -191,6 +191,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.7.0 | Agent 上下文管理修复 - send_message_with_history 实现、历史上下文传递到 AI API、Tool 消息编码修复 |
 | v3.6.0 | TUI 消息历史持久化 - SQLite 本地存储、会话恢复、优雅降级 |
 | v3.5.0 | WebUI Chat 多会话切换 - 会话下拉选择、sessionKey 传递、历史加载、SSE 实时更新 |
 | v3.4.0 | TUI 会话历史加载 + 会话删除 - 自动加载历史、:d 删除会话、防止删除 main |
@@ -208,4 +209,4 @@
 
 ---
 
-*更新时间: 2026-03-22 02:02*
+*更新时间: 2026-03-22 02:32*

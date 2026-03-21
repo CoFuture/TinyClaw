@@ -227,12 +227,11 @@ impl AgentRuntime {
 
     /// Get response from the model
     async fn get_model_response(&self, context: &AgentContext) -> Result<ModelResponse> {
-        // Get conversation history
+        // Get conversation history (includes the current user message already added by run_turn)
         let history = context.get_history();
-        
+
         // Apply context management (truncation if needed)
-        // Note: we drop the lock guard before any await point
-        let truncated_history = {
+        let (truncated_history, current_message) = {
             let cm = self.context_manager.read();
             if cm.needs_truncation(&history) {
                 let truncated = cm.truncate_to_fit(&history);
@@ -241,20 +240,47 @@ impl AgentRuntime {
                     history.len(),
                     truncated.len()
                 );
-                truncated
+                // Extract current message (last element) and previous history
+                let current = truncated.last().map(|m| m.content.clone()).unwrap_or_default();
+                let prev_history: Vec<_> = truncated.iter()
+                    .take(truncated.len().saturating_sub(1))
+                    .map(|m| {
+                        let role = match m.role {
+                            crate::types::Role::User => "user",
+                            crate::types::Role::Assistant => "assistant",
+                            crate::types::Role::System => "system",
+                            crate::types::Role::Tool => "tool",
+                        };
+                        (role.to_string(), m.content.clone())
+                    })
+                    .collect();
+                (prev_history, current)
             } else {
-                history.clone()
+                let prev_history: Vec<_> = history.iter()
+                    .take(history.len().saturating_sub(1))
+                    .map(|m| {
+                        let role = match m.role {
+                            crate::types::Role::User => "user",
+                            crate::types::Role::Assistant => "assistant",
+                            crate::types::Role::System => "system",
+                            crate::types::Role::Tool => "tool",
+                        };
+                        (role.to_string(), m.content.clone())
+                    })
+                    .collect();
+                let current = history.last().map(|m| m.content.clone()).unwrap_or_default();
+                (prev_history, current)
             }
         }; // Lock guard dropped here
-        
-        // Get last user message for the agent
-        let last_message = truncated_history.last()
-            .map(|m| m.content.clone())
-            .unwrap_or_default();
-        
-        // Send to agent (agent handles API formatting internally)
-        let response_text = context.agent.send_message(&context.session_id, &last_message, None).await?;
-        
+
+        // Send to agent with conversation history
+        let response_text = context.agent.send_message_with_history(
+            &context.session_id,
+            &current_message,
+            &truncated_history,
+            None
+        ).await?;
+
         Ok(ModelResponse {
             text: Some(response_text),
             tool_calls: None,

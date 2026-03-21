@@ -61,7 +61,9 @@ pub enum TuiGatewayEvent {
 #[derive(Debug, Clone)]
 pub struct SessionInfo {
     pub id: String,
+    #[allow(dead_code)]
     pub label: Option<String>,
+    #[allow(dead_code)]
     pub kind: String,
 }
 

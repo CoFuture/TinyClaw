@@ -119,6 +119,61 @@ pub struct Agent {
     tool_executor: Arc<ToolExecutor>,
 }
 
+/// History message for passing conversation context to API methods
+#[derive(Debug, Clone)]
+struct HistoryMessage {
+    role: String,
+    content: String,
+}
+
+impl From<&(String, String)> for HistoryMessage {
+    fn from(tuple: &(String, String)) -> Self {
+        Self {
+            role: tuple.0.clone(),
+            content: tuple.1.clone(),
+        }
+    }
+}
+
+impl From<&crate::types::Message> for HistoryMessage {
+    fn from(msg: &crate::types::Message) -> Self {
+        match msg.role {
+            crate::types::Role::User => Self {
+                role: "user".to_string(),
+                content: msg.content.clone(),
+            },
+            crate::types::Role::Assistant => Self {
+                role: "assistant".to_string(),
+                content: msg.content.clone(),
+            },
+            crate::types::Role::System => Self {
+                role: "system".to_string(),
+                content: msg.content.clone(),
+            },
+            crate::types::Role::Tool => {
+                // Tool messages: encode tool_call_id and tool_name in content
+                // Format: "[TOOL:tool_name:id] content"
+                let name = msg.tool_name.as_deref().unwrap_or("unknown");
+                let id = msg.tool_call_id.as_deref().unwrap_or("unknown");
+                let encoded = format!("[TOOL:{}:{}] {}", name, id, msg.content);
+                Self {
+                    role: "user".to_string(), // Tool results as user role
+                    content: encoded,
+                }
+            }
+        }
+    }
+}
+
+impl HistoryMessage {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "role": self.role,
+            "content": self.content
+        })
+    }
+}
+
 impl Agent {
     pub fn new(config: Arc<RwLock<AgentConfig>>) -> Self {
         Self {
@@ -152,13 +207,20 @@ impl Agent {
         self.tool_executor.list_tools()
     }
 
-    /// Send a message and get a response (with tool calling loop)
-    /// 
-    /// # Arguments
-    /// * `session_key` - Session identifier (unused, kept for API compatibility)
-    /// * `message` - User message to send
-    /// * `skill_prompt` - Optional skill instructions to inject into system prompt
-    pub async fn send_message(&self, _session_key: &str, message: &str, skill_prompt: Option<&str>) -> Result<String> {
+    /// Send a message with conversation history and get a response (with tool calling loop)
+///
+/// # Arguments
+/// * `session_key` - Session identifier (unused, kept for API compatibility)
+/// * `message` - User message to send
+/// * `history` - Conversation history to prepend (role, content tuples)
+/// * `skill_prompt` - Optional skill instructions to inject into system prompt
+pub async fn send_message_with_history(
+    &self,
+    _session_key: &str,
+    message: &str,
+    history: &[(String, String)],
+    skill_prompt: Option<&str>,
+) -> Result<String> {
         let config = self.config.read().clone();
 
         // Determine provider based on model name or explicit config
@@ -172,11 +234,17 @@ impl Agent {
             }
         });
 
-        // Build messages with initial user message
-        let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({
+        // Build messages: prepend history, then add current user message
+        let mut messages: Vec<serde_json::Value> = history
+            .iter()
+            .map(HistoryMessage::from)
+            .map(|h| h.to_json())
+            .collect();
+        
+        messages.push(serde_json::json!({
             "role": "user",
             "content": message
-        })];
+        }));
 
         // Maximum tool call iterations
         let max_turns = 10;
@@ -673,17 +741,15 @@ impl Agent {
         Ok(response.response)
     }
 
-    /// Send a message with conversation history
-    #[allow(dead_code)]
-    pub async fn send_message_with_history(
-        &self,
-        _session_key: &str,
-        message: &str,
-        _history: &[(String, String)],
-    ) -> Result<String> {
-        // For now, just send the message without history
-        // History management will be added in later iterations
-        self.send_message(_session_key, message, None).await
+    /// Send a message and get a response (with tool calling loop)
+    /// For backward compatibility: uses empty history. Use send_message_with_history for context.
+    ///
+    /// # Arguments
+    /// * `session_key` - Session identifier (unused, kept for API compatibility)
+    /// * `message` - User message to send
+    /// * `skill_prompt` - Optional skill instructions to inject into system prompt
+    pub async fn send_message(&self, session_key: &str, message: &str, skill_prompt: Option<&str>) -> Result<String> {
+        self.send_message_with_history(session_key, message, &[], skill_prompt).await
     }
 }
 
