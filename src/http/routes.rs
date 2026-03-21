@@ -111,9 +111,26 @@ async fn status(State(state): State<Arc<HttpState>>) -> Json<StatusResponse> {
     })
 }
 
-/// Config get handler
-async fn config_get(State(state): State<Arc<HttpState>>) -> Json<Config> {
-    Json(state.config.read().clone())
+/// Config get handler - returns public config only (no secrets)
+async fn config_get(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
+    let config = state.config.read();
+    let sanitized = serde_json::json!({
+        "gateway": {
+            "bind": config.gateway.bind,
+            "verbose": config.gateway.verbose,
+            "dataDir": config.gateway.data_dir,
+        },
+        "agent": {
+            "model": config.agent.model,
+            "provider": config.agent.provider,
+            "apiBase": config.agent.api_base,
+            "workspace": config.agent.workspace,
+            // apiKey intentionally omitted - never expose secrets
+        },
+        "tools": config.tools,
+        "models": config.models,
+    });
+    Json(sanitized)
 }
 
 /// Config patch handler
@@ -247,10 +264,9 @@ fn get_memory_info() -> Option<MemoryInfo> {
             }
         }
         
-        // Fallback for macOS
+        // On macOS, use ps command to get RSS in KB
         #[cfg(target_os = "macos")]
         {
-            // On macOS, use ps command
             if let Ok(output) = std::process::Command::new("ps")
                 .args(["-o", "rss=", "-p", &std::process::id().to_string()])
                 .output()

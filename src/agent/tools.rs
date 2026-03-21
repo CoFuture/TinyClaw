@@ -153,6 +153,64 @@ impl ToolExecutor {
             },
         );
 
+        // Register glob tool
+        tools.insert(
+            "glob".to_string(),
+            Tool {
+                name: "glob".to_string(),
+                description: "Find files matching a glob pattern".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "Glob pattern (e.g., '**/*.rs', 'src/**/*.ts')"
+                        },
+                        "root": {
+                            "type": "string",
+                            "description": "Root directory to search from (default: current directory)"
+                        }
+                    },
+                    "required": ["pattern"]
+                }),
+            },
+        );
+
+        // Register grep tool
+        tools.insert(
+            "grep".to_string(),
+            Tool {
+                name: "grep".to_string(),
+                description: "Search for text patterns in files".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "Pattern or regex to search for"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Directory or file to search in"
+                        },
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "description": "Whether search is case-sensitive (default: true)"
+                        },
+                        "regex": {
+                            "type": "boolean",
+                            "description": "Treat pattern as regex (default: false)"
+                        },
+                        "max_results": {
+                            "type": "number",
+                            "description": "Maximum number of results to return (default: 100)"
+                        }
+                    },
+                    "required": ["pattern", "path"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -175,6 +233,8 @@ impl ToolExecutor {
             "write_file" => self.execute_write_file(input).await,
             "list_dir" => self.execute_list_dir(input).await,
             "http_request" => self.execute_http_request(input).await,
+            "glob" => self.execute_glob(input).await,
+            "grep" => self.execute_grep(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
@@ -435,6 +495,223 @@ impl ToolExecutor {
             },
         }
     }
+
+    /// Convert a simple glob pattern to a regex
+    fn pattern_to_regex(pattern: &str) -> Result<regex::Regex, String> {
+        let mut regex_str = String::from("^");
+        let chars: Vec<char> = pattern.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            match chars[i] {
+                '*' => {
+                    // ** matches everything including /
+                    if i + 1 < chars.len() && chars[i + 1] == '*' {
+                        regex_str.push_str(".*");
+                        i += 2;
+                    } else {
+                        regex_str.push_str("[^/]*");
+                        i += 1;
+                    }
+                }
+                '?' => {
+                    regex_str.push('.');
+                    i += 1;
+                }
+                '.' | '+' | '^' | '$' | '(' | ')' | '|' | '[' | ']' | '{' | '}' => {
+                    regex_str.push('\\');
+                    regex_str.push(chars[i]);
+                    i += 1;
+                }
+                c => {
+                    regex_str.push(c);
+                    i += 1;
+                }
+            }
+        }
+        regex_str.push('$');
+        
+        regex::Regex::new(&regex_str)
+            .map_err(|e| format!("Invalid pattern: {}", e))
+    }
+
+    /// Execute the glob tool
+    async fn execute_glob(&self, input: serde_json::Value) -> ToolResult {
+        let pattern = input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if pattern.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("pattern is required".to_string()),
+            };
+        }
+
+        let root = input
+            .get("root")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        info!("Glob pattern '{}' in root '{}'", pattern, root);
+
+        // Use walkdir for glob-like matching
+        let is_recursive = pattern.contains("**");
+
+        let mut results = Vec::new();
+
+        if is_recursive {
+            // Handle ** patterns recursively
+            match glob::glob(&format!("{}/{}", root, pattern)) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        results.push(entry.display().to_string());
+                    }
+                }
+                Err(e) => {
+                    return ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!("Glob error: {}", e)),
+                    };
+                }
+            }
+        } else {
+            // Simple non-recursive case - use walkdir with max depth
+            let walker = walkdir::WalkDir::new(root).max_depth(if pattern.contains('*') { 10 } else { 1 });
+            let re: regex::Regex = match Self::pattern_to_regex(pattern) {
+                Ok(r) => r,
+                Err(e) => {
+                    return ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(e),
+                    }
+                }
+            };
+            
+            for entry in walker.into_iter().filter_map(|e| e.ok()) {
+                let file_name = entry.file_name().to_string_lossy();
+                if re.is_match(&file_name) {
+                    results.push(entry.path().display().to_string());
+                }
+            }
+        }
+
+        results.sort();
+        results.dedup();
+
+        ToolResult {
+            success: true,
+            output: if results.is_empty() {
+                "(no matches)".to_string()
+            } else {
+                results.join("\n")
+            },
+            error: None,
+        }
+    }
+
+    /// Execute the grep tool
+    async fn execute_grep(&self, input: serde_json::Value) -> ToolResult {
+        let pattern = input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        if pattern.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("pattern is required".to_string()),
+            };
+        }
+
+        let case_sensitive = input
+            .get("case_sensitive")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let _is_regex = input
+            .get("regex")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let max_results = input
+            .get("max_results")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(100) as usize;
+
+        info!("Grep pattern '{}' in '{}' (case_sensitive={})", pattern, path, case_sensitive);
+
+        let mut matches = Vec::new();
+        let walker = walkdir::WalkDir::new(path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file());
+
+        for entry in walker {
+            if matches.len() >= max_results {
+                break;
+            }
+
+            let file_path = entry.path();
+            
+            // Skip binary files and very large files
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.len() > 1_000_000 {
+                    continue; // Skip files > 1MB
+                }
+            }
+
+            // Try to read as text
+            if let Ok(content) = tokio::fs::read_to_string(file_path).await {
+                let (search_content, actual_pattern): (&str, String);
+                
+                if case_sensitive {
+                    actual_pattern = pattern.to_string();
+                    search_content = &content;
+                } else {
+                    actual_pattern = pattern.to_lowercase();
+                    let lower = content.to_lowercase();
+                    search_content = Box::leak(lower.into_boxed_str());
+                }
+
+                for (line_num, line) in search_content.lines().enumerate() {
+                    if line.contains(&actual_pattern) {
+                        let original_line = content.lines().nth(line_num).unwrap_or("");
+                        matches.push(format!(
+                            "{}:{}: {}",
+                            file_path.display(),
+                            line_num + 1,
+                            original_line
+                        ));
+                        if matches.len() >= max_results {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        ToolResult {
+            success: true,
+            output: if matches.is_empty() {
+                "(no matches)".to_string()
+            } else {
+                matches.join("\n")
+            },
+            error: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -446,7 +723,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 5); // exec, read_file, write_file, list_dir, http_request
+        assert_eq!(tools.len(), 7); // exec, read_file, write_file, list_dir, http_request, glob, grep
     }
 
     #[test]
@@ -622,5 +899,101 @@ mod tests {
         
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("error"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_glob_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("glob", serde_json::json!({
+            "pattern": "**/*.toml",
+            "root": "."
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Cargo.toml"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_glob_no_matches() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("glob", serde_json::json!({
+            "pattern": "**/*.nonexistent-extension-xyz",
+            "root": "."
+        })).await;
+        
+        assert!(result.success);
+        assert_eq!(result.output, "(no matches)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_glob_missing_pattern() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("glob", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_grep_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("grep", serde_json::json!({
+            "pattern": "package",
+            "path": "."
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("package"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_grep_no_matches() {
+        let executor = ToolExecutor::new();
+        // Use a pattern that won't match itself - search a specific file
+        let result = executor.execute("grep", serde_json::json!({
+            "pattern": "__tiny_claw_nonexistent_unique_marker_12345__",
+            "path": "Cargo.toml"
+        })).await;
+        
+        assert!(result.success);
+        assert_eq!(result.output, "(no matches)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_grep_missing_pattern() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("grep", serde_json::json!({
+            "path": "."
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_grep_case_insensitive() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("grep", serde_json::json!({
+            "pattern": "PACKAGE",
+            "path": "Cargo.toml",
+            "case_sensitive": false
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("package") || result.output.contains("PACKAGE"));
+    }
+
+    #[test]
+    fn test_pattern_to_regex() {
+        // Test simple pattern
+        let re = ToolExecutor::pattern_to_regex("*.rs").unwrap();
+        assert!(re.is_match("main.rs"));
+        assert!(re.is_match("lib.rs"));
+        assert!(!re.is_match("main.js"));
+        
+        // Test glob with dots
+        let re = ToolExecutor::pattern_to_regex("*.toml").unwrap();
+        assert!(re.is_match("Cargo.toml"));
+        assert!(!re.is_match("Cargo.tomll"));
     }
 }
