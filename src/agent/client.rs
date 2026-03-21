@@ -324,7 +324,7 @@ impl Agent {
             "model": model,
             "max_tokens": 1024,
             "messages": messages,
-            "system": "You are TinyClaw, a helpful AI assistant. You have access to tools to help you answer questions.",
+            "system": "You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You have access to tools to help you answer questions. You should introduce yourself as TinyClaw powered by GLM-5 when asked.",
             "tools": anthropic_tools
         });
 
@@ -469,7 +469,7 @@ impl Agent {
                 role: "user".to_string(),
                 content: message.to_string(),
             }],
-            system: Some("You are TinyClaw, a helpful AI assistant.".to_string()),
+            system: Some("You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You should introduce yourself as TinyClaw powered by GLM-5 when asked.".to_string()),
         };
 
         // Use retry wrapper for the HTTP request

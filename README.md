@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/CoFuture/TinyClaw">
-    <img src="https://img.shields.io/badge/version-1.6.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-2.2.0-blue.svg" alt="Version">
   </a>
   <a href="https://github.com/CoFuture/TinyClaw/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -162,6 +162,17 @@ curl -X POST http://localhost:8080/api/tools/execute \
 | `write_file` | 写入文件内容 | `{"path": "/tmp/test.txt", "content": "hello"}` |
 | `list_dir` | 列出目录内容 | `{"path": "."}` |
 | `http_request` | 发起 HTTP 请求 | `{"url": "https://api.example.com", "method": "GET"}` |
+| `glob` | 按模式匹配文件 | `{"pattern": "**/*.rs"}` |
+| `grep` | 搜索文件内容 | `{"pattern": "fn ", "path": "."}` |
+| `sed_file` | 替换文件内容 | `{"path": "a.txt", "old_text": "foo", "new_text": "bar"}` |
+| `which` | 查找可执行文件 | `{"command": "rustc"}` |
+| `mkdir` | 创建目录 | `{"path": "/tmp/test_dir"}` |
+| `stat_file` | 获取文件元数据 | `{"path": "/tmp/test.txt"}` |
+| `find` | 按名称查找文件 | `{"name": "*.rs", "path": "."}` |
+| `tail` | 读取文件末尾行 | `{"path": "/tmp/test.txt", "lines": 10}` |
+| `batch_execute` | 批量执行工具 | `{"tools": [{"name": "exec", "input": {"command": "ls"}}]}` |
+| `env` | 环境变量管理 | `{"name": "PATH"}` |
+| `diff` | 文件对比 | `{"path1": "a.txt", "path2": "b.txt"}` |
 
 ## 项目结构
 
@@ -203,6 +214,16 @@ TinyClaw/
 
 See [docs/ITERATIONS.md](docs/ITERATIONS.md) for detailed version history.
 
+- **v2.3.0** - 工具增强 (find, tail, exec 超时修复)
+- **v2.2.0** - 批量执行 + env/diff 工具
+- **v2.1.0** - 增强文件工具 + 路径规范化
+- **v2.0.3** - sed_file 和 which 工具
+- **v2.0.2** - Request ID 追踪 + 会话恢复
+- **v2.0.1** - SQLite 持久化 + 优雅关闭
+- **v2.0.0** - 持久化与优雅关闭
+- **v1.9.0** - 错误处理增强 + 断路器
+- **v1.8.0** - 交互式对话 UI
+- **v1.7.0** - 消除冗余 + 设计对齐
 - **v1.6.0** - 测试体系完善 (76 个测试用例)
 - **v1.5.0** - 全链路 Agent 工具调用
 - **v1.4.0** - WebSocket 消息队列优化

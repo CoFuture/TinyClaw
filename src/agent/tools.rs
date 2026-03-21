@@ -304,6 +304,60 @@ impl ToolExecutor {
             },
         );
 
+        // Register find tool (find files by name)
+        tools.insert(
+            "find".to_string(),
+            Tool {
+                name: "find".to_string(),
+                description: "Find files and directories by name pattern".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "File/directory name to search for (supports * wildcards)"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Root directory to search from (default: current directory)"
+                        },
+                        "max_depth": {
+                            "type": "number",
+                            "description": "Maximum directory depth to search (default: 10)"
+                        },
+                        "type": {
+                            "type": "string",
+                            "description": "Filter by type: 'f' (files), 'd' (directories), 'a' (all, default)"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+        );
+
+        // Register tail tool (read last N lines of a file)
+        tools.insert(
+            "tail".to_string(),
+            Tool {
+                name: "tail".to_string(),
+                description: "Read the last N lines of a file".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file (supports ~ and $VAR)"
+                        },
+                        "lines": {
+                            "type": "number",
+                            "description": "Number of lines to read from the end (default: 10)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
         // Register batch_execute tool (execute multiple tools)
         tools.insert(
             "batch_execute".to_string(),
@@ -396,6 +450,8 @@ impl ToolExecutor {
             "which" => self.execute_which(input).await,
             "mkdir" => self.execute_mkdir(input).await,
             "stat_file" => self.execute_stat_file(input).await,
+            "find" => self.execute_find(input).await,
+            "tail" => self.execute_tail(input).await,
             "batch_execute" => self.execute_batch_execute(input).await,
             "env" => self.execute_env(input).await,
             "diff" => self.execute_diff(input).await,
@@ -503,16 +559,26 @@ impl ToolExecutor {
             };
         }
 
-        info!("Executing command: {}", command);
+        let timeout_ms = input
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(30000); // Default 30 second timeout
 
-        let output = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .await;
+        info!("Executing command: {} (timeout: {}ms)", command, timeout_ms);
+
+        let command = command.to_string();
+        let future = async {
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(command)
+                .output()
+                .await
+        };
+
+        let output = timeout(Duration::from_millis(timeout_ms), future).await;
 
         match output {
-            Ok(output) => {
+            Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -526,10 +592,15 @@ impl ToolExecutor {
                     },
                 }
             }
-            Err(e) => ToolResult {
+            Ok(Err(e)) => ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(e.to_string()),
+            },
+            Err(_) => ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Command timed out after {}ms", timeout_ms)),
             },
         }
     }
@@ -1137,9 +1208,10 @@ impl ToolExecutor {
             }
         }
 
+        // Not found - return success=false
         ToolResult {
-            success: true,
-            output: "(not found)".to_string(),
+            success: false,
+            output: String::new(),
             error: Some(format!("'{}' not found in PATH", command)),
         }
     }
@@ -1193,6 +1265,142 @@ impl ToolExecutor {
                     error: Some(e.to_string()),
                 },
             }
+        }
+    }
+
+    /// Execute the find tool - find files/directories by name pattern
+    async fn execute_find(&self, input: serde_json::Value) -> ToolResult {
+        let name = input
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if name.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("name is required".to_string()),
+            };
+        }
+
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        let max_depth = input
+            .get("max_depth")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10) as usize;
+
+        let type_filter = input
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("a");
+
+        let path = Self::normalize_path(path);
+        info!("find: name='{}' in '{}' (max_depth={}, type={})", name, path, max_depth, type_filter);
+
+        // Convert name pattern to regex (* -> .*, ? -> .)
+        let name_pattern = name
+            .replace('*', ".*")
+            .replace('?', ".");
+
+        let regex_match = format!("^{}$", name_pattern);
+        let re = match regex::Regex::new(&regex_match) {
+            Ok(r) => r,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Invalid name pattern '{}': {}", name, e)),
+                };
+            }
+        };
+
+        let mut results: Vec<String> = Vec::new();
+        let walker = walkdir::WalkDir::new(&path)
+            .max_depth(max_depth)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok());
+
+        for entry in walker {
+            let file_name = entry.file_name().to_string_lossy();
+            if re.is_match(&file_name) {
+                let entry_path = entry.path();
+                let is_dir = entry.file_type().is_dir();
+
+                // Apply type filter
+                match type_filter {
+                    "f" if !is_dir => results.push(entry_path.display().to_string()),
+                    "d" if is_dir => results.push(entry_path.display().to_string()),
+                    "a" => results.push(entry_path.display().to_string()),
+                    _ => {}
+                }
+            }
+        }
+
+        results.sort();
+
+        ToolResult {
+            success: true,
+            output: if results.is_empty() {
+                "(no matches)".to_string()
+            } else {
+                results.join("\n")
+            },
+            error: None,
+        }
+    }
+
+    /// Execute the tail tool - read last N lines of a file
+    async fn execute_tail(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let num_lines = input
+            .get("lines")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10) as usize;
+
+        let path = Self::normalize_path(path);
+        info!("tail: reading {} lines from '{}'", num_lines, path);
+
+        let content = match fs::read_to_string(&path).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(e.to_string()),
+                };
+            }
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        let start_idx = if lines.len() > num_lines {
+            lines.len() - num_lines
+        } else {
+            0
+        };
+
+        let tail: String = lines[start_idx..].join("\n");
+
+        ToolResult {
+            success: true,
+            output: tail,
+            error: None,
         }
     }
 
@@ -1346,6 +1554,8 @@ impl ToolExecutor {
             "which" => self.execute_which(input).await,
             "mkdir" => self.execute_mkdir(input).await,
             "stat_file" => self.execute_stat_file(input).await,
+            "find" => self.execute_find(input).await,
+            "tail" => self.execute_tail(input).await,
             "env" => self.execute_env(input).await,
             "diff" => self.execute_diff(input).await,
             _ => ToolResult {
@@ -1515,7 +1725,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 14); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, batch_execute, env, diff
+        assert_eq!(tools.len(), 16); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, find, tail, batch_execute, env, diff
     }
 
     #[test]
@@ -1865,8 +2075,9 @@ mod tests {
             "command": "__nonexistent_command_tinyclaw_xyz123__"
         })).await;
         
-        assert!(result.success); // Tool succeeds even if not found
-        assert_eq!(result.output, "(not found)");
+        // Tool returns success=false when not found (semantically correct)
+        assert!(!result.success);
+        assert!(result.error.is_some());
     }
 
     #[tokio::test]
@@ -2090,5 +2301,141 @@ mod tests {
         })).await;
         
         assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_find_by_name() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("find", serde_json::json!({
+            "name": "Cargo.toml",
+            "path": "."
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Cargo.toml"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_find_with_wildcard() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("find", serde_json::json!({
+            "name": "*.rs",
+            "path": "src"
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains(".rs") || result.output == "(no matches)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_find_no_matches() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("find", serde_json::json!({
+            "name": "__nonexistent_file_tinyclaw_xyz__",
+            "path": "."
+        })).await;
+        
+        assert!(result.success);
+        assert_eq!(result.output, "(no matches)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_find_missing_name() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("find", serde_json::json!({
+            "path": "."
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_find_type_filter() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("find", serde_json::json!({
+            "name": "src",
+            "path": ".",
+            "type": "d"
+        })).await;
+        
+        assert!(result.success);
+        // Should find the src directory
+        assert!(result.output.contains("src") || result.output == "(no matches)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_tail_success() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_tail_test.txt";
+        tokio::fs::write(path, "line1\nline2\nline3\nline4\nline5\n").await.unwrap();
+        
+        let result = executor.execute("tail", serde_json::json!({
+            "path": path,
+            "lines": 3
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("line3"));
+        assert!(result.output.contains("line5"));
+        assert!(!result.output.contains("line1"));
+        
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_tail_default_lines() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_tail_test2.txt";
+        let content: String = (1..=20).map(|i| format!("line{}\n", i)).collect();
+        tokio::fs::write(path, content).await.unwrap();
+        
+        let result = executor.execute("tail", serde_json::json!({
+            "path": path
+        })).await;
+        
+        assert!(result.success);
+        // Default is 10 lines, so should get lines 11-20
+        assert!(result.output.contains("line11"));
+        assert!(result.output.contains("line20"));
+        
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_tail_file_too_short() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_tail_test3.txt";
+        tokio::fs::write(path, "short\n").await.unwrap();
+        
+        let result = executor.execute("tail", serde_json::json!({
+            "path": path,
+            "lines": 100
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("short"));
+        
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_tail_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("tail", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_tail_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("tail", serde_json::json!({
+            "path": "/nonexistent/file_tinyclaw.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
     }
 }
