@@ -1,5 +1,6 @@
 //! AI Model client with multi-provider support
 
+use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
 use parking_lot::RwLock;
@@ -110,6 +111,7 @@ struct OllamaResponse {
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
     http_client: reqwest::Client,
+    tool_executor: Arc<ToolExecutor>,
 }
 
 impl Agent {
@@ -117,10 +119,16 @@ impl Agent {
         Self {
             config,
             http_client: reqwest::Client::new(),
+            tool_executor: Arc::new(ToolExecutor::new()),
         }
     }
 
-    /// Send a message and get a response
+    /// Get list of available tools
+    pub fn list_tools(&self) -> Vec<Tool> {
+        self.tool_executor.list_tools()
+    }
+
+    /// Send a message and get a response (with tool calling loop)
     pub async fn send_message(&self, _session_key: &str, message: &str) -> Result<String> {
         let config = self.config.read().clone();
 
@@ -135,11 +143,252 @@ impl Agent {
             }
         });
 
-        match provider {
-            ModelProvider::Anthropic => self.send_anthropic(&config, message).await,
-            ModelProvider::OpenAI => self.send_openai(&config, message).await,
-            ModelProvider::Ollama => self.send_ollama(&config, message).await,
+        // Build messages with initial user message
+        let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({
+            "role": "user",
+            "content": message
+        })];
+
+        // Maximum tool call iterations
+        let max_turns = 10;
+        let tools = self.tool_executor.list_tools();
+
+        for turn in 0..max_turns {
+            debug!("Tool loop turn {}", turn + 1);
+
+            match provider {
+                ModelProvider::Anthropic => {
+                    let response = self.send_anthropic_with_tools(&config, &messages, &tools).await?;
+                    
+                    // Extract text content
+                    let text_content: Option<String> = response["content"]
+                        .as_array()
+                        .and_then(|arr| {
+                            arr.iter()
+                                .filter_map(|c| c.get("text").and_then(|t| t.as_str().map(String::from)))
+                                .next()
+                        });
+
+                    // Check for tool_use in response
+                    let tool_calls = response["content"]
+                        .as_array()
+                        .and_then(|arr| {
+                            Some(arr.iter().filter_map(|c| c.get("tool_use").cloned()).collect::<Vec<_>>())
+                        })
+                        .map(|v| !v.is_empty())
+                        .unwrap_or(false);
+
+                    if tool_calls {
+                        // Get tool_use blocks
+                        let tool_use_blocks = response["content"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .filter(|c| c.get("tool_use").is_some())
+                            .filter_map(|c| c.get("tool_use").cloned())
+                            .collect::<Vec<_>>();
+
+                        // Add assistant message with tool use
+                        messages.push(serde_json::json!({
+                            "role": "assistant",
+                            "content": tool_use_blocks
+                        }));
+
+                        // Execute tools and add results
+                        for tool_block in &tool_use_blocks {
+                            let tool_name = tool_block["name"].as_str().unwrap_or("");
+                            let tool_input = tool_block["input"].clone();
+                            let result = self.tool_executor.execute(tool_name, tool_input).await;
+                            let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+                            messages.push(serde_json::json!({
+                                "role": "tool",
+                                "content": result_json,
+                                "tool_use_id": tool_block["id"]
+                            }));
+                        }
+                    } else {
+                        // No tool calls, return the text response
+                        return Ok(text_content.unwrap_or_default());
+                    }
+                }
+                ModelProvider::OpenAI => {
+                    let response = self.send_openai_with_tools(&config, &messages, &tools).await?;
+                    
+                    // Check for tool_calls in response
+                    let has_tool_calls = response["choices"]
+                        .as_array()
+                        .and_then(|arr| arr.first())
+                        .and_then(|c| c.get("message"))
+                        .and_then(|m| m.get("tool_calls"))
+                        .is_some();
+
+                    if has_tool_calls {
+                        let choices = response["choices"].as_array().unwrap();
+                        let message_obj = &choices[0]["message"];
+                        
+                        // Add assistant message
+                        messages.push(message_obj.clone());
+
+                        let tool_calls = message_obj["tool_calls"].as_array().unwrap();
+                        
+                        // Execute tools and add results
+                        for tool_call in tool_calls {
+                            let tool_name = tool_call["function"]["name"].as_str().unwrap_or("");
+                            let args: serde_json::Value = serde_json::from_str(
+                                tool_call["function"]["arguments"].as_str().unwrap_or("{}")
+                            ).unwrap_or(serde_json::json!({}));
+                            let result = self.tool_executor.execute(tool_name, args).await;
+                            let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+                            messages.push(serde_json::json!({
+                                "role": "tool",
+                                "content": result_json,
+                                "tool_call_id": tool_call["id"]
+                            }));
+                        }
+                    } else {
+                        // No tool calls, return the text response
+                        let text = response["choices"]
+                            .as_array()
+                            .and_then(|arr| arr.first())
+                            .and_then(|c| c.get("message"))
+                            .and_then(|m| m.get("content"))
+                            .and_then(|c| c.as_str())
+                            .map(String::from)
+                            .unwrap_or_default();
+                        return Ok(text);
+                    }
+                }
+                ModelProvider::Ollama => {
+                    // Ollama doesn't support tools, just return direct response
+                    return self.send_ollama(&config, message).await;
+                }
+            }
         }
+
+        Ok("Max tool call iterations reached".to_string())
+    }
+
+    /// Send message to Anthropic API with tools
+    async fn send_anthropic_with_tools(
+        &self,
+        config: &AgentConfig,
+        messages: &[serde_json::Value],
+        tools: &[Tool],
+    ) -> Result<serde_json::Value> {
+        if config.api_key.is_none() {
+            return Err(Error::Agent("API key not configured".into()));
+        }
+
+        let api_key = config.api_key.clone().unwrap();
+        let model = config.model.clone();
+        let api_base = config.api_base.clone();
+
+        // Convert tools to Anthropic format
+        let anthropic_tools: Vec<serde_json::Value> = tools
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema
+                })
+            })
+            .collect();
+
+        // Build request with tools
+        let request = serde_json::json!({
+            "model": model,
+            "max_tokens": 1024,
+            "messages": messages,
+            "system": "You are TinyClaw, a helpful AI assistant. You have access to tools to help you answer questions.",
+            "tools": anthropic_tools
+        });
+
+        // Send request
+        let response = self
+            .http_client
+            .post(format!("{}/v1/messages", api_base))
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            error!("API error: {} - {}", status, body);
+            return Err(Error::Agent(format!("API error: {} - {}", status, body)));
+        }
+
+        // Parse response as JSON value
+        let response: serde_json::Value = response.json().await?;
+
+        debug!("Anthropic tool response received");
+
+        Ok(response)
+    }
+
+    /// Send message to OpenAI API with tools
+    async fn send_openai_with_tools(
+        &self,
+        config: &AgentConfig,
+        messages: &[serde_json::Value],
+        tools: &[Tool],
+    ) -> Result<serde_json::Value> {
+        if config.api_key.is_none() {
+            return Err(Error::Agent("API key not configured".into()));
+        }
+
+        let api_key = config.api_key.clone().unwrap();
+        let model = config.model.clone();
+        let api_base = config.api_base.clone();
+
+        // Convert tools to OpenAI format
+        let openai_tools: Vec<serde_json::Value> = tools
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema
+                    }
+                })
+            })
+            .collect();
+
+        // Build request with tools
+        let request = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "max_tokens": 1024,
+            "tools": openai_tools
+        });
+
+        let response = self
+            .http_client
+            .post(format!("{}/v1/chat/completions", api_base))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            error!("API error: {} - {}", status, body);
+            return Err(Error::Agent(format!("API error: {} - {}", status, body)));
+        }
+
+        let response: serde_json::Value = response.json().await?;
+
+        debug!("OpenAI tool response received");
+
+        Ok(response)
     }
 
     /// Send message to Anthropic API

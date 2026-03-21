@@ -110,7 +110,7 @@ impl Default for GatewayConfig {
 }
 
 fn default_bind_address() -> String {
-    "127.0.0.1:18789".to_string()
+    "127.0.0.1:18790".to_string()
 }
 
 /// Agent configuration

@@ -107,12 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_port = 8080u16;
     let http_addr = format!("0.0.0.0:{}", http_port);
     
-    // Get static files directory
-    let static_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("examples");
+    // Get static files directory (examples folder in project root)
+    let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
     
     let http_state_clone = http_state.clone();
     let http_handle = tokio::spawn(async move {
