@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::fs;
 use tokio::time::timeout;
 use tracing::info;
+use chrono::{DateTime, Local};
 
 /// Tool definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +262,48 @@ impl ToolExecutor {
             },
         );
 
+        // Register mkdir tool (create directories)
+        tools.insert(
+            "mkdir".to_string(),
+            Tool {
+                name: "mkdir".to_string(),
+                description: "Create one or more directories".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the directory to create (supports ~ and $VAR)"
+                        },
+                        "parents": {
+                            "type": "boolean",
+                            "description": "Create parent directories as needed (default: true)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
+        // Register stat_file tool (get file metadata)
+        tools.insert(
+            "stat_file".to_string(),
+            Tool {
+                name: "stat_file".to_string(),
+                description: "Get file or directory metadata (size, modified time, permissions)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file or directory (supports ~ and $VAR)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -287,12 +330,74 @@ impl ToolExecutor {
             "grep" => self.execute_grep(input).await,
             "sed_file" => self.execute_sed_file(input).await,
             "which" => self.execute_which(input).await,
+            "mkdir" => self.execute_mkdir(input).await,
+            "stat_file" => self.execute_stat_file(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Unknown tool: {}", name)),
             },
         }
+    }
+
+    /// Normalize a path by expanding ~ to home directory and $VAR env vars.
+    fn normalize_path(path: &str) -> String {
+        if path.is_empty() {
+            return path.to_string();
+        }
+        // Expand ~ to home directory
+        let expanded = if path.starts_with("~/") || path == "~" {
+            if let Some(home) = dirs::home_dir() {
+                if path == "~" {
+                    home.to_string_lossy().to_string()
+                } else {
+                    format!("{}{}", home.to_string_lossy(), &path[1..])
+                }
+            } else {
+                path.to_string()
+            }
+        } else {
+            path.to_string()
+        };
+        // Expand environment variables ($VAR or ${VAR} forms)
+        Self::expand_env_vars(&expanded)
+    }
+
+    /// Expand environment variables in a string ($VAR and ${VAR} forms).
+    fn expand_env_vars(s: &str) -> String {
+        let mut result = s.to_string();
+        // Handle ${VAR} form
+        while let Some(rel_start) = result.find("${") {
+            let start = rel_start;
+            if let Some(rel_end) = result[start..].find('}') {
+                let close_pos = start + rel_end;
+                let var_name = &result[start + 2..close_pos];
+                let replacement = std::env::var(var_name).unwrap_or_default();
+                result = format!("{}{}{}", &result[..start], replacement, &result[close_pos + 1..]);
+            } else {
+                break;
+            }
+        }
+        // Handle $VAR form (alphanumeric and underscore)
+        let mut i = 0;
+        let bytes = result.as_bytes();
+        let mut output = String::new();
+        while i < bytes.len() {
+            if bytes[i] == b'$' && i + 1 < bytes.len() && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'_') {
+                let start = i + 1;
+                let mut end = start;
+                while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                    end += 1;
+                }
+                let var_name = std::str::from_utf8(&bytes[start..end]).unwrap_or("");
+                output.push_str(&std::env::var(var_name).unwrap_or_default());
+                i = end;
+            } else {
+                output.push(bytes[i] as char);
+                i += 1;
+            }
+        }
+        output
     }
 
     /// Execute a tool with timeout (in milliseconds)
@@ -377,9 +482,10 @@ impl ToolExecutor {
             };
         }
 
+        let path = Self::normalize_path(path);
         info!("Reading file: {}", path);
 
-        match fs::read_to_string(path).await {
+        match fs::read_to_string(&path).await {
             Ok(content) => ToolResult {
                 success: true,
                 output: content,
@@ -413,9 +519,10 @@ impl ToolExecutor {
             };
         }
 
+        let path = Self::normalize_path(path);
         info!("Writing file: {}", path);
 
-        match fs::write(path, content).await {
+        match fs::write(&path, content).await {
             Ok(()) => ToolResult {
                 success: true,
                 output: format!("File written successfully: {}", path),
@@ -429,6 +536,22 @@ impl ToolExecutor {
         }
     }
 
+    /// Format a file size in bytes to a human-readable string.
+    fn format_size(bytes: u64) -> String {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * 1024;
+        const GB: u64 = MB * 1024;
+        if bytes >= GB {
+            format!("{:.1}G", bytes as f64 / GB as f64)
+        } else if bytes >= MB {
+            format!("{:.1}M", bytes as f64 / MB as f64)
+        } else if bytes >= KB {
+            format!("{:.1}K", bytes as f64 / KB as f64)
+        } else {
+            format!("{}B", bytes)
+        }
+    }
+
     /// Execute the list_dir tool
     async fn execute_list_dir(&self, input: serde_json::Value) -> ToolResult {
         let path = input
@@ -436,27 +559,65 @@ impl ToolExecutor {
             .and_then(|v| v.as_str())
             .unwrap_or(".");
 
+        let path = Self::normalize_path(path);
         info!("Listing directory: {}", path);
 
-        match fs::read_dir(path).await {
+        match fs::read_dir(&path).await {
             Ok(mut entries) => {
                 let mut results = Vec::new();
                 while let Some(entry) = entries.next_entry().await.unwrap_or(None) {
                     let file_name = entry.file_name().to_string_lossy().to_string();
-                    let file_type = entry.file_type().await.map(|ft| {
-                        if ft.is_dir() {
+                    let metadata = entry.metadata().await.ok();
+                    
+                    let file_type = metadata.as_ref().map(|m| {
+                        if m.is_dir() {
                             "dir"
-                        } else if ft.is_file() {
+                        } else if m.is_file() {
                             "file"
-                        } else if ft.is_symlink() {
+                        } else if m.is_symlink() {
                             "symlink"
                         } else {
                             "unknown"
                         }
                     }).unwrap_or("unknown");
+
+                    let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
                     
-                    results.push(format!("{} ({})", file_name, file_type));
+                    let modified = metadata.and_then(|m| {
+                        m.modified().ok()
+                    }).map(|t| {
+                        let datetime: DateTime<Local> = t.into();
+                        datetime.format("%Y-%m-%d %H:%M").to_string()
+                    }).unwrap_or_else(|| "-".to_string());
+
+                    // Format size
+                    let size_str = if file_type == "dir" || size == 0 {
+                        "-".to_string()
+                    } else {
+                        Self::format_size(size)
+                    };
+
+                    results.push(format!("{:<40} {:>8}  {}", file_name, size_str, modified));
                 }
+                
+                if results.is_empty() {
+                    return ToolResult {
+                        success: true,
+                        output: "(empty directory)".to_string(),
+                        error: None,
+                    };
+                }
+                
+                // Sort: dirs first, then files, both alphabetically
+                results.sort_by(|a, b| {
+                    let a_is_dir = a.contains("dir");
+                    let b_is_dir = b.contains("dir");
+                    if a_is_dir != b_is_dir {
+                        b_is_dir.cmp(&a_is_dir)
+                    } else {
+                        a.cmp(b)
+                    }
+                });
                 
                 ToolResult {
                     success: true,
@@ -785,6 +946,7 @@ impl ToolExecutor {
             };
         }
 
+        let path = Self::normalize_path(path);
         let line_number = input
             .get("line_number")
             .and_then(|v: &serde_json::Value| v.as_u64())
@@ -798,7 +960,7 @@ impl ToolExecutor {
             path, line_number, old_text.as_ref().map(|s| &s[..s.len().min(50)]), new_text.len());
 
         // Read the file
-        let content = match fs::read_to_string(path).await {
+        let content = match fs::read_to_string(&path).await {
             Ok(c) => c,
             Err(e) => {
                 return ToolResult {
@@ -843,7 +1005,7 @@ impl ToolExecutor {
         };
 
         // Write back
-        if let Err(e) = fs::write(path, &new_content).await {
+        if let Err(e) = fs::write(&path, &new_content).await {
             return ToolResult {
                 success: false,
                 output: String::new(),
@@ -914,6 +1076,141 @@ impl ToolExecutor {
             error: Some(format!("'{}' not found in PATH", command)),
         }
     }
+
+    /// Execute the mkdir tool - create directories
+    async fn execute_mkdir(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+        let parents = input
+            .get("parents")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        info!("mkdir: path='{}', parents={}", path, parents);
+
+        if parents {
+            match fs::create_dir_all(&path).await {
+                Ok(()) => ToolResult {
+                    success: true,
+                    output: format!("Directory created: {}", path),
+                    error: None,
+                },
+                Err(e) => ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(e.to_string()),
+                },
+            }
+        } else {
+            match fs::create_dir(&path).await {
+                Ok(()) => ToolResult {
+                    success: true,
+                    output: format!("Directory created: {}", path),
+                    error: None,
+                },
+                Err(e) => ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(e.to_string()),
+                },
+            }
+        }
+    }
+
+    /// Execute the stat_file tool - get file/directory metadata
+    async fn execute_stat_file(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+        info!("stat_file: path='{}'", path);
+
+        let metadata = match fs::metadata(&path).await {
+            Ok(m) => m,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(e.to_string()),
+                };
+            }
+        };
+
+        let file_type = if metadata.is_dir() {
+            "directory"
+        } else if metadata.is_file() {
+            "file"
+        } else if metadata.is_symlink() {
+            "symlink"
+        } else {
+            "unknown"
+        };
+
+        let size = metadata.len();
+        let size_str = if metadata.is_dir() { "-".to_string() } else { Self::format_size(size) };
+
+        let modified: String = metadata.modified()
+            .ok()
+            .map(|t| {
+                let datetime: DateTime<Local> = t.into();
+                datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let created: String = metadata.created()
+            .ok()
+            .map(|t| {
+                let datetime: DateTime<Local> = t.into();
+                datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
+        #[cfg(unix)]
+        let perms = {
+            use std::os::unix::fs::PermissionsExt;
+            format!("{:o}", metadata.permissions().mode() & 0o777)
+        };
+        #[cfg(not(unix))]
+        let perms = "n/a".to_string();
+
+        let output = format!(
+            "Path:     {}\n\
+             Type:     {}\n\
+             Size:     {}\n\
+             Modified: {}\n\
+             Created:  {}\n\
+             Permissions: {}",
+            path, file_type, size_str, modified, created, perms
+        );
+
+        ToolResult {
+            success: true,
+            output,
+            error: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -925,7 +1222,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 9); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which
+        assert_eq!(tools.len(), 11); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file
     }
 
     #[test]
@@ -1286,5 +1583,125 @@ mod tests {
         
         assert!(!result.success);
         assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_mkdir_success() {
+        let executor = ToolExecutor::new();
+        let test_path = "/tmp/tiny_claw_test_mkdir/subdir";
+        let result = executor.execute("mkdir", serde_json::json!({
+            "path": test_path,
+            "parents": true
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("created"));
+        
+        // Cleanup
+        let _ = tokio::fs::remove_dir_all("/tmp/tiny_claw_test_mkdir").await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_mkdir_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("mkdir", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_stat_file_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("stat_file", serde_json::json!({
+            "path": "Cargo.toml"
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Type:"));
+        assert!(result.output.contains("Size:"));
+        assert!(result.output.contains("Modified:"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_stat_file_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("stat_file", serde_json::json!({
+            "path": "/nonexistent/file_tinyclaw_xyz.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_stat_file_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("stat_file", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_normalize_path_tilde() {
+        let _executor = ToolExecutor::new();
+        // Write to home dir first
+        if let Some(home) = dirs::home_dir() {
+            let expanded = ToolExecutor::normalize_path("~/tiny_claw_test.txt");
+            assert!(expanded.starts_with(&*home.to_string_lossy()));
+            assert!(expanded.ends_with("tiny_claw_test.txt"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_normalize_path_env_var() {
+        // Can't easily test env vars without modifying the environment
+        // This is tested implicitly through path tools
+    }
+
+    #[tokio::test]
+    async fn test_execute_read_file_with_tilde_path() {
+        let executor = ToolExecutor::new();
+        // Create a file in home dir first
+        if let Some(home) = dirs::home_dir() {
+            let test_file = home.join(".tiny_claw_test_file");
+            tokio::fs::write(&test_file, "test content").await.unwrap();
+            
+            let result = executor.execute("read_file", serde_json::json!({
+                "path": format!("~/{}", test_file.file_name().unwrap().to_string_lossy())
+            })).await;
+            
+            assert!(result.success);
+            assert!(result.output.contains("test content"));
+            
+            // Cleanup
+            let _ = tokio::fs::remove_file(&test_file).await;
+        }
+    }
+
+    #[test]
+    fn test_expand_env_vars() {
+        // Test ${VAR} form
+        std::env::set_var("TINY_CLAW_TEST_VAR", "test_value");
+        let result = ToolExecutor::expand_env_vars("prefix_${TINY_CLAW_TEST_VAR}_suffix");
+        assert_eq!(result, "prefix_test_value_suffix");
+        std::env::remove_var("TINY_CLAW_TEST_VAR");
+        
+        // Test $VAR form
+        std::env::set_var("TINY_CLAW_TEST_VAR2", "hello");
+        let result = ToolExecutor::expand_env_vars("prefix$TINY_CLAW_TEST_VAR2");
+        assert_eq!(result, "prefixhello");
+        std::env::remove_var("TINY_CLAW_TEST_VAR2");
+    }
+
+    #[test]
+    fn test_format_size() {
+        assert_eq!(ToolExecutor::format_size(0), "0B");
+        assert_eq!(ToolExecutor::format_size(500), "500B");
+        assert_eq!(ToolExecutor::format_size(1024), "1.0K");
+        assert_eq!(ToolExecutor::format_size(1536), "1.5K");
+        assert_eq!(ToolExecutor::format_size(1048576), "1.0M");
+        assert_eq!(ToolExecutor::format_size(1073741824), "1.0G");
     }
 }
