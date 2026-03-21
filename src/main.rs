@@ -17,6 +17,7 @@ mod http;
 mod metrics;
 mod persistence;
 mod ratelimit;
+mod tui;
 mod types;
 
 use common::logging;
@@ -39,6 +40,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log_dir = logging::default_log_dir();
     if let Err(e) = logging::init_logging(log_dir) {
         eprintln!("Failed to initialize logging: {}", e);
+    }
+
+    // Check for --tui flag
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--tui".to_string()) || args.contains(&"-t".to_string()) {
+        run_tui_mode()?;
+        return Ok(());
     }
 
     info!("TinyClaw v{} starting...", env!("CARGO_PKG_VERSION"));
@@ -199,4 +207,35 @@ fn load_or_default_config() -> Config {
     // Use default config
     info!("Using default configuration");
     Config::default()
+}
+
+/// Run TUI mode
+fn run_tui_mode() -> Result<(), Box<dyn std::error::Error>> {
+    use ratatui::Terminal;
+    use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
+    use crossterm::execute;
+
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    
+    // Setup terminal
+    std::panic::set_hook(Box::new(|_| {
+        // Restore terminal on panic
+        let _ = execute!(std::io::stderr(), LeaveAlternateScreen);
+    }));
+
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    
+    let backend = ratatui::backend::CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    
+    // Run TUI
+    if let Err(e) = tui::run_tui(&mut terminal, version) {
+        eprintln!("TUI error: {}", e);
+    }
+
+    // Restore terminal
+    execute!(std::io::stdout(), LeaveAlternateScreen)?;
+    
+    Ok(())
 }

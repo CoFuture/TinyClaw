@@ -1,6 +1,6 @@
 [package]
 name = "tiny_claw"
-version = "2.5.0"
+version = "2.6.0"
 edition = "2021"
 description = "A minimal implementation of OpenClaw in Rust"
 authors = ["TinyClaw"]
