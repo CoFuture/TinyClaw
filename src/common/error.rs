@@ -61,3 +61,9 @@ impl From<tokio_tungstenite::tungstenite::Error> for Error {
         Error::WebSocket(e.to_string())
     }
 }
+
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Self {
+        Error::Other(format!("SQLite error: {}", e))
+    }
+}

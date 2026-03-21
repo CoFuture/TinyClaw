@@ -6,6 +6,10 @@ pub mod config;
 pub mod gateway;
 pub mod http;
 pub mod metrics;
+pub mod persistence;
 pub mod ratelimit;
+pub mod types;
 
 pub use common::error::Error;
+pub use persistence::{HistoryManager, SqliteStore};
+pub use types::{Message, Role, SessionHistory};

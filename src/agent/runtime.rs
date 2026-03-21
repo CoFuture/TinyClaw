@@ -7,7 +7,7 @@ use crate::agent::context::{AgentContext, ExecutionState};
 use crate::agent::tools::{ToolExecutor, ToolResult};
 use crate::common::Result;
 use crate::gateway::events::{Event, EventEmitter};
-use crate::gateway::history::HistoryManager;
+use crate::persistence::HistoryManager;
 use crate::gateway::session::SessionManager;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -187,7 +187,7 @@ impl AgentRuntime {
                     
                     context.history_manager.add_message(
                         &context.session_id,
-                        crate::gateway::history::Message::tool(
+                        crate::types::Message::tool(
                             &tool_result_str,
                             &tool_call.id,
                             &tool_call.name,

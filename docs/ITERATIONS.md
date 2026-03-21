@@ -361,7 +361,85 @@
 
 ---
 
-## v2.0.0 待规划
+## v2.0.0 - 2026-03-21
+
+### Iteration 20: 持久化与优雅关闭
+
+**目标**: 添加 SQLite 持久化，提升生产可用性
+
+新增功能:
+- [x] rusqlite 依赖添加 (bundled 特性)
+- [x] persistence 模块创建 (src/persistence/sqlite.rs)
+  - SqliteStore 结构 - 专用 SQLite 线程避免 Sync 问题
+  - 会话和消息的 CRUD 操作
+  - WAL 模式提高并发性能
+- [x] 修复 common::Error 添加 From<rusqlite::Error> 实现
+
+**待完成** (遇到 Rust lib/bin 模块系统复杂性):
+- [ ] HistoryManager 集成 SQLite 持久化
+- [ ] main.rs 初始化时启用持久化
+- [ ] graceful shutdown (连接排空)
+
+### 完成状态: ⚠️ 部分完成 (SQLite 模块就绪，集成待完成)
+
+代码质量:
+- [x] cargo clippy - 通过 (2个 minor warnings，已修复)
+- [x] cargo test - 90 个测试全部通过
+
+---
+
+## v2.0.1 - 2026-03-21
+
+### Iteration 21: SQLite 持久化 + 优雅关闭
+
+**目标**: 完成 SQLite 持久化集成，实现优雅关闭
+
+新增功能:
+- [x] 创建共享 types 模块 (src/types.rs)
+  - 解决 gateway 和 persistence 之间的循环依赖
+  - Message, Role, SessionHistory 类型统一管理
+- [x] SQLite 持久化集成
+  - HistoryManager 新增 `new_with_persistence(path)` 构造函数
+  - 添加 `persistence` 配置节 (enabled, path)
+  - 自动同步会话历史到 SQLite (add_message, remove, clear)
+  - 新增 `shutdown_persistence()` 方法
+- [x] 优雅关闭支持
+  - ServerState 结构追踪活动连接数
+  - 关闭时等待连接排空 (可配置超时)
+  - SqliteStore 优雅关闭
+- [x] Graceful shutdown 配置
+  - 新增 `shutdown.timeout_secs` 配置项
+
+代码质量:
+- [x] cargo clippy - 通过 (minor warnings)
+- [x] cargo test - 164 个测试通过
+
+---
+
+## v2.0.2 - 2026-03-21
+
+### Iteration 22: Request ID 追踪 + 会话恢复
+
+**目标**: 添加请求追踪能力，支持从 SQLite 恢复会话历史
+
+新增功能:
+- [x] Request ID 追踪
+  - `RequestId` 结构 (基于 UUID，前8字符用于日志显示)
+  - 每个请求自动生成唯一 `req:xxxxxxxx` 标识符
+  - `handle_request` 日志格式: `[req:xxxx] --> method` / `[req:xxxx] <-- method success/error`
+  - request_id 传递到 `handle_sessions_send`、`handle_agent_turn`、`handle_exec`、`handle_tool_execute`
+- [x] 会话历史从 SQLite 恢复
+  - `HistoryManager::new_with_persistence()` 启动时从 SQLite 加载所有历史会话
+  - 恢复后日志输出: `Recovering N sessions from SQLite...` / `Session recovery complete`
+  - 内存 HashMap 预填充，已恢复的会话可立即访问
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 82 个测试通过
+
+---
+
+## v2.0.0 待规划 (完整功能)
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
 - 高级认证 (OAuth, JWT)

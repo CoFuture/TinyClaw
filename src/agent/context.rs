@@ -6,7 +6,8 @@
 //! - Conversation history
 //! - Execution state
 
-use crate::gateway::history::{HistoryManager, Message};
+use crate::persistence::HistoryManager;
+use crate::types::Message;
 use crate::gateway::session::SessionManager;
 use crate::agent::client::Agent;
 use crate::agent::tools::ToolExecutor;

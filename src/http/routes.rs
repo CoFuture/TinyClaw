@@ -25,7 +25,7 @@ use std::collections::HashMap;
 pub struct HttpState {
     pub config: Arc<RwLock<Config>>,
     pub session_manager: Arc<SessionManager>,
-    pub history_manager: Arc<crate::gateway::history::HistoryManager>,
+    pub history_manager: Arc<crate::persistence::HistoryManager>,
     #[allow(dead_code)]
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,

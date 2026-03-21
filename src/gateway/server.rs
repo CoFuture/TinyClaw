@@ -6,7 +6,9 @@ use crate::gateway::messages::handle_request;
 use crate::gateway::protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
@@ -17,11 +19,41 @@ use tracing::{debug, error, info, warn};
 /// Maximum concurrent requests per connection
 const MAX_CONCURRENT_REQUESTS: usize = 10;
 
+/// RAII guard that decrements active connection count on drop
+struct ConnGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Shared server state for graceful shutdown
+#[derive(Clone)]
+pub struct ServerState {
+    /// Number of currently active connections
+    pub active_connections: Arc<AtomicUsize>,
+    /// Shutdown timeout in seconds
+    pub shutdown_timeout_secs: u64,
+}
+
+impl ServerState {
+    pub fn new(shutdown_timeout_secs: u64) -> Self {
+        Self {
+            active_connections: Arc::new(AtomicUsize::new(0)),
+            shutdown_timeout_secs,
+        }
+    }
+}
+
 /// Start the WebSocket server
 pub async fn start_server(
     config: Arc<RwLock<Config>>,
     ctx: crate::gateway::messages::HandlerContext,
     shutdown_rx: broadcast::Receiver<()>,
+    server_state: ServerState,
 ) -> Result<()> {
     let addr = config.read().gateway.bind.clone();
     let listener = TcpListener::bind(&addr).await?;
@@ -43,7 +75,8 @@ pub async fn start_server(
                             ctx.agent.clone(),
                             ctx.shutdown_tx.clone(),
                         );
-                        tokio::spawn(handle_connection(stream, ctx));
+                        let server_state = server_state.clone();
+                        tokio::spawn(handle_connection(stream, ctx, server_state));
                     }
                     Err(e) => {
                         error!("Failed to accept connection: {}", e);
@@ -51,7 +84,21 @@ pub async fn start_server(
                 }
             }
             _ = shutdown_rx.recv() => {
-                info!("Server shutting down");
+                info!("Shutdown signal received, draining connections...");
+                // Wait for active connections to drain
+                let timeout = Duration::from_secs(server_state.shutdown_timeout_secs);
+                let deadline = tokio::time::Instant::now() + timeout;
+                while server_state.active_connections.load(Ordering::SeqCst) > 0 {
+                    if tokio::time::Instant::now() >= deadline {
+                        warn!(
+                            "Shutdown timeout reached, {} connections still active",
+                            server_state.active_connections.load(Ordering::SeqCst)
+                        );
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                info!("All connections drained, server shutting down");
                 break;
             }
         }
@@ -73,9 +120,18 @@ enum ConnectionMessage {
 }
 
 /// Handle a single WebSocket connection with message queue
-async fn handle_connection(stream: TcpStream, ctx: crate::gateway::messages::HandlerContext) {
+async fn handle_connection(
+    stream: TcpStream,
+    ctx: crate::gateway::messages::HandlerContext,
+    server_state: ServerState,
+) {
     let addr = stream.peer_addr().unwrap_or_else(|_| "unknown".parse().unwrap());
     info!("New connection from: {}", addr);
+
+    server_state.active_connections.fetch_add(1, Ordering::SeqCst);
+    let _conn_guard = ConnGuard {
+        counter: server_state.active_connections.clone(),
+    };
 
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,

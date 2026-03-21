@@ -4,7 +4,7 @@ use crate::agent::tools::ToolExecutor;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
-use crate::gateway::history::HistoryManager;
+use crate::persistence::HistoryManager;
 use crate::gateway::protocol::*;
 use crate::gateway::session::SessionManager;
 use crate::agent::Agent;
@@ -15,6 +15,34 @@ use tracing::{debug, error, info};
 
 lazy_static::lazy_static! {
     static ref TOOL_EXECUTOR: ToolExecutor = ToolExecutor::new();
+}
+
+/// A server-generated unique request ID for tracing
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(String);
+
+impl RequestId {
+    /// Generate a new unique request ID
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for RequestId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for RequestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "req:{}", &self.0[..8])
+    }
 }
 
 /// Message handler context
@@ -53,33 +81,41 @@ pub async fn handle_request(
     ctx: &HandlerContext,
     request: Request,
 ) -> Option<Response> {
-    let id = request.id().map(String::from);
-    let id_clone = id.clone();
+    let request_id = RequestId::new();
+    let jsonrpc_id = request.id().map(String::from);
     let method = request.method().to_string();
     let params = request.params().clone();
 
-    debug!("Handling request: {} with params: {:?}", method, params);
+    info!(
+        "[{}] --> {} request: method={}",
+        request_id,
+        method,
+        jsonrpc_id.as_deref().unwrap_or("none")
+    );
 
     let result = match method.as_str() {
-        methods::PING => handle_ping(id_clone.clone()).await,
-        methods::SESSIONS_LIST => handle_sessions_list(ctx, id_clone.clone(), params).await,
-        methods::SESSIONS_SEND => handle_sessions_send(ctx, id_clone.clone(), params).await,
-        methods::SESSIONS_HISTORY => handle_sessions_history(ctx, id_clone.clone(), params).await,
-        methods::AGENT_TURN => handle_agent_turn(ctx, id_clone.clone(), params).await,
-        methods::EXEC => handle_exec(ctx, id_clone.clone(), params).await,
-        methods::TOOLS_LIST => handle_tools_list(id_clone.clone()).await,
-        methods::TOOL_EXECUTE => handle_tool_execute(ctx, id_clone.clone(), params).await,
-        methods::STATUS => handle_status(ctx, id_clone.clone()).await,
-        methods::SHUTDOWN => handle_shutdown(ctx, id_clone.clone()).await,
+        methods::PING => handle_ping(jsonrpc_id.clone()).await,
+        methods::SESSIONS_LIST => handle_sessions_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSIONS_SEND => handle_sessions_send(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
+        methods::SESSIONS_HISTORY => handle_sessions_history(ctx, jsonrpc_id.clone(), params).await,
+        methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
+        methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
+        methods::TOOLS_LIST => handle_tools_list(jsonrpc_id.clone()).await,
+        methods::TOOL_EXECUTE => handle_tool_execute(request_id.clone(), jsonrpc_id.clone(), params).await,
+        methods::STATUS => handle_status(ctx, jsonrpc_id.clone()).await,
+        methods::SHUTDOWN => handle_shutdown(ctx, jsonrpc_id.clone()).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
 
     match result {
-        Ok(value) => Some(ResponseSuccess::new(id_clone, value).into()),
+        Ok(value) => {
+            info!("[{}] <-- {} success", request_id, method);
+            Some(ResponseSuccess::new(jsonrpc_id, value).into())
+        }
         Err(e) => {
-            error!("Error handling {}: {}", method, e);
-            let err_response = ResponseError::new(id_clone, "METHOD_NOT_FOUND", e.to_string());
+            error!("[{}] <-- {} error: {}", request_id, method, e);
+            let err_response = ResponseError::new(jsonrpc_id, "METHOD_NOT_FOUND", e.to_string());
             Some(err_response.into())
         }
     }
@@ -151,6 +187,7 @@ async fn handle_sessions_history(
 /// Handle sessions.send
 async fn handle_sessions_send(
     ctx: &HandlerContext,
+    request_id: RequestId,
     _id: Option<String>,
     params: serde_json::Value,
 ) -> Result<serde_json::Value> {
@@ -164,12 +201,12 @@ async fn handle_sessions_send(
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::Protocol("message required".to_string()))?;
 
-    info!("Session {} received message: {}", session_key, message);
+    debug!("[{}] Session {} received message: {}", request_id, session_key, message);
     
     // Add to history
     ctx.history_manager.add_message(
         session_key,
-        crate::gateway::history::Message::user(message),
+        crate::types::Message::user(message),
     );
     
     // Forward to agent
@@ -181,6 +218,7 @@ async fn handle_sessions_send(
 /// Handle agent.turn (send message to agent and get response)
 async fn handle_agent_turn(
     ctx: &HandlerContext,
+    request_id: RequestId,
     _id: Option<String>,
     params: serde_json::Value,
 ) -> Result<serde_json::Value> {
@@ -194,12 +232,12 @@ async fn handle_agent_turn(
         .and_then(|v| v.as_str())
         .unwrap_or("main");
 
-    info!("Agent turn: session={}, message={}", session_key, message);
+    debug!("[{}] Agent turn: session={}", request_id, session_key);
 
     // Add user message to history
     ctx.history_manager.add_message(
         session_key,
-        crate::gateway::history::Message::user(message),
+        crate::types::Message::user(message),
     );
 
     // Send to agent and get response
@@ -208,7 +246,7 @@ async fn handle_agent_turn(
     // Add assistant response to history
     ctx.history_manager.add_message(
         session_key,
-        crate::gateway::history::Message::assistant(&response),
+        crate::types::Message::assistant(&response),
     );
 
     // Emit event
@@ -224,7 +262,7 @@ async fn handle_agent_turn(
 
 /// Handle exec
 async fn handle_exec(
-    _ctx: &HandlerContext,
+    request_id: RequestId,
     _id: Option<String>,
     params: serde_json::Value,
 ) -> Result<serde_json::Value> {
@@ -233,12 +271,12 @@ async fn handle_exec(
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::Protocol("command required".to_string()))?;
 
-    let _timeout = params
+    let timeout = params
         .get("timeout")
         .and_then(|v| v.as_u64())
         .unwrap_or(30000);
 
-    info!("Executing: {}", command);
+    info!("[{}] Exec: {} (timeout={}ms)", request_id, command, timeout);
 
     // Execute command using tokio
     let output = tokio::process::Command::new("sh")
@@ -262,7 +300,7 @@ async fn handle_tools_list(_id: Option<String>) -> Result<serde_json::Value> {
 
 /// Handle tools.execute
 async fn handle_tool_execute(
-    _ctx: &HandlerContext,
+    request_id: RequestId,
     _id: Option<String>,
     params: serde_json::Value,
 ) -> Result<serde_json::Value> {
@@ -273,7 +311,7 @@ async fn handle_tool_execute(
 
     let tool_input = params.get("input").cloned().unwrap_or(serde_json::Value::Null);
 
-    info!("Executing tool: {} with input: {:?}", tool_name, tool_input);
+    debug!("[{}] Tool execute: {}", request_id, tool_name);
 
     let result = TOOL_EXECUTOR.execute(tool_name, tool_input).await;
 

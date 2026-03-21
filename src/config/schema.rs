@@ -89,6 +89,59 @@ pub struct Config {
     /// Hot reload configuration
     #[serde(default)]
     pub hot_reload: HotReloadConfig,
+
+    /// Persistence configuration
+    #[serde(default)]
+    pub persistence: PersistenceConfig,
+
+    /// Graceful shutdown configuration
+    #[serde(default)]
+    pub shutdown: ShutdownConfig,
+}
+
+/// Persistence configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistenceConfig {
+    /// Enable SQLite persistence for session history
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Database file path (relative to data_dir or absolute)
+    #[serde(default = "default_persistence_path")]
+    pub path: String,
+}
+
+impl Default for PersistenceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            path: default_persistence_path(),
+        }
+    }
+}
+
+fn default_persistence_path() -> String {
+    "tinyclaw.db".to_string()
+}
+
+/// Graceful shutdown configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShutdownConfig {
+    /// Timeout for draining active connections (seconds)
+    #[serde(default = "default_shutdown_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            timeout_secs: 30,
+        }
+    }
+}
+
+fn default_shutdown_timeout_secs() -> u64 {
+    30
 }
 
 /// Gateway configuration
