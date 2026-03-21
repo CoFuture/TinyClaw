@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/CoFuture/TinyClaw">
-    <img src="https://img.shields.io/badge/version-2.7.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-2.8.0-blue.svg" alt="Version">
   </a>
   <a href="https://github.com/CoFuture/TinyClaw/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -177,6 +177,10 @@ curl -X POST http://localhost:8080/api/tools/execute \
 | `mv` | 移动/重命名文件 | `{"source": "a.txt", "dest": "b.txt"}` |
 | `rm` | 删除文件 | `{"path": "/tmp/test.txt"}` |
 | `cat` | 读取多个文件 | `{"paths": ["a.txt", "b.txt"]}` |
+| `tree` | 显示目录树 | `{"path": ".", "depth": 3}` |
+| `chmod` | 修改文件权限 | `{"path": "a.txt", "mode": "755"}` |
+| `hash` | 计算文件哈希 | `{"path": "a.txt", "algorithm": "sha256"}` |
+| `wc` | 统计行/词/字符 | `{"path": "a.txt", "lines": true, "words": true}` |
 
 ## 项目结构
 
@@ -218,6 +222,7 @@ TinyClaw/
 
 See [docs/ITERATIONS.md](docs/ITERATIONS.md) for detailed version history.
 
+- **v2.8.0** - 增强文件工具 (tree, chmod, hash, wc)
 - **v2.7.0** - 增强文件工具 (cp, mv, rm, cat)
 - **v2.6.0** - TUI 终端界面
 - **v2.5.0** - Context 管理增强 (上下文截断)

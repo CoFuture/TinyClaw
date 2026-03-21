@@ -7,6 +7,8 @@ use tokio::fs;
 use tokio::time::timeout;
 use tracing::info;
 use chrono::{DateTime, Local};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 /// Tool definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -512,6 +514,114 @@ impl ToolExecutor {
             },
         );
 
+        // Register tree tool (directory tree visualization)
+        tools.insert(
+            "tree".to_string(),
+            Tool {
+                name: "tree".to_string(),
+                description: "Display directory tree structure".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Root directory path (supports ~ and $VAR, default: .)"
+                        },
+                        "depth": {
+                            "type": "number",
+                            "description": "Maximum depth to traverse (default: 3)"
+                        },
+                        "show_hidden": {
+                            "type": "boolean",
+                            "description": "Whether to show hidden files (default: false)"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+        );
+
+        // Register chmod tool (change file permissions)
+        tools.insert(
+            "chmod".to_string(),
+            Tool {
+                name: "chmod".to_string(),
+                description: "Change file permissions".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "File or directory path (supports ~ and $VAR)"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Permission mode in octal (e.g., '755') or symbolic (e.g., '+x')"
+                        }
+                    },
+                    "required": ["path", "mode"]
+                }),
+            },
+        );
+
+        // Register hash tool (compute file hash)
+        tools.insert(
+            "hash".to_string(),
+            Tool {
+                name: "hash".to_string(),
+                description: "Compute file hash/checksum".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "File path to hash (supports ~ and $VAR)"
+                        },
+                        "algorithm": {
+                            "type": "string",
+                            "description": "Hash algorithm: sha256, sha512, sha1, md5 (default: sha256)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
+        // Register wc tool (word/line/char count)
+        tools.insert(
+            "wc".to_string(),
+            Tool {
+                name: "wc".to_string(),
+                description: "Count lines, words, and characters in a file".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "File path (supports ~ and $VAR)"
+                        },
+                        "bytes": {
+                            "type": "boolean",
+                            "description": "Show byte count (default: true)"
+                        },
+                        "chars": {
+                            "type": "boolean",
+                            "description": "Show character count (default: false)"
+                        },
+                        "lines": {
+                            "type": "boolean",
+                            "description": "Show line count (default: true)"
+                        },
+                        "words": {
+                            "type": "boolean",
+                            "description": "Show word count (default: false)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -558,6 +668,10 @@ impl ToolExecutor {
             "mv" => self.execute_mv(input).await,
             "rm" => self.execute_rm(input).await,
             "cat" => self.execute_cat(input).await,
+            "tree" => self.execute_tree(input).await,
+            "chmod" => self.execute_chmod(input).await,
+            "hash" => self.execute_hash(input).await,
+            "wc" => self.execute_wc(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
@@ -2093,6 +2207,389 @@ impl ToolExecutor {
             error: if has_error { Some("Some files could not be read".to_string()) } else { None },
         }
     }
+
+    /// Execute the tree tool - display directory tree
+    async fn execute_tree(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+        let depth = input
+            .get("depth")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3) as usize;
+        let show_hidden = input
+            .get("show_hidden")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let path = Self::normalize_path(path);
+        info!("tree: {} (depth={})", path, depth);
+
+        let mut output = String::new();
+        output.push_str(&format!("{}\n", path));
+
+        fn build_tree(
+            dir_path: &std::path::Path,
+            prefix: &str,
+            depth: usize,
+            max_depth: usize,
+            show_hidden: bool,
+            output: &mut String,
+        ) -> std::io::Result<()> {
+            if depth >= max_depth {
+                return Ok(());
+            }
+
+            let entries: Vec<_> = std::fs::read_dir(dir_path)?
+                .filter_map(|e| e.ok())
+                .filter(|e| show_hidden || !e.file_name().to_string_lossy().starts_with('.'))
+                .collect();
+
+            let total = entries.len();
+            for (i, entry) in entries.iter().enumerate() {
+                let is_last = i == total - 1;
+                let file_name: String = entry.file_name().to_string_lossy().into_owned();
+                let entry_path = entry.path();
+                let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+
+                let branch = if is_last { "└── " } else { "├── " };
+                let next_prefix = if is_last { "    " } else { "│   " };
+
+                output.push_str(prefix);
+                output.push_str(branch);
+                output.push_str(&file_name);
+
+                if is_dir {
+                    output.push('/');
+                }
+                output.push('\n');
+
+                if is_dir {
+                    build_tree(
+                        &entry_path,
+                        &format!("{}{}", prefix, next_prefix),
+                        depth + 1,
+                        max_depth,
+                        show_hidden,
+                        output,
+                    )?;
+                }
+            }
+            Ok(())
+        }
+
+        match std::fs::metadata(&path) {
+            Ok(meta) => {
+                if !meta.is_dir() {
+                    return ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!("{} is not a directory", path)),
+                    };
+                }
+            }
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Cannot access {}: {}", path, e)),
+                };
+            }
+        }
+
+        if let Err(e) = build_tree(std::path::Path::new(&path), "", 0, depth, show_hidden, &mut output) {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Error building tree: {}", e)),
+            };
+        }
+
+        ToolResult {
+            success: true,
+            output,
+            error: None,
+        }
+    }
+
+    /// Execute the chmod tool - change file permissions
+    async fn execute_chmod(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let mode_str = input
+            .get("mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() || mode_str.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path and mode are required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+        info!("chmod: {} {}", mode_str, path);
+
+        // Parse the mode - support both octal (755) and symbolic (+x)
+        let new_mode = if mode_str.chars().all(|c| c.is_ascii_digit()) {
+            // Octal mode like "755" or "644"
+            u32::from_str_radix(mode_str, 8).ok()
+        } else {
+            // Symbolic mode - for simplicity, we handle a subset: +x, -x, +r, -r, +w, -w
+            // Try to get current permissions and modify them
+            std::fs::metadata(&path)
+                .ok()
+                .and_then(|m| m.permissions().mode().into())
+                .map(|current| {
+                    let mut mode = current;
+                    for part in mode_str.split(',') {
+                        let part = part.trim();
+                        if part.len() >= 2 {
+                            let op = part.chars().nth(0).unwrap();
+                            let mut perms = part[1..].chars().filter(|c| !c.is_ascii_digit()).collect::<String>();
+                            // Handle +x, -x patterns
+                            if perms.is_empty() && part.len() >= 2 && part[1..].chars().all(|c| c == 'x' || c == 'r' || c == 'w') {
+                                perms = part[1..].to_string();
+                            }
+                            for p in perms.chars() {
+                                let flag = match p {
+                                    'r' => 0o444,
+                                    'w' => 0o222,
+                                    'x' => 0o111,
+                                    'u' => (mode >> 6) & 0o777,
+                                    'g' => (mode >> 3) & 0o777,
+                                    'o' => mode & 0o777,
+                                    'a' => 0o777,
+                                    _ => continue,
+                                };
+                                match op {
+                                    '+' => mode |= flag,
+                                    '-' => mode &= !flag,
+                                    '=' => mode = (mode & !0o777) | flag,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    mode
+                })
+        };
+
+        let new_mode = match new_mode {
+            Some(m) => m,
+            None => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Invalid mode: {}", mode_str)),
+                };
+            }
+        };
+
+        // Apply the permission change
+        match std::fs::metadata(&path) {
+            Ok(meta) => {
+                let mut perms = meta.permissions();
+                perms.set_mode(new_mode);
+                if let Err(e) = std::fs::set_permissions(&path, perms) {
+                    return ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!("Failed to change permissions: {}", e)),
+                    };
+                }
+            }
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Cannot access {}: {}", path, e)),
+                };
+            }
+        }
+
+        ToolResult {
+            success: true,
+            output: format!("Changed permissions of {} to {:o}", path, new_mode),
+            error: None,
+        }
+    }
+
+    /// Execute the hash tool - compute file hash/checksum
+    async fn execute_hash(&self, input: serde_json::Value) -> ToolResult {
+
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let algorithm = input
+            .get("algorithm")
+            .and_then(|v| v.as_str())
+            .unwrap_or("sha256");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+        info!("hash ({}): {}", algorithm, path);
+
+        // Check if file exists and is readable
+        let metadata = match tokio::fs::metadata(&path).await {
+            Ok(m) => m,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Cannot access {}: {}", path, e)),
+                };
+            }
+        };
+
+        if metadata.is_dir() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("{} is a directory, not a file", path)),
+            };
+        }
+
+        // Read file and compute hash
+        let content = match tokio::fs::read(&path).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to read {}: {}", path, e)),
+                };
+            }
+        };
+
+        let hash_hex = match algorithm.to_lowercase().as_str() {
+            "sha256" => {
+                use sha2::{Sha256, Digest};
+                let mut hasher = Sha256::new();
+                hasher.update(&content);
+                format!("{:x}", hasher.finalize())
+            }
+            "sha512" => {
+                use sha2::{Sha512, Digest};
+                let mut hasher = Sha512::new();
+                hasher.update(&content);
+                format!("{:x}", hasher.finalize())
+            }
+            "sha1" => {
+                use sha1::{Sha1, Digest};
+                let mut hasher = Sha1::new();
+                hasher.update(&content);
+                format!("{:x}", hasher.finalize())
+            }
+            "md5" => {
+                let digest = md5::compute(&content);
+                format!("{:x}", digest)
+            }
+            _ => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Unsupported algorithm: {}. Supported: sha256, sha512, sha1, md5", algorithm)),
+                };
+            }
+        };
+
+        ToolResult {
+            success: true,
+            output: format!("{}  {}", hash_hex, path),
+            error: None,
+        }
+    }
+
+    /// Execute the wc tool - count lines, words, characters
+    async fn execute_wc(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let show_bytes = input
+            .get("bytes")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let show_chars = input
+            .get("chars")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let show_lines = input
+            .get("lines")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let show_words = input
+            .get("words")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // If no specific flags, show all
+        let show_all = ![show_bytes, show_chars, show_lines, show_words]
+            .contains(&true);
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+        info!("wc: {}", path);
+
+        let content = match tokio::fs::read_to_string(&path).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to read {}: {}", path, e)),
+                };
+            }
+        };
+
+        let mut output = String::new();
+        let line_count = content.lines().count();
+        let word_count = content.split_whitespace().count();
+        let byte_count = content.len();
+        let char_count = content.chars().count();
+
+        // Default: show lines, words, bytes (like unix wc)
+        if show_all || show_lines {
+            output.push_str(&format!("{} ", line_count));
+        }
+        if show_all || show_words {
+            output.push_str(&format!("{} ", word_count));
+        }
+        if show_bytes || (show_all && !show_chars) {
+            output.push_str(&format!("{} ", byte_count));
+        }
+        if show_chars {
+            output.push_str(&format!("{} ", char_count));
+        }
+        output.push_str(&path);
+
+        ToolResult {
+            success: true,
+            output,
+            error: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2104,7 +2601,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 20); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, find, tail, batch_execute, env, diff, cp, mv, rm, cat
+        assert_eq!(tools.len(), 24); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, find, tail, batch_execute, env, diff, cp, mv, rm, cat, tree, chmod, hash, wc
     }
 
     #[test]
@@ -3034,5 +3531,232 @@ mod tests {
         
         assert!(!result.success);
         assert!(result.error.is_some());
+    }
+
+    // ============ tree tool tests ============
+
+    #[tokio::test]
+    async fn test_execute_tree_success() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("tree", serde_json::json!({
+            "path": "/tmp",
+            "depth": 1
+        })).await;
+
+        assert!(result.success);
+        assert!(result.output.contains("/tmp"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_tree_default_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("tree", serde_json::json!({})).await;
+
+        // Should use "." as default path
+        assert!(result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_tree_not_directory() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_tree_file.txt";
+        tokio::fs::write(path, "content").await.unwrap();
+
+        let result = executor.execute("tree", serde_json::json!({
+            "path": path
+        })).await;
+
+        assert!(!result.success);
+        assert!(result.error.is_some());
+
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_tree_show_hidden() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("tree", serde_json::json!({
+            "path": "/tmp",
+            "depth": 1,
+            "show_hidden": true
+        })).await;
+
+        assert!(result.success);
+    }
+
+    // ============ chmod tool tests ============
+
+    #[tokio::test]
+    async fn test_execute_chmod_success() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_chmod_test.txt";
+        tokio::fs::write(path, "content").await.unwrap();
+
+        let result = executor.execute("chmod", serde_json::json!({
+            "path": path,
+            "mode": "755"
+        })).await;
+
+        assert!(result.success);
+        assert!(result.output.contains("755"));
+
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_chmod_missing_args() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("chmod", serde_json::json!({
+            "path": "/tmp/test.txt"
+        })).await;
+
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_chmod_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("chmod", serde_json::json!({
+            "path": "/tmp/nonexistent_tinyclaw_chmod.txt",
+            "mode": "755"
+        })).await;
+
+        assert!(!result.success);
+    }
+
+    // ============ hash tool tests ============
+
+    #[tokio::test]
+    async fn test_execute_hash_sha256_success() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_hash_test.txt";
+        tokio::fs::write(path, "hello world").await.unwrap();
+
+        let result = executor.execute("hash", serde_json::json!({
+            "path": path,
+            "algorithm": "sha256"
+        })).await;
+
+        assert!(result.success);
+        // Verify the output contains a 64-char hex hash and the file path
+        let hash_part = result.output.split_whitespace().next().unwrap_or("");
+        assert_eq!(hash_part.len(), 64, "SHA256 should be 64 hex chars");
+        assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "Should be valid hex");
+        assert!(result.output.contains(path));
+
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_hash_default_algorithm() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_hash_test.txt";
+        tokio::fs::write(path, "test").await.unwrap();
+
+        let result = executor.execute("hash", serde_json::json!({
+            "path": path
+        })).await;
+
+        assert!(result.success); // defaults to sha256
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_hash_unsupported_algorithm() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_hash_test.txt";
+        tokio::fs::write(path, "test").await.unwrap();
+
+        let result = executor.execute("hash", serde_json::json!({
+            "path": path,
+            "algorithm": "blake3"
+        })).await;
+
+        assert!(!result.success);
+        assert!(result.error.is_some());
+
+        // Cleanup
+        let _ = tokio::fs::remove_file(path).await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_hash_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("hash", serde_json::json!({
+            "path": "/tmp/nonexistent_tinyclaw_hash.txt"
+        })).await;
+
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_hash_on_directory() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("hash", serde_json::json!({
+            "path": "/tmp"
+        })).await;
+
+        assert!(!result.success);
+    }
+
+    // ============ wc tool tests ============
+
+    #[tokio::test]
+    async fn test_execute_wc_default() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_wc_test.txt";
+        tokio::fs::write(path, "hello world\nsecond line\nthird line").await.unwrap();
+
+        let result = executor.execute("wc", serde_json::json!({
+            "path": path
+        })).await;
+
+        assert!(result.success);
+        assert!(result.output.contains("3")); // 3 lines
+        assert!(result.output.contains(path));
+
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_wc_specific_flags() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tiny_claw_wc_test.txt";
+        tokio::fs::write(path, "hello world\nsecond line").await.unwrap();
+
+        let result = executor.execute("wc", serde_json::json!({
+            "path": path,
+            "lines": true,
+            "words": true
+        })).await;
+
+        // When specific flags are set (not using defaults), show_all becomes false
+        // show_bytes defaults to true, so it will also be shown
+        // Output format: "<lines> <words> <bytes> <path>"
+        assert!(result.success, "wc failed: {:?}", result.error);
+        // Contains line count
+        assert!(result.output.contains("2"));
+        // Contains word count  
+        assert!(result.output.contains("4"));
+
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_wc_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("wc", serde_json::json!({})).await;
+
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_wc_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("wc", serde_json::json!({
+            "path": "/tmp/nonexistent_tinyclaw_wc.txt"
+        })).await;
+
+        assert!(!result.success);
     }
 }
