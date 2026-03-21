@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/CoFuture/TinyClaw">
-    <img src="https://img.shields.io/badge/version-2.6.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/version-2.7.0-blue.svg" alt="Version">
   </a>
   <a href="https://github.com/CoFuture/TinyClaw/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -173,6 +173,10 @@ curl -X POST http://localhost:8080/api/tools/execute \
 | `batch_execute` | 批量执行工具 | `{"tools": [{"name": "exec", "input": {"command": "ls"}}]}` |
 | `env` | 环境变量管理 | `{"name": "PATH"}` |
 | `diff` | 文件对比 | `{"path1": "a.txt", "path2": "b.txt"}` |
+| `cp` | 复制文件 | `{"source": "a.txt", "dest": "b.txt"}` |
+| `mv` | 移动/重命名文件 | `{"source": "a.txt", "dest": "b.txt"}` |
+| `rm` | 删除文件 | `{"path": "/tmp/test.txt"}` |
+| `cat` | 读取多个文件 | `{"paths": ["a.txt", "b.txt"]}` |
 
 ## 项目结构
 
@@ -214,6 +218,9 @@ TinyClaw/
 
 See [docs/ITERATIONS.md](docs/ITERATIONS.md) for detailed version history.
 
+- **v2.7.0** - 增强文件工具 (cp, mv, rm, cat)
+- **v2.6.0** - TUI 终端界面
+- **v2.5.0** - Context 管理增强 (上下文截断)
 - **v2.4.0** - 会话导入导出 + 连接状态API + 工具schema验证
 - **v2.3.0** - 工具增强 (find, tail, exec 超时修复)
 - **v2.2.0** - 批量执行 + env/diff 工具

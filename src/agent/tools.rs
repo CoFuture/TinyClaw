@@ -421,6 +421,97 @@ impl ToolExecutor {
             },
         );
 
+        // Register cp tool (copy file)
+        tools.insert(
+            "cp".to_string(),
+            Tool {
+                name: "cp".to_string(),
+                description: "Copy a file to a new location".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "source": {
+                            "type": "string",
+                            "description": "Source file path (supports ~ and $VAR)"
+                        },
+                        "dest": {
+                            "type": "string",
+                            "description": "Destination file path (supports ~ and $VAR)"
+                        }
+                    },
+                    "required": ["source", "dest"]
+                }),
+            },
+        );
+
+        // Register mv tool (move file)
+        tools.insert(
+            "mv".to_string(),
+            Tool {
+                name: "mv".to_string(),
+                description: "Move a file to a new location (rename)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "source": {
+                            "type": "string",
+                            "description": "Source file path (supports ~ and $VAR)"
+                        },
+                        "dest": {
+                            "type": "string",
+                            "description": "Destination file path (supports ~ and $VAR)"
+                        }
+                    },
+                    "required": ["source", "dest"]
+                }),
+            },
+        );
+
+        // Register rm tool (remove file)
+        tools.insert(
+            "rm".to_string(),
+            Tool {
+                name: "rm".to_string(),
+                description: "Remove a file".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "File path to remove (supports ~ and $VAR)"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        );
+
+        // Register cat tool (concatenate files)
+        tools.insert(
+            "cat".to_string(),
+            Tool {
+                name: "cat".to_string(),
+                description: "Read and concatenate multiple files".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "paths": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of file paths to read (supports ~ and $VAR)"
+                        },
+                        "show_line_numbers": {
+                            "type": "boolean",
+                            "description": "Whether to show line numbers (default: false)"
+                        }
+                    },
+                    "required": ["paths"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -463,6 +554,10 @@ impl ToolExecutor {
             "batch_execute" => self.execute_batch_execute(input).await,
             "env" => self.execute_env(input).await,
             "diff" => self.execute_diff(input).await,
+            "cp" => self.execute_cp(input).await,
+            "mv" => self.execute_mv(input).await,
+            "rm" => self.execute_rm(input).await,
+            "cat" => self.execute_cat(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
@@ -1770,6 +1865,234 @@ impl ToolExecutor {
             error: None,
         }
     }
+
+    /// Execute the cp tool - copy a file
+    async fn execute_cp(&self, input: serde_json::Value) -> ToolResult {
+        let source = input
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let dest = input
+            .get("dest")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if source.is_empty() || dest.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("source and dest are required".to_string()),
+            };
+        }
+
+        let source = Self::normalize_path(source);
+        let dest = Self::normalize_path(dest);
+
+        info!("cp: {} -> {}", source, dest);
+
+        // Check if source exists
+        if tokio::fs::metadata(&source).await.is_err() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Source file does not exist: {}", source)),
+            };
+        }
+
+        // Copy the file
+        match tokio::fs::copy(&source, &dest).await {
+            Ok(bytes) => ToolResult {
+                success: true,
+                output: format!("Copied {} bytes from {} to {}", bytes, source, dest),
+                error: None,
+            },
+            Err(e) => ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Failed to copy {} to {}: {}", source, dest, e)),
+            },
+        }
+    }
+
+    /// Execute the mv tool - move/rename a file
+    async fn execute_mv(&self, input: serde_json::Value) -> ToolResult {
+        let source = input
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let dest = input
+            .get("dest")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if source.is_empty() || dest.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("source and dest are required".to_string()),
+            };
+        }
+
+        let source = Self::normalize_path(source);
+        let dest = Self::normalize_path(dest);
+
+        info!("mv: {} -> {}", source, dest);
+
+        // Check if source exists
+        if tokio::fs::metadata(&source).await.is_err() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Source file does not exist: {}", source)),
+            };
+        }
+
+        // Move the file
+        match tokio::fs::rename(&source, &dest).await {
+            Ok(()) => ToolResult {
+                success: true,
+                output: format!("Moved {} to {}", source, dest),
+                error: None,
+            },
+            Err(e) => {
+                // If rename fails (e.g., cross-filesystem), try copy+delete
+                if let Ok(bytes) = tokio::fs::copy(&source, &dest).await {
+                    if tokio::fs::remove_file(&source).await.is_ok() {
+                        return ToolResult {
+                            success: true,
+                            output: format!("Moved {} to {} (copy+delete fallback, {} bytes)", source, dest, bytes),
+                            error: None,
+                        };
+                    }
+                }
+                ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to move {} to {}: {}", source, dest, e)),
+                }
+            }
+        }
+    }
+
+    /// Execute the rm tool - remove a file
+    async fn execute_rm(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let path = Self::normalize_path(path);
+
+        info!("rm: {}", path);
+
+        // Check if file exists
+        match tokio::fs::metadata(&path).await {
+            Ok(metadata) => {
+                if metadata.is_dir() {
+                    return ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!("{} is a directory, use rmdir instead", path)),
+                    };
+                }
+            }
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("File does not exist: {}", e)),
+                };
+            }
+        }
+
+        // Remove the file
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => ToolResult {
+                success: true,
+                output: format!("Removed {}", path),
+                error: None,
+            },
+            Err(e) => ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Failed to remove {}: {}", path, e)),
+            },
+        }
+    }
+
+    /// Execute the cat tool - read and concatenate multiple files
+    async fn execute_cat(&self, input: serde_json::Value) -> ToolResult {
+        let paths_json = input
+            .get("paths")
+            .and_then(|v| v.as_array())
+            .cloned();
+
+        let show_line_numbers = input
+            .get("show_line_numbers")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let paths = match paths_json {
+            Some(arr) if !arr.is_empty() => arr,
+            _ => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some("paths array is required and must not be empty".to_string()),
+                };
+            }
+        };
+
+        let mut results = Vec::new();
+        let mut has_error = false;
+
+        for (idx, path_val) in paths.iter().enumerate() {
+            let path = match path_val.as_str() {
+                Some(s) => Self::normalize_path(s),
+                None => {
+                    results.push(format!("[{}] Error: Invalid path", idx + 1));
+                    has_error = true;
+                    continue;
+                }
+            };
+
+            info!("cat: {}", path);
+
+            match fs::read_to_string(&path).await {
+                Ok(content) => {
+                    let lines: Vec<&str> = content.lines().collect();
+                    if show_line_numbers {
+                        let numbered: Vec<String> = lines
+                            .iter()
+                            .enumerate()
+                            .map(|(i, l)| format!("{:6}  {}", i + 1, l))
+                            .collect();
+                        results.push(format!("==> {} <==\n{}", path, numbered.join("\n")));
+                    } else {
+                        results.push(format!("==> {} <==\n{}", path, content));
+                    }
+                }
+                Err(e) => {
+                    results.push(format!("[{}] Error reading {}: {}", idx + 1, path, e));
+                    has_error = true;
+                }
+            }
+        }
+
+        ToolResult {
+            success: !has_error,
+            output: results.join("\n"),
+            error: if has_error { Some("Some files could not be read".to_string()) } else { None },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1781,7 +2104,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 16); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, find, tail, batch_execute, env, diff
+        assert_eq!(tools.len(), 20); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which, mkdir, stat_file, find, tail, batch_execute, env, diff, cp, mv, rm, cat
     }
 
     #[test]
@@ -2357,6 +2680,224 @@ mod tests {
         })).await;
         
         assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_cp_success() {
+        let executor = ToolExecutor::new();
+        let source = "/tmp/tinyclaw_cp_source.txt";
+        let dest = "/tmp/tinyclaw_cp_dest.txt";
+        
+        tokio::fs::write(source, "test content").await.unwrap();
+        
+        let result = executor.execute("cp", serde_json::json!({
+            "source": source,
+            "dest": dest
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Copied"));
+        assert!(tokio::fs::read_to_string(dest).await.unwrap() == "test content");
+        
+        // Cleanup
+        tokio::fs::remove_file(source).await.unwrap();
+        tokio::fs::remove_file(dest).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_cp_missing_source() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("cp", serde_json::json!({
+            "dest": "/tmp/dest.txt"
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_cp_source_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("cp", serde_json::json!({
+            "source": "/nonexistent_file_tinyclaw.txt",
+            "dest": "/tmp/dest.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_mv_success() {
+        let executor = ToolExecutor::new();
+        let source = "/tmp/tinyclaw_mv_source.txt";
+        let dest = "/tmp/tinyclaw_mv_dest.txt";
+        
+        tokio::fs::write(source, "test content").await.unwrap();
+        
+        let result = executor.execute("mv", serde_json::json!({
+            "source": source,
+            "dest": dest
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Moved"));
+        assert!(!tokio::fs::metadata(source).await.is_ok()); // source gone
+        assert!(tokio::fs::read_to_string(dest).await.unwrap() == "test content");
+        
+        // Cleanup
+        let _ = tokio::fs::remove_file(dest).await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_mv_missing_source() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("mv", serde_json::json!({
+            "dest": "/tmp/dest.txt"
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_mv_source_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("mv", serde_json::json!({
+            "source": "/nonexistent_file_tinyclaw.txt",
+            "dest": "/tmp/dest.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_rm_success() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_rm_test.txt";
+        
+        tokio::fs::write(path, "test content").await.unwrap();
+        
+        let result = executor.execute("rm", serde_json::json!({
+            "path": path
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("Removed"));
+        assert!(!tokio::fs::metadata(path).await.is_ok()); // file gone
+        
+        // No cleanup needed
+    }
+
+    #[tokio::test]
+    async fn test_execute_rm_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("rm", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_rm_not_found() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("rm", serde_json::json!({
+            "path": "/nonexistent_file_tinyclaw.txt"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_cat_single_file() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_cat_test.txt";
+        
+        tokio::fs::write(path, "line1\nline2\nline3").await.unwrap();
+        
+        let result = executor.execute("cat", serde_json::json!({
+            "paths": [path]
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("line1"));
+        assert!(result.output.contains("line2"));
+        assert!(result.output.contains("line3"));
+        
+        // Cleanup
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_cat_multiple_files() {
+        let executor = ToolExecutor::new();
+        let path1 = "/tmp/tinyclaw_cat_test1.txt";
+        let path2 = "/tmp/tinyclaw_cat_test2.txt";
+        
+        tokio::fs::write(path1, "content1").await.unwrap();
+        tokio::fs::write(path2, "content2").await.unwrap();
+        
+        let result = executor.execute("cat", serde_json::json!({
+            "paths": [path1, path2]
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("content1"));
+        assert!(result.output.contains("content2"));
+        
+        // Cleanup
+        tokio::fs::remove_file(path1).await.unwrap();
+        tokio::fs::remove_file(path2).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_cat_with_line_numbers() {
+        let executor = ToolExecutor::new();
+        let path = "/tmp/tinyclaw_cat_linenum.txt";
+        
+        tokio::fs::write(path, "line1\nline2\nline3").await.unwrap();
+        
+        let result = executor.execute("cat", serde_json::json!({
+            "paths": [path],
+            "show_line_numbers": true
+        })).await;
+        
+        assert!(result.success);
+        assert!(result.output.contains("1  line1"));
+        assert!(result.output.contains("2  line2"));
+        assert!(result.output.contains("3  line3"));
+        
+        // Cleanup
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_cat_missing_paths() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("cat", serde_json::json!({
+            "paths": []
+        })).await;
+        
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn test_execute_cat_partial_failure() {
+        let executor = ToolExecutor::new();
+        let path1 = "/tmp/tinyclaw_cat_ok.txt";
+        let path2 = "/tmp/nonexistent_tinyclaw.txt";
+        
+        tokio::fs::write(path1, "ok content").await.unwrap();
+        
+        let result = executor.execute("cat", serde_json::json!({
+            "paths": [path1, path2]
+        })).await;
+        
+        // Should succeed overall but include error for missing file
+        assert!(result.output.contains("ok content"));
+        assert!(result.output.contains("Error"));
+        
+        // Cleanup
+        tokio::fs::remove_file(path1).await.unwrap();
     }
 
     #[tokio::test]

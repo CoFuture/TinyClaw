@@ -1,5 +1,43 @@
 # TinyClaw 版本迭代记录
 
+## v2.7.0 - 2026-03-21
+
+### Iteration 30: 增强文件工具
+
+**目标**: 添加常用文件操作工具，完善 AI Agent 文件管理能力
+
+新增工具:
+- [x] `cp` - 复制文件
+  - 支持 source/dest 参数
+  - 支持 ~ 和 $VAR 路径
+  - 保留原始文件内容
+
+- [x] `mv` - 移动/重命名文件
+  - 支持 source/dest 参数
+  - 支持跨文件系统移动（自动使用 copy+delete fallback）
+  - 保留原始文件内容
+
+- [x] `rm` - 删除文件
+  - 支持 path 参数
+  - 检查文件是否存在
+  - 不允许删除目录
+
+- [x] `cat` - 读取并拼接多个文件
+  - 支持 paths 数组参数
+  - 可选 show_line_numbers 显示行号
+  - 部分失败时仍返回其他文件内容
+
+测试增强:
+- [x] 新增 14 个测试用例 (cp × 3, mv × 3, rm × 3, cat × 5)
+
+代码质量:
+- [x] cargo clippy - 通过 (0 警告)
+- [x] cargo test - 138 个测试通过 (+14 新测试)
+
+工具总数: 20 个
+
+---
+
 ## v2.6.0 - 2026-03-21
 
 ### Iteration 29: TUI Terminal Interface
