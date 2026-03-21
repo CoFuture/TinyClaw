@@ -3,6 +3,8 @@
 use crate::config::Config;
 use crate::gateway::session::SessionManager;
 use crate::agent::Agent;
+use crate::metrics::{MetricsCollector, collector::SystemMetrics};
+use crate::ratelimit::RateLimiter;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -17,6 +19,7 @@ use std::time::Instant;
 use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
 use tracing::info;
+use std::collections::HashMap;
 
 /// HTTP Server state
 pub struct HttpState {
@@ -27,6 +30,8 @@ pub struct HttpState {
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
     pub start_time: Instant,
+    pub metrics: Arc<MetricsCollector>,
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 /// Health check response
@@ -158,6 +163,70 @@ async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::
     Json(serde_json::json!({ "sessions": session_infos }))
 }
 
+/// Metrics response
+#[derive(Serialize)]
+pub struct MetricsResponse {
+    pub system: SystemMetrics,
+    pub endpoints: HashMap<String, EndpointMetricsResponse>,
+}
+
+/// Endpoint metrics response
+#[derive(Serialize)]
+pub struct EndpointMetricsResponse {
+    pub requests: u64,
+    pub avg_response_time_ms: f64,
+    pub errors: u64,
+}
+
+/// Metrics handler
+async fn metrics(State(state): State<Arc<HttpState>>) -> Json<MetricsResponse> {
+    let system = state.metrics.get_system_metrics();
+    let endpoints = state.metrics.get_endpoint_metrics();
+    
+    let endpoint_responses: HashMap<String, EndpointMetricsResponse> = endpoints
+        .into_iter()
+        .map(|(k, v)| {
+            let avg_response = if v.requests > 0 {
+                v.total_response_time_ms / v.requests as f64
+            } else {
+                0.0
+            };
+            (k, EndpointMetricsResponse {
+                requests: v.requests,
+                avg_response_time_ms: avg_response,
+                errors: v.errors,
+            })
+        })
+        .collect();
+
+    Json(MetricsResponse {
+        system,
+        endpoints: endpoint_responses,
+    })
+}
+
+/// Rate limit check response
+#[derive(Serialize)]
+pub struct RateLimitCheckResponse {
+    pub allowed: bool,
+    pub remaining: u32,
+    pub reset_in_seconds: u64,
+}
+
+/// Rate limit check handler
+async fn rate_limit_check(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(client_id): axum::extract::Path<String>,
+) -> Json<RateLimitCheckResponse> {
+    let result = state.rate_limiter.check(&client_id);
+    
+    Json(RateLimitCheckResponse {
+        allowed: result.allowed,
+        remaining: result.remaining,
+        reset_in_seconds: result.reset_in.as_secs(),
+    })
+}
+
 /// Get memory info (Linux/macOS)
 fn get_memory_info() -> Option<MemoryInfo> {
     #[cfg(unix)]
@@ -205,6 +274,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/admin.html", get(|| async { "/admin/admin.html" }))
         .route("/health", get(health))
         .route("/api/status", get(status))
+        .route("/api/metrics", get(metrics))
+        .route("/api/ratelimit/:client_id", get(rate_limit_check))
         .route("/api/config", get(config_get))
         .route("/api/config", axum::routing::patch(config_patch))
         .route("/api/shutdown", axum::routing::post(shutdown))

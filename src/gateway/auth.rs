@@ -112,6 +112,7 @@ impl Default for Authenticator {
 }
 
 /// Authorization helper
+#[allow(dead_code)]
 pub fn require_admin(api_key: &ApiKey) -> Result<()> {
     if api_key.has_permission(&Permission::Admin) {
         Ok(())
@@ -120,6 +121,7 @@ pub fn require_admin(api_key: &ApiKey) -> Result<()> {
     }
 }
 
+#[allow(dead_code)]
 pub fn require_permission(api_key: &ApiKey, permission: Permission) -> Result<()> {
     if api_key.has_permission(&permission) {
         Ok(())

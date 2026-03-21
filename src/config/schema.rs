@@ -13,6 +13,7 @@ pub enum ModelProvider {
 }
 
 impl ModelProvider {
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &'static str {
         match self {
             ModelProvider::Anthropic => "Anthropic",

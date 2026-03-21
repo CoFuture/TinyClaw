@@ -184,10 +184,35 @@
 
 ---
 
+## v1.3.0 - 2026-03-21
+
+### Iteration 13: 指标监控与速率限制
+
+新增功能:
+- [x] 指标收集模块 (metrics/)
+  - SystemMetrics - 系统指标 (请求数、响应时间、会话数等)
+  - EndpointMetrics - 端点指标
+  - MetricsCollector - 指标收集器
+  - 每分钟请求数统计
+  - 平均响应时间跟踪
+- [x] 速率限制模块 (ratelimit/)
+  - RateLimitConfig - 速率限制配置
+  - RateLimiter - 滑动窗口速率限制器
+  - RateLimitResult - 限制结果
+  - 客户端级别限制
+  - 自动封禁机制
+- [x] HTTP API 端点
+  - /api/metrics - 获取系统指标
+  - /api/ratelimit/:client_id - 检查速率限制状态
+
+### 完成状态: ✅ 已完成
+
+---
+
 ## 迭代计划
 
-### v1.3.0 待实现
+### v1.4.0 待实现
 - WebSocket 消息队列优化
-- 分布式支持
-- 指标收集与监控
-- 速率限制
+- 分布式支持 (节点发现、状态同步)
+- 插件市场/远程插件加载
+- 高级认证 (OAuth, JWT)

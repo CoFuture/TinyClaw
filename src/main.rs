@@ -14,6 +14,8 @@ mod common;
 mod config;
 mod gateway;
 mod http;
+mod metrics;
+mod ratelimit;
 
 use common::logging;
 use config::{load_config, Config};
@@ -23,6 +25,8 @@ use gateway::messages::HandlerContext;
 use gateway::server;
 use gateway::session::SessionManager;
 use http::routes::{create_router, HttpState};
+use metrics::MetricsCollector;
+use ratelimit::RateLimiter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,6 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = Arc::new(agent::Agent::new(Arc::new(RwLock::new(
         config.read().agent.clone(),
     ))));
+    
+    // Create metrics collector and rate limiter
+    let metrics = Arc::new(MetricsCollector::new());
+    let rate_limiter = Arc::new(RateLimiter::new());
 
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
@@ -70,6 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent: agent.clone(),
         shutdown_tx: shutdown_tx.clone(),
         start_time,
+        metrics: metrics.clone(),
+        rate_limiter: rate_limiter.clone(),
     });
 
     // Create the main session
