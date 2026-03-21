@@ -784,6 +784,19 @@
             margin: 0 auto 12px;
             max-width: 80%;
         }
+        /* Streaming message indicator */
+        .message.streaming {
+            opacity: 0.9;
+        }
+        .streaming-indicator {
+            color: #00d9ff;
+            animation: blink 0.8s infinite;
+            font-size: 10px;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
         .msg-role {
             font-size: 11px;
             opacity: 0.7;
@@ -2530,15 +2543,130 @@
                 return; // Ignore events for other sessions
             }
             
-            if (eventType === 'assistant.text' && data.text) {
-                // Add to history cache
-                addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: data.text });
-                // Show in chat panel (only if it matches current session)
-                addChatMessage(data.text, 'assistant');
+            if (eventType === 'assistant.partial' && data.text) {
+                // Real-time streaming partial text - update UI incrementally
+                streamingTextBuffer += data.text;
+                if (streamingMsgElement) {
+                    // Update existing streaming message content
+                    updateStreamingMessage(streamingMsgElement, streamingTextBuffer, 'assistant');
+                } else {
+                    // Create new streaming message
+                    streamingMsgElement = createStreamingMessage(streamingTextBuffer, 'assistant');
+                }
+            } else if (eventType === 'assistant.text' && data.text) {
+                // Final complete text - finalize the streaming message or add new one
+                if (streamingMsgElement) {
+                    // Finalize the streaming message with complete content
+                    finalizeStreamingMessage(streamingMsgElement, data.text, 'assistant');
+                    streamingMsgElement = null;
+                    streamingTextBuffer = '';
+                } else {
+                    // No streaming - add as normal message
+                    addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: data.text });
+                    addChatMessage(data.text, 'assistant');
+                }
             } else if (eventType === 'turn.started' && data.message) {
                 // User message from SSE - add to history
                 addChatMessageToHistory(chatCurrentSession, { role: 'user', content: data.message });
+            } else if (eventType === 'turn.ended') {
+                // Turn ended - finalize any streaming message
+                if (streamingMsgElement && streamingTextBuffer) {
+                    finalizeStreamingMessage(streamingMsgElement, streamingTextBuffer, 'assistant');
+                }
+                streamingMsgElement = null;
+                streamingTextBuffer = '';
             }
+        }
+        
+        /// Create a streaming message element with a typing indicator
+        function createStreamingMessage(content, type) {
+            const container = document.getElementById('chatMessages');
+            if (!container) return null;
+            
+            const msg = document.createElement('div');
+            msg.className = 'message ' + type + ' streaming';
+            
+            const roleNames = { user: '你', assistant: 'AI', error: '错误', system: '系统', 'tool-call': '工具' };
+            const role = roleNames[type] || '系统';
+            const time = new Date().toLocaleTimeString();
+            
+            // Format content for display
+            let displayContent;
+            const safeText = escapeHtml(content);
+            if (typeof marked !== 'undefined') {
+                try {
+                    displayContent = marked.parse(safeText);
+                } catch (e) {
+                    displayContent = safeText.replace(/\n/g, '<br>');
+                }
+            } else {
+                displayContent = safeText.replace(/\n/g, '<br>');
+            }
+            
+            msg.innerHTML = '<div class="msg-role">' + role + ' <span class="msg-time">' + time + '</span> <span class="streaming-indicator">▊</span></div><div class="msg-content">' + displayContent + '</div>';
+            container.appendChild(msg);
+            container.scrollTop = container.scrollHeight;
+            return msg;
+        }
+        
+        /// Update a streaming message with new content
+        function updateStreamingMessage(msgElement, content, type) {
+            if (!msgElement) return;
+            
+            const safeText = escapeHtml(content);
+            let displayContent;
+            if (typeof marked !== 'undefined') {
+                try {
+                    displayContent = marked.parse(safeText);
+                } catch (e) {
+                    displayContent = safeText.replace(/\n/g, '<br>');
+                }
+            } else {
+                displayContent = safeText.replace(/\n/g, '<br>');
+            }
+            
+            const contentDiv = msgElement.querySelector('.msg-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = displayContent;
+            }
+            
+            // Auto-scroll
+            const container = document.getElementById('chatMessages');
+            if (container) container.scrollTop = container.scrollHeight;
+        }
+        
+        /// Finalize a streaming message with the complete content
+        function finalizeStreamingMessage(msgElement, content, type) {
+            if (!msgElement) return;
+            
+            msgElement.classList.remove('streaming');
+            
+            const indicator = msgElement.querySelector('.streaming-indicator');
+            if (indicator) indicator.remove();
+            
+            const safeText = escapeHtml(content);
+            let displayContent;
+            if (typeof marked !== 'undefined') {
+                try {
+                    displayContent = marked.parse(safeText);
+                } catch (e) {
+                    displayContent = safeText.replace(/\n/g, '<br>');
+                }
+            } else {
+                displayContent = safeText.replace(/\n/g, '<br>');
+            }
+            
+            const contentDiv = msgElement.querySelector('.msg-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = displayContent;
+            }
+            
+            // Add to history
+            addChatMessageToHistory(chatCurrentSession, { role: type, content: content });
+            
+            // Auto-scroll
+            const container = document.getElementById('chatMessages');
+            if (container) container.scrollTop = container.scrollHeight;
         }
         
         /// Update the chat session selector with current sessions list
@@ -2567,6 +2695,9 @@
         let eventSource = null;
         const maxEventLogSize = 100;
         const eventLog = [];
+        // Track streaming message element for real-time partial text updates
+        let streamingMsgElement = null;
+        let streamingTextBuffer = '';
         
         function initEventStream() {
             const statusDot = document.getElementById('eventStreamStatus');
@@ -2597,7 +2728,7 @@
                 // Handle all event types
                 const eventTypes = [
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended',
-                    'assistant.text', 'assistant.tool_use', 'tool_result',
+                    'assistant.text', 'assistant.partial', 'assistant.tool_use', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat'
                 ];
                 

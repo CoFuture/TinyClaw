@@ -461,8 +461,22 @@ async fn handle_agent_turn(
         session_id: session_key.to_string(),
     });
 
-    // Send to agent and get response
-    let response: String = ctx.agent.send_message(session_key, message, skill_prompt.as_deref()).await?;
+    // Use streaming mode to get partial text updates
+    let session_id_clone = session_key.to_string();
+    let event_emitter_clone = ctx.event_emitter.clone();
+    
+    let response: String = ctx.agent.send_message_streaming(
+        session_key,
+        message,
+        &[],
+        skill_prompt.as_deref(),
+        move |chunk| {
+            event_emitter_clone.emit(Event::AssistantPartial {
+                session_id: session_id_clone.clone(),
+                text: chunk,
+            });
+        },
+    ).await?;
 
     // Add assistant response to history
     ctx.history_manager.add_message(

@@ -111,6 +111,15 @@ struct OllamaResponse {
     response: String,
 }
 
+/// Ollama streaming SSE response line
+#[derive(Debug, Deserialize)]
+struct OllamaStreamResponse {
+    /// Text chunk
+    response: String,
+    /// Whether this is the final chunk
+    done: bool,
+}
+
 /// Agent client for AI model interaction
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
@@ -739,6 +748,129 @@ pub async fn send_message_with_history(
         debug!("Ollama response: {}", response.response);
 
         Ok(response.response)
+    }
+
+    /// Send message to Ollama API with streaming support.
+    /// Calls the callback for each text chunk as it arrives via SSE.
+    async fn send_ollama_streaming<F>(&self, config: &AgentConfig, message: &str, mut on_chunk: F) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
+        let model = config.model.clone();
+        let api_base = config.api_base.clone();
+
+        // For Ollama, default to localhost if no base URL
+        let base_url = if api_base.is_empty() || api_base == "https://api.anthropic.com" {
+            "http://localhost:11434".to_string()
+        } else {
+            api_base
+        };
+
+        info!("Sending streaming message to Ollama {}: {}", model, message);
+
+        let request = serde_json::json!({
+            "model": model,
+            "prompt": message,
+            "stream": true
+        });
+
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("{}/api/generate", base_url))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| Error::Network(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            error!("Ollama streaming error: {} - {}", status, body);
+            return Err(Error::Agent(format!("Ollama error: {} - {}", status, body)));
+        }
+
+        // Read SSE lines and process each chunk
+        let mut full_response = String::new();
+        let mut stream = resp.bytes_stream();
+        let mut buffer = Vec::new();
+        
+        use futures_util::StreamExt;
+        
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.map_err(std::io::Error::other)?;
+            buffer.extend_from_slice(&chunk);
+            
+            // Process complete lines (each SSE line starts with "data: ")
+            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                let line_str = String::from_utf8_lossy(&line);
+                let line_str = line_str.trim();
+                
+                if let Some(json_str) = line_str.strip_prefix("data: ") {
+                    if let Ok(stream_resp) = serde_json::from_str::<OllamaStreamResponse>(json_str) {
+                        if !stream_resp.response.is_empty() {
+                            full_response.push_str(&stream_resp.response);
+                            on_chunk(stream_resp.response);
+                        }
+                        if stream_resp.done {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        debug!("Ollama streaming complete: {} chars", full_response.len());
+        Ok(full_response)
+    }
+
+    /// Send a message with streaming partial text support.
+    /// Calls the callback for each text chunk as it arrives (for streaming providers like Ollama).
+    /// 
+    /// # Arguments
+    /// * `session_key` - Session identifier
+    /// * `message` - User message to send
+    /// * `history` - Conversation history
+    /// * `skill_prompt` - Optional skill instructions
+    /// * `on_partial` - Callback invoked with each text chunk as it arrives
+    pub async fn send_message_streaming(
+        &self,
+        session_key: &str,
+        message: &str,
+        history: &[(String, String)],
+        skill_prompt: Option<&str>,
+        on_partial: impl FnMut(String) + Send + 'static,
+    ) -> Result<String> {
+        let config = self.config.read().clone();
+
+        // Determine provider
+        let provider = config.provider.clone().unwrap_or_else(|| {
+            if config.model.starts_with("claude-") || config.model.starts_with("anthropic/") {
+                ModelProvider::Anthropic
+            } else if config.model.starts_with("gpt-") || config.model.starts_with("openai/") {
+                ModelProvider::OpenAI
+            } else {
+                ModelProvider::Ollama
+            }
+        });
+
+        // For non-streaming providers (Anthropic, OpenAI), fall back to regular method
+        // Ollama supports native streaming
+        if provider == ModelProvider::Ollama {
+            // Build prompt from history + current message
+            let mut prompt = String::new();
+            for (role, content) in history {
+                prompt.push_str(&format!("{}: {}\n", role, content));
+            }
+            prompt.push_str(&format!("user: {}\nassistant:", message));
+            
+            let full_response = self.send_ollama_streaming(&config, &prompt, on_partial).await?;
+            return Ok(full_response);
+        }
+
+        // Fall back to non-streaming for other providers
+        self.send_message_with_history(session_key, message, history, skill_prompt).await
     }
 
     /// Send a message and get a response (with tool calling loop)

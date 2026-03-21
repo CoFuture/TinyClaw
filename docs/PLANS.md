@@ -136,22 +136,45 @@
 
 ---
 
-## 当前迭代规划 (v4.6.0)
+## 当前迭代规划 (v4.7.0)
 
 ### 本轮目标
-**Agent 能力提升 + 交互体验优化**
+**Agent 流式响应 + 交互体验优化**
 
 **计划完成**:
-- [x] TUI 命令帮助系统增强
-  - 结构化命令元数据 (TuiCommandMeta)：名称、别名、描述、分类
-  - 命令分类：Session (n/new, d/delete)、Connection (r/reconnect)、Navigation (q/quit, h/help)
-  - Tab 补全支持所有命令别名
-  - 帮助面板重构：按分类展示命令，带颜色高亮
-- [ ] 交互体验持续打磨
+- [x] Agent 流式响应支持 (Ollama)
+  - 新增 `send_ollama_streaming` 方法：通过 SSE 逐块接收 AI 响应
+  - 新增 `send_message_streaming` 方法：支持流式回调，Ollama 自动使用流式
+  - 新增 `AssistantPartial` 事件：流式文本片段实时推送
+  - Gateway `handle_agent_turn` 集成流式路径，实时发射 partial 事件
+- [x] WebUI 实时流式显示
+  - SSE 事件流新增 `assistant.partial` 事件类型
+  - 实时文本缓冲区 + 流式消息元素动态更新
+  - 流式结束动画：`▊` 闪烁指示器，完成后自动消失
+  - CSS 动画增强：streaming 消息透明度 + blink 动画
+- [x] SSE 事件过滤增强
+  - `AssistantPartial` 加入 session filter 逻辑
+  - `AssistantPartial` 加入 event name match
+- [x] 依赖更新：reqwest 添加 `stream` feature
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
 - `cargo test` 全部通过 (176 tests)
+
+---
+
+### v4.6.0 (已完成 ✅)
+
+**完成事项**:
+- TUI 命令帮助系统增强
+  - 结构化命令元数据 (TuiCommandMeta)：名称、别名、描述、分类
+  - 命令分类：Session (n/new, d/delete)、Connection (r/reconnect)、Navigation (q/quit, h/help)
+  - Tab 补全支持所有命令别名
+  - 帮助面板重构：按分类展示命令，带颜色高亮
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: Agent 流式响应、WebUI 实时反馈
 
 ---
 
@@ -242,4 +265,4 @@
 
 ---
 
-*更新时间: 2026-03-22 07:02*
+*更新时间: 2026-03-22 07:32*

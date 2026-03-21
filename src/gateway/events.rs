@@ -34,6 +34,13 @@ pub enum Event {
         text: String,
     },
     
+    /// Assistant is sending partial/streaming text (incremental update)
+    #[serde(rename = "assistant.partial")]
+    AssistantPartial {
+        session_id: String,
+        text: String,
+    },
+    
     /// Assistant used a tool
     #[serde(rename = "assistant.tool_use")]
     AssistantToolUse {
