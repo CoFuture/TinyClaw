@@ -292,8 +292,34 @@
 
 ---
 
-## v1.7.0 待实现
-- 分布式支持 (节点发现、状态同步)
-- 插件市场/远程插件加载
-- 高级认证 (OAuth, JWT)
+## v1.7.0 - 2026-03-21
+
+### Iteration 17: 消除冗余 + 设计对齐
+
+**目标**: 消除冗余实现，对齐"小而精"设计目标
+
+消除冗余:
+- [x] 删除 plugins/ 模块 (~500行)
+- [x] 删除 tui/ 模块 (~420行)
+- [x] 删除 gateway/auth.rs
+- [x] 删除 gateway/persistence.rs
+- [x] 删除 gateway/session_ext.rs
+- [x] 删除 gateway/streaming.rs
+- [x] 删除 gateway/queue.rs
+- [x] 删除 gateway/templates.rs
+
+设计更新:
+- [x] 更新 PRINCIPLES.md - 添加设计原则
+- [x] 更新 PROJECT.md - 简化架构文档
+- [x] 更新 DESIGN.md - 精简设计文档
+
+代码量减少: ~2200行
+
+### 完成状态: ✅ 已完成
+
+---
+
+## v1.8.0 待实现
+- 交互式对话 UI
 - 错误处理与重试机制
+- 配置热重载

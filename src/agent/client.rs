@@ -372,9 +372,17 @@ impl Agent {
             "tools": openai_tools
         });
 
+        // Determine API version path based on model
+        // GLM models use v4, others use v1
+        let api_version = if model.starts_with("glm") {
+            "v4"
+        } else {
+            "v1"
+        };
+
         let response = self
             .http_client
-            .post(format!("{}/v1/chat/completions", api_base))
+            .post(format!("{}/{}/chat/completions", api_base, api_version))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request)
@@ -468,7 +476,7 @@ impl Agent {
         info!("Sending message to OpenAI {}: {}", model, message);
 
         let request = OpenAIRequest {
-            model,
+            model: model.clone(),
             messages: vec![Message {
                 role: "user".to_string(),
                 content: message.to_string(),
@@ -476,9 +484,16 @@ impl Agent {
             max_tokens: Some(1024),
         };
 
+        // Determine API version path based on model
+        let api_version = if model.starts_with("glm") {
+            "v4"
+        } else {
+            "v1"
+        };
+
         let response = self
             .http_client
-            .post(format!("{}/v1/chat/completions", api_base))
+            .post(format!("{}/{}/chat/completions", api_base, api_version))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request)
