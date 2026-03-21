@@ -120,8 +120,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metrics = Arc::new(MetricsCollector::new());
     let rate_limiter = Arc::new(RateLimiter::new());
 
-    // Create skill registry and session skill manager
-    let skill_registry = SkillRegistry::new();
+    // Create skill registry with persistence (if configured)
+    let skill_registry: Arc<SkillRegistry> = if !config.read().persistence.skills_path.is_empty() {
+        let data_dir = config.read().gateway.data_dir.clone();
+        let skills_path = config.read().persistence.skills_path.clone();
+        let persist_path = if skills_path.starts_with('/') {
+            std::path::PathBuf::from(&skills_path)
+        } else {
+            let base = data_dir
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| {
+                    dirs::data_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
+                        .join("tiny_claw")
+                });
+            base.join(&skills_path)
+        };
+        // Ensure parent directory exists
+        if let Some(parent) = persist_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let persist_path_str = persist_path.to_string_lossy().to_string();
+        info!("Enabling skill persistence at: {:?}", persist_path);
+        SkillRegistry::new_with_persistence(&persist_path_str)
+    } else {
+        info!("Skill persistence disabled, using in-memory skills");
+        SkillRegistry::new()
+    };
     let skill_manager = Arc::new(SessionSkillManager::new(skill_registry.clone()));
 
     // Create shutdown channel

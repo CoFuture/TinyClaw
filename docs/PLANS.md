@@ -136,48 +136,18 @@
 
 ---
 
-## 当前迭代规划 (v3.7.0)
+## 当前迭代规划 (v4.1.0)
 
 ### 本轮目标
-**Agent 上下文管理增强** (P0)
+**WebUI 监控面板 + 结构化日志增强** (P1)
 
-**已完成** ✅:
-- **Agent 上下文管理修复** - 修复 Agent 无法获取对话历史的严重 bug
-  - `send_message_with_history` 实现 - 真正的对话历史传递到 AI API
-  - 历史消息自动转换为 Anthropic/OpenAI API 格式
-  - Tool 消息正确编码（包含 tool_call_id 和 tool_name）
-  - `get_model_response` 现在传递完整的历史上下文给 AI 模型
-  - 保留向后兼容 - 原有 `send_message` 调用不受影响
-- 修复 clippy warning: SessionInfo 未使用字段
-
-**下一步**: 
-- 命令行客户端
-
-#### 基础修复 (持续)
-- `cargo clippy` 无警告
-- `cargo test` 全部通过 (170 tests)
-
----
-
-## 当前迭代规划 (v3.9.0)
-
-### 本轮目标
-**监控指标增强** (P1)
-
-**已完成** ✅:
-- **HTTP Metrics 中间件** - 新增请求指标收集中间件
-  - `MetricsLayer` / `metrics_middleware` - Tower 中间件，记录每个 HTTP 请求的 timing
-  - 自动记录所有 API 端点的请求量、平均响应时间、错误率
-  - `/api/metrics` 端点现在返回真实采集的 per-endpoint 数据
-- **修复 clippy warning** - 移除 `ChatClient` 中未使用的 `url` 和 `event_rx` 字段
-
-**下一步**: 
+**计划完成**:
 - 结构化日志增强 (tracing fields)
-- WebUI 监控面板
+- WebUI 监控面板可视化
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
-- `cargo test` 全部通过 (170 tests)
+- `cargo test` 全部通过 (173 tests)
 
 ---
 
@@ -186,6 +156,7 @@
 ### Agent 能力增强
 - [x] 上下文管理机制 (Context struct + 压缩策略) ✅ v3.7.0
 - [x] Skill 机制 (轻量级工具集) ✅ v3.0.0
+- [x] Skill 持久化 (自定义技能保存到 JSON) ✅ v4.0.0
 - [ ] 工具扩展 (更多内置工具)
 - [ ] Agent 配置文件支持
 
@@ -212,6 +183,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.0.0 | Skill 持久化 - 自定义技能自动保存到 JSON 文件，重启后自动加载；内置技能保护（无法删除/覆盖）；移除无用的 metrics_middleware dead code；cargo clippy 0 警告；cargo test 173 tests |
 | v3.9.0 | 监控指标增强 - HTTP Metrics 中间件、请求 timing 采集、clippy warning 修复 |
 | v3.8.0 | 交互体验优化 - HTTP API 会话创建、WebUI 会话管理面板增强、交互式 CLI 聊天客户端 |
 | v3.7.0 | Agent 上下文管理修复 - send_message_with_history 实现、历史上下文传递到 AI API、Tool 消息编码修复 |
@@ -232,4 +204,4 @@
 
 ---
 
-*更新时间: 2026-03-22 03:32*
+*更新时间: 2026-03-22 04:02*

@@ -109,6 +109,11 @@ pub struct PersistenceConfig {
     /// Database file path (relative to data_dir or absolute)
     #[serde(default = "default_persistence_path")]
     pub path: String,
+
+    /// Custom skills file path (relative to data_dir or absolute)
+    /// Set to empty string to disable skills persistence
+    #[serde(default = "default_skills_path")]
+    pub skills_path: String,
 }
 
 impl Default for PersistenceConfig {
@@ -116,12 +121,17 @@ impl Default for PersistenceConfig {
         Self {
             enabled: false,
             path: default_persistence_path(),
+            skills_path: default_skills_path(),
         }
     }
 }
 
 fn default_persistence_path() -> String {
     "tinyclaw.db".to_string()
+}
+
+fn default_skills_path() -> String {
+    "skills.json".to_string()
 }
 
 /// Graceful shutdown configuration
