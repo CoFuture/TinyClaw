@@ -1,9 +1,10 @@
 //! TUI Gateway Client - WebSocket client for connecting to the TinyClaw gateway
 
 use crate::gateway::protocol::{methods, Request, RequestStandard, Response};
+use crate::types::SessionHistory;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 use tokio_tungstenite::connect_async;
 use tracing::{debug, error, info};
 
@@ -50,6 +51,10 @@ pub enum TuiGatewayEvent {
     SessionsList(Vec<SessionInfo>),
     /// New session created
     SessionCreated { session_id: String, label: Option<String> },
+    /// Session history loaded
+    SessionHistoryLoaded { session_id: String, history: SessionHistory },
+    /// Session deleted
+    SessionDeleted { session_id: String },
 }
 
 /// Session info from gateway
@@ -126,7 +131,7 @@ impl TuiGatewayClient {
                         match msg {
                             Some(msg) => {
                                 // ignore write errors as they indicate connection issues
-                                let _ = ws_send.send(Message::Text(msg.into())).await;
+                                let _ = ws_send.send(TungsteniteMessage::Text(msg.into())).await;
                             }
                             None => break,
                         }
@@ -134,7 +139,7 @@ impl TuiGatewayClient {
                     ping_data = ping_rx.recv() => {
                         match ping_data {
                             Some(data) => {
-                                let _ = ws_send.send(Message::Pong(data.into())).await;
+                                let _ = ws_send.send(TungsteniteMessage::Pong(data.into())).await;
                             }
                             None => break,
                         }
@@ -153,7 +158,7 @@ impl TuiGatewayClient {
             let mut stream = ws_recv;
             while let Some(msg) = stream.next().await {
                 match msg {
-                    Ok(Message::Text(text)) => {
+                    Ok(TungsteniteMessage::Text(text)) => {
                         let text_str = text.to_string();
                         debug!("TUI received: {}", text_str);
                         
@@ -162,17 +167,17 @@ impl TuiGatewayClient {
                             Self::handle_response(&event_tx, response);
                         }
                     }
-                    Ok(Message::Close(_)) => {
+                    Ok(TungsteniteMessage::Close(_)) => {
                         let _ = event_tx.send(TuiGatewayEvent::Disconnected);
                         let _ = close_tx.send(()).await;
                         break;
                     }
-                    Ok(Message::Ping(data)) => {
+                    Ok(TungsteniteMessage::Ping(data)) => {
                         let _ = event_tx.send(TuiGatewayEvent::Pong);
                         let _ = ping_tx.send(data.to_vec()).await;
                     }
-                    Ok(Message::Pong(_)) => {}
-                    Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
+                    Ok(TungsteniteMessage::Pong(_)) => {}
+                    Ok(TungsteniteMessage::Binary(_)) | Ok(TungsteniteMessage::Frame(_)) => {}
                     Err(e) => {
                         let _ = event_tx.send(TuiGatewayEvent::ConnectionError(e.to_string()));
                         let _ = close_tx.send(()).await;
@@ -238,6 +243,30 @@ impl TuiGatewayClient {
                     }
                     if let Some(response_text) = result_obj.get("response") {
                         let _ = event_tx.send(TuiGatewayEvent::TurnEnded(response_text.to_string()));
+                    }
+                    // Check if this is a sessions.history response
+                    if let Some(session_id) = result_obj.get("sessionId") {
+                        if let Some(messages) = result_obj.get("messages") {
+                            if let Ok(history) = serde_json::from_value::<SessionHistory>(
+                                serde_json::json!({
+                                    "session_id": session_id,
+                                    "messages": messages
+                                })
+                            ) {
+                                let _ = event_tx.send(TuiGatewayEvent::SessionHistoryLoaded {
+                                    session_id: session_id.to_string(),
+                                    history,
+                                });
+                            }
+                        }
+                    }
+                    // Check if this is a sessions.delete response
+                    if result_obj.get("deleted") == Some(&serde_json::json!(true)) {
+                        if let Some(session_id) = result_obj.get("sessionId") {
+                            let _ = event_tx.send(TuiGatewayEvent::SessionDeleted {
+                                session_id: session_id.to_string(),
+                            });
+                        }
                     }
                 } else if resp.result.is_string() {
                     // Pong response
@@ -332,6 +361,38 @@ impl TuiGatewayClient {
             id: Some(format!("tui-create-session-{}", uuid::Uuid::new_v4())),
             method: methods::AGENT_SPAWN.to_string(),
             params: serde_json::json!({}),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get session history - sends request and returns immediately
+    /// History is delivered via the event channel as TuiGatewayEvent::SessionHistoryLoaded
+    pub async fn get_history(&self, session_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-history-{}", session_id)),
+            method: methods::SESSIONS_HISTORY.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Delete a session - sends request and returns immediately
+    /// Result is delivered via the event channel as TuiGatewayEvent::SessionDeleted
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-delete-{}", session_id)),
+            method: methods::SESSIONS_DELETE.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id
+            }),
         });
 
         let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;

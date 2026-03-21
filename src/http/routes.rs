@@ -229,6 +229,60 @@ async fn session_import(
     }))
 }
 
+/// Session delete response
+#[derive(Serialize)]
+pub struct SessionDeleteResponse {
+    pub success: bool,
+    pub session_id: String,
+    pub error: Option<String>,
+}
+
+/// Session delete handler
+async fn session_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<SessionDeleteResponse>) {
+    // Prevent deleting the main session
+    if session_id == "main" {
+        return (
+            HttpStatusCode::BAD_REQUEST,
+            Json(SessionDeleteResponse {
+                success: false,
+                session_id,
+                error: Some("Cannot delete the main session".to_string()),
+            }),
+        );
+    }
+
+    // Remove from session manager
+    let removed = state.session_manager.remove(&session_id);
+    
+    if removed.is_none() {
+        return (
+            HttpStatusCode::NOT_FOUND,
+            Json(SessionDeleteResponse {
+                success: false,
+                session_id,
+                error: Some("Session not found".to_string()),
+            }),
+        );
+    }
+
+    // Remove history for this session
+    state.history_manager.remove(&session_id);
+
+    info!("HTTP: Deleted session: {}", session_id);
+
+    (
+        HttpStatusCode::OK,
+        Json(SessionDeleteResponse {
+            success: true,
+            session_id,
+            error: None,
+        }),
+    )
+}
+
 /// Config get handler - returns public config only (no secrets)
 async fn config_get(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
     let config = state.config.read();
@@ -590,6 +644,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions", get(sessions_list))
         .route("/api/sessions/{id}/messages", get(session_messages))
         .route("/api/sessions/{id}/export", get(session_export))
+        .route("/api/sessions/{id}", axum::routing::delete(session_delete))
         .route("/api/sessions/import", post(session_import))
         .route("/api/tools", get(tools_list))
         // Skill management API

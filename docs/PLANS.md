@@ -136,31 +136,28 @@
 
 ---
 
-## 当前迭代规划 (v3.3.0)
+## 当前迭代规划 (v3.4.0)
 
 ### 本轮目标
-**TUI 多 Session 支持** (P0)
+**TUI 会话历史加载 + 会话删除** (P0)
 
 **已完成** ✅:
-- **Gateway agent.spawn 处理** - 新增 `handle_agent_spawn` 处理函数 (`src/gateway/messages.rs`)
-  - 支持创建新的 isolated session
-  - 可选 label 参数命名会话
-  - 自动注册到 SessionManager 和 HistoryManager
-- **TUI 会话列表同步** - TUI 连接 Gateway 时自动获取会话列表
-  - `SessionsList` 事件类型 - 接收并解析网关返回的会话列表
-  - `SessionCreated` 事件类型 - 监听新会话创建事件
-  - 连接成功后自动调用 `sessions.list` 获取现有会话
-- **TUI 新建会话命令** - 新增 `:n` 命令创建新会话
-  - 在 TUI 中输入 `:n` 即可创建新的 isolated session
-  - 创建后自动切换到新会话
-- **TUI 会话管理 UI** - 会话列表自动更新反映网关状态
-  - 显示所有活跃会话 ID
-  - 新会话创建后自动出现在列表中
-- **会话历史初始化** - 新会话自动初始化空的历史记录
+- **TUI 会话历史加载** - 连接网关后自动加载会话历史
+  - `SessionHistoryLoaded` 事件类型 - 接收并解析网关返回的会话历史
+  - `get_history(session_id)` 方法 - TUI Gateway Client 支持获取会话历史
+  - 连接成功后自动获取所有会话的历史记录
+  - 历史消息缓存在 TUI 本地状态中
+- **TUI 会话删除功能** - 支持删除不需要的会话
+  - `sessions.delete` WebSocket 方法 - 网关支持删除会话
+  - `DELETE /api/sessions/{id}` HTTP API - REST API 删除会话
+  - `SessionDeleted` 事件类型 - 删除完成后通知客户端
+  - `:d` 命令 - TUI 中删除当前会话（不能删除 main）
+  - 删除后自动切换到其他会话
+- **防止误删 main 会话** - main 会话无法被删除
 
 **下一步**: 
-- TUI 持久化消息历史
-- 会话删除功能
+- TUI 消息历史持久化到本地
+- WebUI 会话管理面板
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告 (1 minor warning: SessionInfo fields for future use)
@@ -182,6 +179,8 @@
 - [x] 实时反馈 (SSE 事件流) ✅ v3.1.0
 - [x] TUI Gateway 集成 ✅ v3.2.0
 - [x] TUI 多 Session 支持 ✅ v3.3.0
+- [x] TUI 会话历史加载 ✅ v3.4.0
+- [x] TUI 会话删除功能 ✅ v3.4.0
 - [ ] 命令行客户端
 
 ### 稳定性
@@ -195,6 +194,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v3.4.0 | TUI 会话历史加载 + 会话删除 - 自动加载历史、:d 删除会话、防止删除 main |
 | v3.3.0 | TUI 多 Session 支持 - agent.spawn 处理器、会话列表同步、:n 新建会话 |
 | v3.2.0 | TUI Gateway 集成 - WebSocket 客户端、实时对话、连接状态显示 |
 | v3.1.0 | 实时反馈系统 (SSE) + 新事件类型 + WebUI 实时事件面板 |
@@ -209,4 +209,4 @@
 
 ---
 
-*更新时间: 2026-03-22 00:32*
+*更新时间: 2026-03-22 01:02*

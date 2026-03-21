@@ -101,6 +101,7 @@ pub async fn handle_request(
         methods::SESSIONS_LIST => handle_sessions_list(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSIONS_SEND => handle_sessions_send(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::SESSIONS_HISTORY => handle_sessions_history(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSIONS_DELETE => handle_sessions_delete(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::AGENT_SPAWN => handle_agent_spawn(ctx, jsonrpc_id.clone(), params).await,
         methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -353,6 +354,41 @@ async fn handle_sessions_history(
             "messages": [],
         }))
     }
+}
+
+/// Handle sessions.delete
+async fn handle_sessions_delete(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionKey required".to_string()))?
+        .to_string();
+
+    // Prevent deleting the main session
+    if session_key == "main" {
+        return Err(Error::Protocol("Cannot delete the main session".to_string()));
+    }
+
+    // Remove from session manager
+    let removed = ctx.session_manager.remove(&session_key);
+    
+    if removed.is_none() {
+        return Err(Error::SessionNotFound(session_key.to_string()));
+    }
+
+    // Remove history for this session
+    ctx.history_manager.remove(&session_key);
+
+    info!("Deleted session: {}", session_key);
+
+    Ok(serde_json::json!({
+        "deleted": true,
+        "sessionId": session_key,
+    }))
 }
 
 /// Handle sessions.send

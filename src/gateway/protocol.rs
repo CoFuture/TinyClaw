@@ -231,6 +231,8 @@ pub mod methods {
     pub const AGENT_SPAWN: &str = "agent.spawn";
     /// Sessions history
     pub const SESSIONS_HISTORY: &str = "sessions.history";
+    /// Sessions delete
+    pub const SESSIONS_DELETE: &str = "sessions.delete";
     /// Exec command
     pub const EXEC: &str = "exec";
     /// Tool execute

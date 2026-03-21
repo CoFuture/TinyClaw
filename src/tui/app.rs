@@ -254,7 +254,7 @@ impl TuiApp {
                     self.state.sessions.push(session_id.clone());
                     self.state.session_histories.insert(
                         session_id.clone(),
-                        crate::types::SessionHistory::new(session_id),
+                        crate::types::SessionHistory::new(session_id.clone()),
                     );
                 }
                 // Set current session to first one if available and not set
@@ -262,6 +262,45 @@ impl TuiApp {
                     if let Some(first) = self.state.sessions.first() {
                         self.state.set_current_session(first.clone());
                     }
+                }
+                // Fetch history for all sessions
+                let client = self.gateway_client.clone();
+                let session_ids = self.state.sessions.clone();
+                tokio::spawn(async move {
+                    let client = client.read().await;
+                    for session_id in session_ids {
+                        if let Err(e) = client.get_history(&session_id).await {
+                            error!("Failed to fetch history for {}: {}", session_id, e);
+                        }
+                    }
+                });
+            }
+            TuiGatewayEvent::SessionHistoryLoaded { session_id, history } => {
+                info!("Loaded history for session {}: {} messages", session_id, history.messages.len());
+                // Update session history in state
+                if let Some(existing) = self.state.session_histories.get_mut(&session_id) {
+                    // Merge messages - only add messages that don't already exist
+                    let existing_ids: std::collections::HashSet<_> = 
+                        existing.messages.iter().map(|m| m.id.clone()).collect();
+                    for msg in history.messages {
+                        if !existing_ids.contains(&msg.id) {
+                            existing.add_message(msg);
+                        }
+                    }
+                } else {
+                    // Session exists in list but no history yet
+                    self.state.session_histories.insert(session_id.clone(), history);
+                }
+            }
+            TuiGatewayEvent::SessionDeleted { session_id } => {
+                info!("Session deleted: {}", session_id);
+                // Remove from sessions list
+                self.state.sessions.retain(|s| s != &session_id);
+                self.state.session_histories.remove(&session_id);
+                // If current session was deleted, switch to another
+                if self.state.current_session_id.as_ref() == Some(&session_id) {
+                    self.state.current_session_id = self.state.sessions.first().cloned();
+                    self.state.scroll_offset = 0;
                 }
             }
             TuiGatewayEvent::SessionCreated { session_id, label } => {
@@ -371,6 +410,23 @@ impl TuiApp {
                                         error!("Failed to create session: {}", e);
                                     }
                                 });
+                            }
+                            KeyCode::Char('d') => {
+                                // Delete current session (if not main)
+                                if let Some(ref session_id) = self.state.current_session_id {
+                                    if session_id != "main" {
+                                        let client = self.gateway_client.clone();
+                                        let sid = session_id.clone();
+                                        tokio::spawn(async move {
+                                            let client = client.read().await;
+                                            if let Err(e) = client.delete_session(&sid).await {
+                                                error!("Failed to delete session: {}", e);
+                                            }
+                                        });
+                                    } else {
+                                        self.state.set_error(Some("Cannot delete main session".to_string()));
+                                    }
+                                }
                             }
                             _ => {}
                         }
@@ -569,6 +625,7 @@ impl TuiApp {
             Line::from(" :q - Quit"),
             Line::from(" :r - Reconnect gateway"),
             Line::from(" :n - Create new session"),
+            Line::from(" :d - Delete current session"),
             Line::from(" :h - Toggle this help"),
             Line::from(""),
             Line::from(" Press any key to close "),
