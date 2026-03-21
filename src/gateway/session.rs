@@ -1,6 +1,7 @@
 //! Session management
 
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -9,7 +10,7 @@ use uuid::Uuid;
 pub type SessionId = String;
 
 /// Session state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     /// Unique session ID
     pub id: SessionId,
@@ -27,7 +28,7 @@ pub struct Session {
 }
 
 /// Session kind
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum SessionKind {
     /// Main session (direct chat)

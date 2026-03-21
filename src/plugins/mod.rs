@@ -4,10 +4,12 @@
 //! - 自定义消息处理器
 //! - 自定义认证提供者
 
+pub mod api;
 pub mod loader;
 pub mod manager;
 pub mod traits;
 
+pub use api::PluginApi;
 pub use loader::PluginLoader;
 pub use manager::PluginManager;
 pub use traits::{Hook, Plugin, PluginMetadata};

@@ -156,10 +156,38 @@
 
 ---
 
+## v1.2.0 - 2026-03-21
+
+### Iteration 12: 认证授权与会话增强
+
+新增功能:
+- [x] 认证与授权模块 (auth.rs)
+  - ApiKey 结构 - API 密钥认证
+  - Permission 枚举 - 权限类型 (Read, Write, Admin, Execute)
+  - Authenticator - 密钥管理验证器
+  - require_admin / require_permission 辅助函数
+- [x] 消息模板系统 (templates.rs)
+  - MessageTemplate - 模板结构支持变量替换
+  - TemplateManager - 模板管理器
+  - 6 个内置模板 (greeting, farewell, error_*, success, processing)
+- [x] 高级会话管理 (session_ext.rs)
+  - SessionTag - 会话标签
+  - ExtendedSession - 扩展会话信息
+  - AdvancedSessionManager - 高级会话管理
+  - 会话优先级、置顶、标签功能
+  - 会话导出/导入支持
+- [x] 插件 API (plugins/api.rs)
+  - PluginApi - 插件 HTTP API 状态管理
+  - 插件启用/禁用/列表功能
+
+### 完成状态: ✅ 已完成并推送
+
+---
+
 ## 迭代计划
 
-### v1.2.0 待实现
-- 高级会话管理
-- 认证与授权
-- 消息模板
-- 插件 API
+### v1.3.0 待实现
+- WebSocket 消息队列优化
+- 分布式支持
+- 指标收集与监控
+- 速率限制
