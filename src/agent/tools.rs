@@ -211,6 +211,56 @@ impl ToolExecutor {
             },
         );
 
+        // Register sed_file tool (replace lines in a file)
+        tools.insert(
+            "sed_file".to_string(),
+            Tool {
+                name: "sed_file".to_string(),
+                description: "Replace specific lines in a file".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to edit"
+                        },
+                        "old_text": {
+                            "type": "string",
+                            "description": "Text to search for (first occurrence will be replaced)"
+                        },
+                        "new_text": {
+                            "type": "string",
+                            "description": "Text to replace with"
+                        },
+                        "line_number": {
+                            "type": "number",
+                            "description": "Specific line number to replace (1-indexed, takes precedence over old_text)"
+                        }
+                    },
+                    "required": ["path", "new_text"]
+                }),
+            },
+        );
+
+        // Register which tool (find executable in PATH)
+        tools.insert(
+            "which".to_string(),
+            Tool {
+                name: "which".to_string(),
+                description: "Find an executable in the system PATH".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Name of the executable to find"
+                        }
+                    },
+                    "required": ["command"]
+                }),
+            },
+        );
+
         Self { tools }
     }
 
@@ -235,6 +285,8 @@ impl ToolExecutor {
             "http_request" => self.execute_http_request(input).await,
             "glob" => self.execute_glob(input).await,
             "grep" => self.execute_grep(input).await,
+            "sed_file" => self.execute_sed_file(input).await,
+            "which" => self.execute_which(input).await,
             _ => ToolResult {
                 success: false,
                 output: String::new(),
@@ -712,6 +764,156 @@ impl ToolExecutor {
             error: None,
         }
     }
+
+    /// Execute the sed_file tool - replace lines in a file
+    async fn execute_sed_file(&self, input: serde_json::Value) -> ToolResult {
+        let path = input
+            .get("path")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .unwrap_or("");
+
+        let new_text = input
+            .get("new_text")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .unwrap_or("");
+
+        if path.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("path is required".to_string()),
+            };
+        }
+
+        let line_number = input
+            .get("line_number")
+            .and_then(|v: &serde_json::Value| v.as_u64())
+            .map(|n| n as usize);
+
+        let old_text = input
+            .get("old_text")
+            .and_then(|v: &serde_json::Value| v.as_str());
+
+        info!("sed_file: path='{}', line_number={:?}, old_text={:?}, new_text has {} chars",
+            path, line_number, old_text.as_ref().map(|s| &s[..s.len().min(50)]), new_text.len());
+
+        // Read the file
+        let content = match fs::read_to_string(path).await {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Failed to read file: {}", e)),
+                };
+            }
+        };
+
+        let new_content = if let Some(lineno) = line_number {
+            // Replace by line number (1-indexed)
+            let mut lines: Vec<&str> = content.lines().collect();
+            if lineno == 0 || lineno > lines.len() {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Line number {} out of range (file has {} lines)", lineno, lines.len())),
+                };
+            }
+            lines[lineno - 1] = new_text;
+            lines.join("\n")
+        } else if let Some(needle) = old_text {
+            // Replace first occurrence of old_text
+            if let Some(pos) = content.find(needle) {
+                let mut new_content = content.clone();
+                new_content.replace_range(pos..pos + needle.len(), new_text);
+                new_content
+            } else {
+                return ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some(format!("Text '{}' not found in file", &needle[..needle.len().min(50)])),
+                };
+            }
+        } else {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("Either 'line_number' or 'old_text' must be provided".to_string()),
+            };
+        };
+
+        // Write back
+        if let Err(e) = fs::write(path, &new_content).await {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!("Failed to write file: {}", e)),
+            };
+        }
+
+        ToolResult {
+            success: true,
+            output: "File updated successfully".to_string(),
+            error: None,
+        }
+    }
+
+    /// Execute the which tool - find executable in PATH
+    async fn execute_which(&self, input: serde_json::Value) -> ToolResult {
+        let command = input
+            .get("command")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .unwrap_or("");
+
+        if command.is_empty() {
+            return ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some("command is required".to_string()),
+            };
+        }
+
+        info!("which: finding '{}' in PATH", command);
+
+        // Use std::env::split_paths to search PATH
+        let path_var = std::env::var("PATH").unwrap_or_default();
+        let candidates: Vec<std::path::PathBuf> = std::env::split_paths(&path_var).collect();
+
+        for dir in candidates {
+            let candidate = dir.join(command);
+            // Check if file exists and is executable
+            if candidate.is_file() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = candidate.metadata() {
+                        let mode = metadata.permissions().mode();
+                        if mode & 0o111 != 0 {
+                            return ToolResult {
+                                success: true,
+                                output: candidate.display().to_string(),
+                                error: None,
+                            };
+                        }
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    return ToolResult {
+                        success: true,
+                        output: candidate.display().to_string(),
+                        error: None,
+                    };
+                }
+            }
+        }
+
+        ToolResult {
+            success: true,
+            output: "(not found)".to_string(),
+            error: Some(format!("'{}' not found in PATH", command)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -723,7 +925,7 @@ mod tests {
         let executor = ToolExecutor::new();
         let tools = executor.list_tools();
         assert!(!tools.is_empty());
-        assert_eq!(tools.len(), 7); // exec, read_file, write_file, list_dir, http_request, glob, grep
+        assert_eq!(tools.len(), 9); // exec, read_file, write_file, list_dir, http_request, glob, grep, sed_file, which
     }
 
     #[test]
@@ -995,5 +1197,94 @@ mod tests {
         let re = ToolExecutor::pattern_to_regex("*.toml").unwrap();
         assert!(re.is_match("Cargo.toml"));
         assert!(!re.is_match("Cargo.tomll"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_sed_file_by_line_number() {
+        let executor = ToolExecutor::new();
+        // Create a temp file
+        let temp_path = "/tmp/tinyclaw_test_sed.txt";
+        tokio::fs::write(temp_path, "line1\nline2\nline3\n").await.unwrap();
+        
+        let result = executor.execute("sed_file", serde_json::json!({
+            "path": temp_path,
+            "new_text": "replaced",
+            "line_number": 2
+        })).await;
+        
+        assert!(result.success);
+        assert_eq!(result.output, "File updated successfully");
+        
+        // Verify the change
+        let content = tokio::fs::read_to_string(temp_path).await.unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines[1], "replaced");
+        
+        // Cleanup
+        tokio::fs::remove_file(temp_path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_sed_file_by_old_text() {
+        let executor = ToolExecutor::new();
+        let temp_path = "/tmp/tinyclaw_test_sed2.txt";
+        tokio::fs::write(temp_path, "hello world\nfoo bar\n").await.unwrap();
+        
+        let result = executor.execute("sed_file", serde_json::json!({
+            "path": temp_path,
+            "old_text": "world",
+            "new_text": "universe"
+        })).await;
+        
+        assert!(result.success);
+        
+        let content = tokio::fs::read_to_string(temp_path).await.unwrap();
+        assert!(content.contains("universe"));
+        assert!(!content.contains("world"));
+        
+        tokio::fs::remove_file(temp_path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_sed_file_missing_path() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("sed_file", serde_json::json!({
+            "new_text": "something"
+        })).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_which_rustc() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("which", serde_json::json!({
+            "command": "rustc"
+        })).await;
+        
+        // rustc should be in PATH on this system
+        assert!(result.success);
+        assert!(!result.output.is_empty() && result.output != "(not found)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_which_nonexistent() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("which", serde_json::json!({
+            "command": "__nonexistent_command_tinyclaw_xyz123__"
+        })).await;
+        
+        assert!(result.success); // Tool succeeds even if not found
+        assert_eq!(result.output, "(not found)");
+    }
+
+    #[tokio::test]
+    async fn test_execute_which_missing_command() {
+        let executor = ToolExecutor::new();
+        let result = executor.execute("which", serde_json::json!({})).await;
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
     }
 }

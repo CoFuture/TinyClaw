@@ -11,5 +11,5 @@ pub mod ratelimit;
 pub mod types;
 
 pub use common::error::Error;
-pub use persistence::{HistoryManager, SqliteStore};
+pub use persistence::HistoryManager;
 pub use types::{Message, Role, SessionHistory};

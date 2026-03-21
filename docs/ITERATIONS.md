@@ -439,6 +439,35 @@
 
 ---
 
+## v2.0.3 - 2026-03-21
+
+### Iteration 23: 新工具 + 代码清理
+
+**目标**: 增加实用工具，清理废弃代码
+
+新增工具:
+- [x] `sed_file` - 局部文件编辑工具
+  - 支持按行号替换 (line_number 参数)
+  - 支持按文本内容替换 (old_text + new_text 参数)
+  - 对 AI Agent 非常有用，可做精确修改而不必重写整个文件
+- [x] `which` - PATH 中查找可执行文件
+  - 跨平台实现 (Unix permission bit 检查)
+
+代码清理:
+- [x] 修复版本号: Cargo.toml 2.0.1 → 2.0.3 (与 git commit 对齐)
+- [x] 删除废弃的 `gateway/history.rs` 及其模块导出
+- [x] 移除 `lib.rs` 中不再使用的 `SqliteStore` 公开导出
+- [x] 移除 `persistence/mod.rs` 中的 `#[allow(unused)]` SqliteStore 重导出
+
+测试增强:
+- [x] 新增 6 个测试用例 (sed_file × 3, which × 3)
+
+代码质量:
+- [x] cargo clippy -- -D warnings - 通过 (0 警告)
+- [x] cargo test - 88 个测试通过 (+6 新测试)
+
+---
+
 ## v2.0.0 待规划 (完整功能)
 - 分布式支持 (节点发现、状态同步)
 - 插件市场/远程插件加载
