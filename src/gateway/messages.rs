@@ -404,6 +404,12 @@ async fn handle_agent_turn(
 
     debug!("[{}] Agent turn: session={}", request_id, session_key);
 
+    // Emit turn started event
+    ctx.event_emitter.emit(Event::TurnStarted {
+        session_id: session_key.to_string(),
+        message: message.to_string(),
+    });
+
     // Add user message to history
     ctx.history_manager.add_message(
         session_key,
@@ -413,6 +419,11 @@ async fn handle_agent_turn(
     // Generate skill prompt for this session
     let skill_prompt = generate_skill_prompt(ctx, session_key);
     
+    // Emit thinking event
+    ctx.event_emitter.emit(Event::TurnThinking {
+        session_id: session_key.to_string(),
+    });
+
     // Send to agent and get response
     let response: String = ctx.agent.send_message(session_key, message, skill_prompt.as_deref()).await?;
 
@@ -422,10 +433,16 @@ async fn handle_agent_turn(
         crate::types::Message::assistant(&response),
     );
 
-    // Emit event
+    // Emit assistant text event
     ctx.event_emitter.emit(Event::AssistantText {
         session_id: session_key.to_string(),
         text: response.clone(),
+    });
+
+    // Emit turn ended event
+    ctx.event_emitter.emit(Event::TurnEnded {
+        session_id: session_key.to_string(),
+        response: response.clone(),
     });
 
     Ok(serde_json::json!({

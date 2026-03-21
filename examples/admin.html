@@ -284,6 +284,85 @@
             max-height: 400px;
             overflow-y: auto;
         }
+        
+        /* Events Panel */
+        .events-panel {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .event-item {
+            display: flex;
+            gap: 12px;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 13px;
+            align-items: flex-start;
+        }
+        .event-item:last-child {
+            border-bottom: none;
+        }
+        .event-time {
+            color: #555;
+            font-size: 11px;
+            min-width: 70px;
+            flex-shrink: 0;
+        }
+        .event-type {
+            color: #00d9ff;
+            font-weight: bold;
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+        .event-session {
+            color: #888;
+            font-size: 11px;
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .event-content {
+            color: #ccc;
+            flex: 1;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .event-item.event-turn-started .event-type { color: #ff9800; }
+        .event-item.event-turn-thinking .event-type { color: #2196f3; }
+        .event-item.event-turn-ended .event-type { color: #4caf50; }
+        .event-item.event-error .event-type { color: #f44336; }
+        .event-item.event-tool .event-type { color: #9c27b0; }
+        .event-item.event-tool-result .event-type { color: #ff5722; }
+        .event-item.event-heartbeat .event-type { color: #607d8b; }
+        .event-item.event-system .event-type { color: #888; }
+        
+        /* Status dot */
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            flex-shrink: 0;
+        }
+        .status-dot.connected {
+            background: #00ff88;
+            box-shadow: 0 0 8px rgba(0,255,136,0.5);
+        }
+        .status-dot.connecting {
+            background: #ff9800;
+            animation: pulse 1s infinite;
+        }
+        .status-dot.error {
+            background: #f44336;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
         .skill-item {
             background: rgba(0,0,0,0.2);
             border-radius: 8px;
@@ -806,6 +885,33 @@
                     <button class="btn" onclick="saveConfig()">💾 保存配置</button>
                     <button class="btn btn-secondary" onclick="reloadConfig()">🔄 重载配置</button>
                     <span id="configStatus"></span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Real-time Events -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🔔 实时事件流</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="status-dot" id="eventStreamStatus"></span>
+                    <span id="eventStreamStatusText" style="color: #888; font-size: 13px;">连接中...</span>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="font-size: 13px; color: #888;">
+                        过滤会话:
+                        <select id="eventSessionFilter" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 4px 8px; border-radius: 4px;">
+                            <option value="">全部</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="clearEventLog()">🗑️ 清除</button>
+                </div>
+            </div>
+            <div class="events-panel" id="eventsPanel">
+                <div class="event-item event-system">
+                    <span class="event-time">-</span>
+                    <span class="event-type">系统</span>
+                    <span class="event-content">等待事件连接...</span>
                 </div>
             </div>
         </div>
@@ -1500,11 +1606,206 @@
             chatWs.send(JSON.stringify(request));
         }
 
+        // SSE Event Stream
+        let eventSource = null;
+        const maxEventLogSize = 100;
+        const eventLog = [];
+        
+        function initEventStream() {
+            const statusDot = document.getElementById('eventStreamStatus');
+            const statusText = document.getElementById('eventStreamStatusText');
+            
+            statusDot.className = 'status-dot connecting';
+            statusText.textContent = '连接中...';
+            
+            const sessionFilter = document.getElementById('eventSessionFilter').value;
+            const url = sessionFilter ? '/api/events?session_id=' + encodeURIComponent(sessionFilter) : '/api/events';
+            
+            try {
+                eventSource = new EventSource(url);
+                
+                eventSource.onopen = function() {
+                    statusDot.className = 'status-dot connected';
+                    statusText.textContent = '已连接';
+                    clearEventLog();
+                    addEvent({ type: 'system', content: '事件流已连接' });
+                };
+                
+                eventSource.onerror = function(err) {
+                    console.error('EventSource error:', err);
+                    statusDot.className = 'status-dot error';
+                    statusText.textContent = '连接错误';
+                };
+                
+                // Handle all event types
+                const eventTypes = [
+                    'connected', 'turn.started', 'turn.thinking', 'turn.ended',
+                    'assistant.text', 'assistant.tool_use', 'tool_result',
+                    'session.created', 'session.ended', 'error', 'status', 'heartbeat'
+                ];
+                
+                eventTypes.forEach(type => {
+                    eventSource.addEventListener(type, function(e) {
+                        try {
+                            const data = JSON.parse(e.data);
+                            addEvent({
+                                type: type,
+                                session_id: data.session_id || null,
+                                content: data
+                            });
+                            
+                            // Update session filter dropdown if we see a new session
+                            if (data.session_id) {
+                                updateSessionFilter(data.session_id);
+                            }
+                        } catch (err) {
+                            addEvent({ type: type, content: e.data });
+                        }
+                    });
+                });
+                
+            } catch (e) {
+                console.error('EventSource connection failed:', e);
+                statusDot.className = 'status-dot error';
+                statusText.textContent = '连接失败';
+            }
+        }
+        
+        function addEvent(event) {
+            const panel = document.getElementById('eventsPanel');
+            if (!panel) return;
+            
+            // Keep log size limited
+            if (eventLog.length >= maxEventLogSize) {
+                eventLog.shift();
+                if (panel.firstChild && panel.firstChild.classList && panel.firstChild.classList.contains('event-system')) {
+                    // Keep the first system message, remove next
+                    if (panel.children[1]) {
+                        panel.removeChild(panel.children[1]);
+                    }
+                } else {
+                    panel.removeChild(panel.firstChild);
+                }
+            }
+            
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            
+            // Determine CSS class based on event type
+            let cssClass = 'event-item';
+            if (event.type === 'turn.started') cssClass += ' event-turn-started';
+            else if (event.type === 'turn.thinking') cssClass += ' event-turn-thinking';
+            else if (event.type === 'turn.ended') cssClass += ' event-turn-ended';
+            else if (event.type === 'error') cssClass += ' event-error';
+            else if (event.type === 'assistant.tool_use') cssClass += ' event-tool';
+            else if (event.type === 'tool_result') cssClass += ' event-tool-result';
+            else if (event.type === 'heartbeat') cssClass += ' event-heartbeat';
+            else if (event.type === 'system') cssClass += ' event-system';
+            
+            // Format content display
+            let contentText = '';
+            if (typeof event.content === 'string') {
+                contentText = event.content;
+            } else if (event.content) {
+                // For JSON events, show a summary
+                if (event.type === 'connected') {
+                    contentText = '已连接到事件流' + (event.content.filter ? ' (过滤: ' + event.content.filter + ')' : '');
+                } else if (event.type === 'turn.started') {
+                    contentText = '开始处理: ' + (event.content.message || '').substring(0, 50) + (event.content.message && event.content.message.length > 50 ? '...' : '');
+                } else if (event.type === 'turn.thinking') {
+                    contentText = 'AI 思考中...';
+                } else if (event.type === 'turn.ended') {
+                    contentText = '处理完成，响应: ' + ((event.content.response || '').substring(0, 40)) + '...';
+                } else if (event.type === 'assistant.text') {
+                    contentText = (event.content.text || '').substring(0, 60) + ((event.content.text || '').length > 60 ? '...' : '');
+                } else if (event.type === 'assistant.tool_use') {
+                    contentText = '调用工具: ' + event.content.tool;
+                } else if (event.type === 'tool_result') {
+                    const out = event.content.output || '';
+                    contentText = '结果: ' + out.substring(0, 40) + (out.length > 40 ? '...' : '');
+                } else if (event.type === 'heartbeat') {
+                    contentText = '心跳';
+                } else {
+                    contentText = JSON.stringify(event.content).substring(0, 60);
+                }
+            }
+            
+            const item = document.createElement('div');
+            item.className = cssClass;
+            item.innerHTML = 
+                '<span class="event-time">' + time + '</span>' +
+                '<span class="event-type">' + formatEventType(event.type) + '</span>' +
+                (event.session_id ? '<span class="event-session">' + escapeHtml(event.session_id.substring(0, 8)) + '</span>' : '<span class="event-session">-</span>') +
+                '<span class="event-content">' + escapeHtml(contentText) + '</span>';
+            
+            panel.appendChild(item);
+            panel.scrollTop = panel.scrollHeight;
+            
+            eventLog.push(event);
+        }
+        
+        function formatEventType(type) {
+            const names = {
+                'connected': '已连接',
+                'turn.started': 'Turn开始',
+                'turn.thinking': '思考中',
+                'turn.ended': 'Turn结束',
+                'assistant.text': 'AI回复',
+                'assistant.tool_use': '工具调用',
+                'tool_result': '工具结果',
+                'session.created': '会话创建',
+                'session.ended': '会话结束',
+                'error': '错误',
+                'status': '状态',
+                'heartbeat': '心跳',
+                'system': '系统'
+            };
+            return names[type] || type;
+        }
+        
+        function clearEventLog() {
+            const panel = document.getElementById('eventsPanel');
+            if (!panel) return;
+            panel.innerHTML = '<div class="event-item event-system"><span class="event-time">-</span><span class="event-type">系统</span><span class="event-content">日志已清除</span></div>';
+            eventLog.length = 0;
+        }
+        
+        function updateSessionFilter(sessionId) {
+            const select = document.getElementById('eventSessionFilter');
+            const options = select.options;
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].value === sessionId) return; // Already in list
+            }
+            const opt = document.createElement('option');
+            opt.value = sessionId;
+            opt.textContent = sessionId.substring(0, 8) + '...';
+            select.appendChild(opt);
+        }
+        
+        // Handle session filter change
+        document.addEventListener('DOMContentLoaded', function() {
+            const filter = document.getElementById('eventSessionFilter');
+            if (filter) {
+                filter.addEventListener('change', function() {
+                    if (eventSource) {
+                        eventSource.close();
+                    }
+                    initEventStream();
+                });
+            }
+        });
+
         // Initialize chat when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initChat);
         } else {
             initChat();
+        }
+        
+        // Initialize event stream when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initEventStream);
+        } else {
+            initEventStream();
         }
     </script>
 </body>

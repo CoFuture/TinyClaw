@@ -3,10 +3,30 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-/// Event types
+/// Event types for real-time streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Event {
+    /// Turn started (agent beginning to process a message)
+    #[serde(rename = "turn.started")]
+    TurnStarted {
+        session_id: String,
+        message: String,
+    },
+    
+    /// Agent is thinking
+    #[serde(rename = "turn.thinking")]
+    TurnThinking {
+        session_id: String,
+    },
+    
+    /// Turn completed
+    #[serde(rename = "turn.ended")]
+    TurnEnded {
+        session_id: String,
+        response: String,
+    },
+    
     /// Assistant sent text
     #[serde(rename = "assistant.text")]
     AssistantText {
@@ -54,6 +74,12 @@ pub enum Event {
     #[serde(rename = "status")]
     Status {
         message: String,
+    },
+    
+    /// Heartbeat to keep connections alive
+    #[serde(rename = "heartbeat")]
+    Heartbeat {
+        timestamp: i64,
     },
 }
 

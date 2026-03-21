@@ -1,6 +1,7 @@
 //! HTTP routes
 
 use crate::config::{Config, default_config_path};
+use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
 use crate::agent::{Agent, SkillRegistry, SessionSkillManager};
@@ -8,8 +9,8 @@ use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::ratelimit::RateLimiter;
 use crate::types::{SessionHistory, Role};
 use axum::{
-    extract::State,
-    response::{Json},
+    extract::{State, Query},
+    response::{Json, sse::{Sse, Event as SseEvent}},
     routing::{get, post},
     Router,
 };
@@ -20,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
+use std::convert::Infallible;
 use tower_http::services::ServeDir;
 use tracing::{info, error};
 use std::collections::HashMap;
@@ -38,6 +40,7 @@ pub struct HttpState {
     pub server_state: ServerState,
     pub skill_registry: Arc<SkillRegistry>,
     pub skill_manager: Arc<SessionSkillManager>,
+    pub event_emitter: Arc<EventEmitter>,
 }
 
 /// Health check response
@@ -457,6 +460,118 @@ fn get_memory_info() -> Option<MemoryInfo> {
     None
 }
 
+// ============================================================================
+// SSE Event Streaming
+// ============================================================================
+
+use std::time::Duration;
+
+/// Query parameters for SSE events endpoint
+#[derive(Deserialize)]
+pub struct SseQueryParams {
+    /// Optional session ID to filter events (only events for this session)
+    pub session_id: Option<String>,
+}
+
+/// SSE event stream handler - streams real-time events to clients
+async fn sse_events(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<SseQueryParams>,
+) -> Sse<impl futures_util::Stream<Item = Result<SseEvent, Infallible>>> {
+    let mut receiver = state.event_emitter.subscribe();
+    let session_filter = params.session_id;
+    
+    // Create a stream that:
+    // 1. Sends an initial "connected" event
+    // 2. Forwards all events from the event emitter
+    // 3. Sends heartbeat events every 15 seconds to keep connection alive
+    let stream = async_stream::stream! {
+        // Send initial connected event
+        let connected = SseEvent::default()
+            .event("connected")
+            .data(serde_json::json!({
+                "message": "Connected to TinyClaw event stream",
+                "filter": session_filter,
+            }).to_string());
+        yield Ok(connected);
+        
+        let heartbeat_interval = Duration::from_secs(15);
+        let mut heartbeat_timer = tokio::time::interval(heartbeat_interval);
+        heartbeat_timer.tick().await; // Skip first immediate tick
+        
+        loop {
+            tokio::select! {
+                // Event received from emitter
+                event_result = receiver.recv() => {
+                    match event_result {
+                        Ok(event) => {
+                            // Apply session filter if specified
+                            let should_emit = if let Some(ref filter) = session_filter {
+                                match &event {
+                                    Event::TurnStarted { session_id, .. } => session_id == filter,
+                                    Event::TurnThinking { session_id, .. } => session_id == filter,
+                                    Event::TurnEnded { session_id, .. } => session_id == filter,
+                                    Event::AssistantText { session_id, .. } => session_id == filter,
+                                    Event::AssistantToolUse { session_id, .. } => session_id == filter,
+                                    Event::ToolResult { session_id, .. } => session_id == filter,
+                                    Event::SessionCreated { session_id, .. } => session_id == filter,
+                                    Event::SessionEnded { session_id, .. } => session_id == filter,
+                                    Event::Error { session_id, .. } => session_id == filter,
+                                    // Status and Heartbeat are always broadcast
+                                    Event::Status { .. } | Event::Heartbeat { .. } => true,
+                                }
+                            } else {
+                                // No filter - emit all events
+                                true
+                            };
+                            
+                            if should_emit {
+                                let event_name = match &event {
+                                    Event::TurnStarted { .. } => "turn.started",
+                                    Event::TurnThinking { .. } => "turn.thinking",
+                                    Event::TurnEnded { .. } => "turn.ended",
+                                    Event::AssistantText { .. } => "assistant.text",
+                                    Event::AssistantToolUse { .. } => "assistant.tool_use",
+                                    Event::ToolResult { .. } => "tool_result",
+                                    Event::SessionCreated { .. } => "session.created",
+                                    Event::SessionEnded { .. } => "session.ended",
+                                    Event::Error { .. } => "error",
+                                    Event::Status { .. } => "status",
+                                    Event::Heartbeat { .. } => "heartbeat",
+                                };
+                                
+                                let event = SseEvent::default()
+                                    .event(event_name)
+                                    .data(serde_json::to_string(&event).unwrap_or_default());
+                                yield Ok(event);
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            // Receiver lagged behind, skip this event
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            // Channel closed, end stream
+                            break;
+                        }
+                    }
+                }
+                // Heartbeat timer
+                _ = heartbeat_timer.tick() => {
+                    let heartbeat = SseEvent::default()
+                        .event("heartbeat")
+                        .data(serde_json::json!({
+                            "timestamp": chrono::Utc::now().timestamp(),
+                        }).to_string());
+                    yield Ok(heartbeat);
+                }
+            }
+        }
+    };
+    
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::default())
+}
+
 /// Create the router with static files and API routes
 pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
     Router::new()
@@ -488,6 +603,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/skills", axum::routing::post(session_skills_set))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::put(session_skills_enable))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::delete(session_skills_disable))
+        // SSE event stream for real-time feedback
+        .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state)
 }
