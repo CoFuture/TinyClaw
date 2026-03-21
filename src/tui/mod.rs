@@ -5,8 +5,9 @@
 mod app;
 mod components;
 mod gateway_client;
+mod persistence;
 mod state;
 
 pub use app::run_tui;
 #[allow(unused_imports)]
-pub use {app::TuiApp, gateway_client::TuiGatewayClient, state::AppState};
+pub use {app::TuiApp, gateway_client::TuiGatewayClient, persistence::TuiPersistence, state::AppState};

@@ -1,10 +1,13 @@
 [package]
 name = "tiny_claw"
-version = "3.2.0"
+version = "3.6.0"
 edition = "2021"
 description = "A minimal implementation of OpenClaw in Rust"
 authors = ["TinyClaw"]
 license = "MIT"
+
+[dev-dependencies]
+tempfile = "3"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

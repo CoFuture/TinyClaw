@@ -1,6 +1,7 @@
 //! TUI Application
 
 use crate::tui::gateway_client::{TuiGatewayClient, TuiGatewayEvent, TuiGatewayStatus};
+use crate::tui::persistence::TuiPersistence;
 use crate::tui::state::AppState;
 use ratatui::{
     backend::CrosstermBackend,
@@ -21,6 +22,8 @@ pub struct TuiApp {
     version: String,
     gateway_client: Arc<TokioRwLock<TuiGatewayClient>>,
     gateway_handle: Option<tokio::task::JoinHandle<()>>,
+    /// TUI local persistence (optional - gracefully degrades if unavailable)
+    persistence: Option<TuiPersistence>,
 }
 
 /// Simple wrapper for RwLock in async context
@@ -37,11 +40,54 @@ impl TuiApp {
         state.add_session("main".to_string());
         state.set_current_session("main".to_string());
 
+        // Initialize TUI persistence (optional - gracefully degrades)
+        let persistence = match TuiPersistence::new() {
+            Ok(p) => {
+                info!("TUI persistence initialized");
+                // Load any existing session histories from disk
+                let persisted_histories = p.load_all();
+                if !persisted_histories.is_empty() {
+                    info!("Recovered {} session histories from disk", persisted_histories.len());
+                    for history in persisted_histories {
+                        let session_id = history.session_id.clone();
+                        state.session_histories.insert(session_id.clone(), history);
+                        if !state.sessions.contains(&session_id) {
+                            state.sessions.push(session_id);
+                        }
+                    }
+                }
+                Some(p)
+            }
+            Err(e) => {
+                info!("TUI persistence unavailable ({}), messages won't be persisted locally", e);
+                None
+            }
+        };
+
         Self {
             state,
             version,
             gateway_client: Arc::new(TokioRwLock::new(TuiGatewayClient::default())),
             gateway_handle: None,
+            persistence,
+        }
+    }
+
+    /// Save the current session's history to persistence
+    fn save_current_history(&self) {
+        if let (Some(session_id), Some(ref persist)) = (&self.state.current_session_id, &self.persistence) {
+            if let Some(history) = self.state.session_histories.get(session_id) {
+                persist.save_history(history);
+            }
+        }
+    }
+
+    /// Save a specific session's history to persistence
+    fn save_session_history(&self, session_id: &str) {
+        if let Some(ref persist) = self.persistence {
+            if let Some(history) = self.state.session_histories.get(session_id) {
+                persist.save_history(history);
+            }
         }
     }
 
@@ -199,6 +245,7 @@ impl TuiApp {
                             tool_call_id: None,
                             tool_name: None,
                         });
+                        self.save_current_history();
                     }
                 }
             }
@@ -216,6 +263,7 @@ impl TuiApp {
                             tool_call_id: None,
                             tool_name: Some(tool),
                         });
+                        self.save_current_history();
                     }
                 }
             }
@@ -238,6 +286,7 @@ impl TuiApp {
                             tool_call_id: None,
                             tool_name: None,
                         });
+                        self.save_current_history();
                     }
                 }
             }
@@ -291,6 +340,8 @@ impl TuiApp {
                     // Session exists in list but no history yet
                     self.state.session_histories.insert(session_id.clone(), history);
                 }
+                // Save merged history to persistence
+                self.save_session_history(&session_id);
             }
             TuiGatewayEvent::SessionDeleted { session_id } => {
                 info!("Session deleted: {}", session_id);
@@ -301,6 +352,10 @@ impl TuiApp {
                 if self.state.current_session_id.as_ref() == Some(&session_id) {
                     self.state.current_session_id = self.state.sessions.first().cloned();
                     self.state.scroll_offset = 0;
+                }
+                // Remove from persistence
+                if let Some(ref persist) = self.persistence {
+                    persist.delete_session(&session_id);
                 }
             }
             TuiGatewayEvent::SessionCreated { session_id, label } => {
@@ -314,7 +369,9 @@ impl TuiApp {
                     );
                 }
                 // Switch to the new session
-                self.state.set_current_session(session_id);
+                self.state.set_current_session(session_id.clone());
+                // Save new session to persistence
+                self.save_session_history(&session_id);
             }
         }
     }
@@ -358,25 +415,28 @@ impl TuiApp {
                         let content = self.state.input_buffer.clone();
                         let client = self.gateway_client.clone();
                         let session_id = self.state.current_session_id.clone();
-                        let mut history_map = self.state.session_histories.clone();
+                        
+                        // Add user message to state BEFORE sending (so it persists even if send fails)
+                        if let Some(sid) = &session_id {
+                            if let Some(history) = self.state.session_histories.get_mut(sid) {
+                                use crate::types::{Message, Role};
+                                history.add_message(Message {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    role: Role::User,
+                                    content: content.clone(),
+                                    timestamp: chrono::Utc::now(),
+                                    tool_call_id: None,
+                                    tool_name: None,
+                                });
+                                // Save to persistence
+                                self.save_current_history();
+                            }
+                        }
                         
                         // Spawn async task to send message
                         tokio::spawn(async move {
                             let client = client.read().await;
                             if let Some(sid) = &session_id {
-                                // Add user message to history
-                                if let Some(history) = history_map.get_mut(sid) {
-                                    use crate::types::{Message, Role};
-                                    history.add_message(Message {
-                                        id: uuid::Uuid::new_v4().to_string(),
-                                        role: Role::User,
-                                        content: content.clone(),
-                                        timestamp: chrono::Utc::now(),
-                                        tool_call_id: None,
-                                        tool_name: None,
-                                    });
-                                }
-                                
                                 if let Err(e) = client.send_message(sid, content).await {
                                     error!("Failed to send message: {}", e);
                                 }
