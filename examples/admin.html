@@ -855,6 +855,9 @@
         
         <div class="card full-width" style="margin-top: 20px;">
             <h2>📋 会话管理</h2>
+            <div style="margin-bottom: 10px;">
+                <button class="btn" onclick="showCreateSessionModal()">➕ 新建会话</button>
+            </div>
             <div class="search-box">
                 <input type="text" class="search-input" id="sessionSearch" placeholder="搜索会话..." oninput="filterSessions()">
             </div>
@@ -1068,11 +1071,81 @@
                         <td><span class="session-kind">${s.kind}</span></td>
                         <td>${new Date(s.createdAt).toLocaleString('zh-CN')}</td>
                         <td>${new Date(s.lastActive).toLocaleString('zh-CN')}</td>
-                        <td><button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="event.stopPropagation(); showSessionDetails('${s.id}')">查看</button></td>
+                        <td>
+                            <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="event.stopPropagation(); showSessionDetails('${s.id}')">查看</button>
+                            ${s.kind !== 'main' ? `<button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px; margin-left: 4px;" onclick="event.stopPropagation(); deleteSession('${s.id}')">删除</button>` : ''}
+                        </td>
                     </tr>
                 `).join('');
             } else {
                 tbody.innerHTML = '<tr><td colspan="6">暂无会话</td></tr>';
+            }
+        }
+
+        function showCreateSessionModal() {
+            const modalHtml = `
+                <div class="modal-overlay active" id="sessionModal">
+                    <div class="modal">
+                        <h3>➕ 创建新会话</h3>
+                        <div class="form-group">
+                            <label>会话标签 (可选)</label>
+                            <input type="text" id="sessionLabel" placeholder="例如: my-task">
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" onclick="closeCreateSessionModal()">取消</button>
+                            <button class="btn" onclick="createSession()">创建</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const existing = document.getElementById('sessionModal');
+            if (existing) existing.remove();
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        function closeCreateSessionModal() {
+            const modal = document.getElementById('sessionModal');
+            if (modal) modal.remove();
+        }
+
+        async function createSession() {
+            const label = document.getElementById('sessionLabel').value.trim();
+            try {
+                const res = await fetch(API_BASE + '/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: label || null }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeCreateSessionModal();
+                    loadSessions();
+                    alert('会话已创建: ' + data.session_id.substring(0, 8) + '...');
+                } else {
+                    alert('创建失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('创建失败: ' + e.message);
+            }
+        }
+
+        async function deleteSession(sessionId) {
+            if (sessionId === 'main') {
+                alert('无法删除主会话');
+                return;
+            }
+            if (!confirm('确定要删除会话 ' + sessionId.substring(0, 8) + '... 吗？')) return;
+            try {
+                const res = await fetch(API_BASE + '/api/sessions/' + sessionId, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    loadSessions();
+                    alert('会话已删除');
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('删除失败: ' + e.message);
             }
         }
         

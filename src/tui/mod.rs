@@ -10,4 +10,4 @@ mod state;
 
 pub use app::run_tui;
 #[allow(unused_imports)]
-pub use {app::TuiApp, gateway_client::TuiGatewayClient, persistence::TuiPersistence, state::AppState};
+pub use {app::TuiApp, gateway_client::{TuiGatewayClient, TuiGatewayEvent, SessionInfo, TuiGatewayStatus}, persistence::TuiPersistence, state::AppState};

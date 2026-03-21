@@ -642,6 +642,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/config/reload", axum::routing::post(config_reload))
         .route("/api/shutdown", axum::routing::post(shutdown))
         .route("/api/sessions", get(sessions_list))
+        .route("/api/sessions", post(session_create))
         .route("/api/sessions/{id}/messages", get(session_messages))
         .route("/api/sessions/{id}/export", get(session_export))
         .route("/api/sessions/{id}", axum::routing::delete(session_delete))
@@ -690,6 +691,58 @@ async fn session_messages(
     };
 
     Json(serde_json::json!({ "messages": messages, "sessionId": session_id }))
+}
+
+/// Session create request
+#[derive(Deserialize)]
+pub struct SessionCreateRequest {
+    pub label: Option<String>,
+}
+
+/// Session create response
+#[derive(Serialize)]
+pub struct SessionCreateResponse {
+    pub success: bool,
+    pub session_id: String,
+    pub label: Option<String>,
+    pub kind: String,
+    pub error: Option<String>,
+}
+
+/// Session create handler - create a new isolated session
+async fn session_create(
+    State(state): State<Arc<HttpState>>,
+    Json(request): Json<SessionCreateRequest>,
+) -> (HttpStatusCode, Json<SessionCreateResponse>) {
+    use crate::gateway::session::{Session, SessionKind};
+
+    // Create new isolated session
+    let mut session = Session::new(SessionKind::Isolated);
+    if let Some(ref label) = request.label {
+        session = session.with_label(label);
+    }
+
+    let session_id = session.id.clone();
+    let label = session.label.clone();
+
+    // Register session with session manager
+    state.session_manager.create(session);
+
+    // Ensure history manager has an entry for this session
+    let _ = state.history_manager.get_or_create(&session_id);
+
+    info!("HTTP: Created session: {}", session_id);
+
+    (
+        HttpStatusCode::CREATED,
+        Json(SessionCreateResponse {
+            success: true,
+            session_id,
+            label,
+            kind: "isolated".to_string(),
+            error: None,
+        }),
+    )
 }
 
 /// Tools list response

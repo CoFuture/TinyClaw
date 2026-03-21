@@ -2,6 +2,7 @@
 //! 
 //! This is the entry point for the TinyClaw Gateway.
 
+use tiny_claw::chat;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Instant;
@@ -47,6 +48,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.contains(&"--tui".to_string()) || args.contains(&"-t".to_string()) {
         run_tui_mode()?;
+        return Ok(());
+    }
+
+    // Check for --chat flag (interactive CLI chat client)
+    if args.contains(&"--chat".to_string()) || args.contains(&"-c".to_string()) {
+        let url = args.iter()
+            .position(|a| a == "--url" || a == "-u")
+            .and_then(|i| args.get(i + 1))
+            .map(String::from)
+            .unwrap_or_else(|| "ws://127.0.0.1:18790".to_string());
+        
+        println!("🪶 TinyClaw Chat Client connecting to {}", url);
+        let rt = tokio::runtime::Runtime::new()?;
+        if let Err(e) = rt.block_on(async { chat::run_chat(&url).await }) {
+            eprintln!("Chat error: {}", e);
+        }
         return Ok(());
     }
 
