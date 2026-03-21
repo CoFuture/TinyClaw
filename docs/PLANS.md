@@ -48,10 +48,18 @@
   - `POST /api/sessions/{id}/skills` - 设置会话技能
   - `PUT /api/sessions/{id}/skills/{name}` - 启用技能
   - `DELETE /api/sessions/{id}/skills/{name}` - 禁用技能
+- **Skill Prompt 注入** - 技能指令在运行时自动注入到 Agent 系统提示词
+  - `SessionSkillManager` 集成到 `HandlerContext`
+  - `Agent::send_message` 支持技能提示词参数
+  - Anthropic/OpenAI API 自动注入技能上下文
+- **WebUI 技能管理面板** - admin.html 中展示和操作技能
+  - 技能列表展示：名称、描述、工具、标签、指令
+  - 创建新技能表单
+  - 显示默认启用状态
 - cargo clippy 0 警告
-- cargo test 174 tests
+- cargo test 168 tests
 
-**下一步**: WebUI 技能管理面板、实时反馈
+**下一步**: 持久化技能配置、实时反馈
 
 ---
 
@@ -136,16 +144,15 @@
 #### 1. Skill 机制 (P0)
 **目标**: 实现轻量级 Skill 系统，将相关工具分组为可复用技能单元
 
-**已实现**:
+**已完成** ✅:
 - Skill 数据结构与注册表
 - 内置 5 个常用技能
 - 会话级技能管理 (启用/禁用/设置)
 - 完整的 REST API 支持
-- 技能指令自动注入系统提示词
+- 技能指令自动注入系统提示词 (Agent 集成)
+- WebUI 技能管理面板 (admin.html)
 
 **待完善**:
-- [ ] WebUI 技能管理面板 - 在 admin.html 中展示和操作技能
-- [ ] 技能 prompt 注入到 Agent - 运行时将激活技能的 instructions 注入给模型
 - [ ] 持久化技能配置 - 支持保存/加载技能配置
 
 #### 2. 基础修复 (持续)
@@ -164,7 +171,7 @@
 - [ ] Agent 配置文件支持
 
 ### 交互体验
-- [ ] WebUI 技能管理面板
+- [x] WebUI 技能管理面板 ✅ v3.0.0
 - [x] Terminal UI (TUI) ✅ v2.6.0
 - [ ] 实时反馈 (执行进度、流式输出)
 - [ ] 命令行客户端
@@ -180,7 +187,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
-| v3.0.0 | Skill 系统核心 (Skill/SkillRegistry/SessionSkillManager + HTTP API) |
+| v3.0.0 | Skill 系统核心 + 技能注入 + WebUI 技能面板 |
 | v2.9.0 | WebUI 增强 (工具面板、配置编辑器)、测试冲突修复 |
 | v2.8.0 | 错误处理增强 (13种错误代码、ErrorRecovery) |
 | v2.7.0 | 工具扩展 (cp, mv, rm, cat) |

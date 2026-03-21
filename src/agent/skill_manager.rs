@@ -34,7 +34,7 @@ impl SessionSkillManager {
         }
 
         let mut sessions = self.session_skills.write();
-        let skills = sessions.entry(session_id.to_string()).or_insert_with(HashSet::new);
+        let skills = sessions.entry(session_id.to_string()).or_default();
         skills.insert(skill_name.to_string())
     }
 
@@ -58,21 +58,9 @@ impl SessionSkillManager {
             .unwrap_or_default()
     }
 
-    /// Get active skills as full Skill objects
-    pub fn get_active_skill_objects(&self, session_id: &str) -> Vec<crate::agent::skill::Skill> {
-        self.get_active_skills(session_id)
-            .iter()
-            .filter_map(|name| self.skill_registry.get(name))
-            .collect()
-    }
-
-    /// Check if a skill is active for a session
-    pub fn is_skill_active(&self, session_id: &str, skill_name: &str) -> bool {
-        let sessions = self.session_skills.read();
-        sessions
-            .get(session_id)
-            .map(|s| s.contains(skill_name))
-            .unwrap_or(false)
+    /// Get a skill from the registry by name
+    pub fn get_skill(&self, name: &str) -> Option<crate::agent::Skill> {
+        self.skill_registry.get(name)
     }
 
     /// Set all active skills for a session (replaces existing)
@@ -85,12 +73,6 @@ impl SessionSkillManager {
 
         let mut sessions = self.session_skills.write();
         sessions.insert(session_id.to_string(), valid_skills.into_iter().collect());
-    }
-
-    /// Clear all skills for a session
-    pub fn clear_session_skills(&self, session_id: &str) {
-        let mut sessions = self.session_skills.write();
-        sessions.remove(session_id);
     }
 
     /// Enable default skills for a new session
@@ -108,43 +90,12 @@ impl SessionSkillManager {
         }
     }
 
-    /// Get all sessions with a specific skill active
-    pub fn get_sessions_with_skill(&self, skill_name: &str) -> Vec<String> {
-        let sessions = self.session_skills.read();
-        sessions
-            .iter()
-            .filter(|(_, skills)| skills.contains(skill_name))
-            .map(|(id, _)| id.clone())
-            .collect()
-    }
-
-    /// Generate system prompt supplement from active skills for a session
-    pub fn generate_session_skill_prompt(&self, session_id: &str) -> Option<String> {
-        let active_skills = self.get_active_skills(session_id);
-        self.skill_registry.generate_skill_prompt(&active_skills)
-    }
-
     /// Remove a skill from all sessions (when a skill is deleted)
     pub fn remove_skill_from_all(&self, skill_name: &str) {
         let mut sessions = self.session_skills.write();
         for skills in sessions.values_mut() {
             skills.remove(skill_name);
         }
-    }
-
-    /// Get count of sessions with skills active
-    pub fn active_session_count(&self) -> usize {
-        let sessions = self.session_skills.read();
-        sessions.len()
-    }
-
-    /// Get all session IDs with their active skill counts
-    pub fn get_session_skill_counts(&self) -> Vec<(String, usize)> {
-        let sessions = self.session_skills.read();
-        sessions
-            .iter()
-            .map(|(id, skills)| (id.clone(), skills.len()))
-            .collect()
     }
 }
 
@@ -169,9 +120,12 @@ mod tests {
         let result = manager.enable_skill("session1", "file_ops");
         assert!(!result);
 
-        // Check if active
-        assert!(manager.is_skill_active("session1", "file_ops"));
-        assert!(!manager.is_skill_active("session1", "nonexistent"));
+        // Check if active via get_active_skills
+        let skills = manager.get_active_skills("session1");
+        assert!(skills.contains(&"file_ops".to_string()));
+        
+        let skills_nonexistent = manager.get_active_skills("session1");
+        assert!(!skills_nonexistent.contains(&"nonexistent".to_string()));
     }
 
     #[test]
@@ -183,7 +137,8 @@ mod tests {
         let result = manager.disable_skill("session1", "file_ops");
         assert!(result);
 
-        assert!(!manager.is_skill_active("session1", "file_ops"));
+        let skills = manager.get_active_skills("session1");
+        assert!(!skills.contains(&"file_ops".to_string()));
     }
 
     #[test]
@@ -226,31 +181,6 @@ mod tests {
         assert!(skills.len() >= 2); // At least file_ops and code_analysis
         assert!(skills.contains(&"file_ops".to_string()));
         assert!(skills.contains(&"code_analysis".to_string()));
-    }
-
-    #[test]
-    fn test_clear_session_skills() {
-        let registry = create_test_registry();
-        let manager = SessionSkillManager::new(registry);
-
-        manager.enable_skill("session1", "file_ops");
-        manager.clear_session_skills("session1");
-
-        let skills = manager.get_active_skills("session1");
-        assert!(skills.is_empty());
-    }
-
-    #[test]
-    fn test_generate_session_skill_prompt() {
-        let registry = create_test_registry();
-        let manager = SessionSkillManager::new(registry);
-
-        manager.enable_skill("session1", "file_ops");
-        let prompt = manager.generate_session_skill_prompt("session1");
-
-        assert!(prompt.is_some());
-        let prompt_str = prompt.unwrap();
-        assert!(prompt_str.contains("file_ops"));
     }
 
     #[test]

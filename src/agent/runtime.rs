@@ -253,7 +253,7 @@ impl AgentRuntime {
             .unwrap_or_default();
         
         // Send to agent (agent handles API formatting internally)
-        let response_text = context.agent.send_message(&context.session_id, &last_message).await?;
+        let response_text = context.agent.send_message(&context.session_id, &last_message, None).await?;
         
         Ok(ModelResponse {
             text: Some(response_text),

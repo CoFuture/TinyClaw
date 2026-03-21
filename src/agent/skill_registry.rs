@@ -41,24 +41,6 @@ impl SkillRegistry {
         self.skills.read().values().cloned().collect()
     }
 
-    /// List skills by tag
-    pub fn list_by_tag(&self, tag: &str) -> Vec<Skill> {
-        self.skills.read()
-            .values()
-            .filter(|s| s.tags.iter().any(|t| t == tag))
-            .cloned()
-            .collect()
-    }
-
-    /// Get skills that use a specific tool
-    pub fn get_skills_for_tool(&self, tool_name: &str) -> Vec<Skill> {
-        self.skills.read()
-            .values()
-            .filter(|s| s.has_tool(tool_name))
-            .cloned()
-            .collect()
-    }
-
     /// Remove a skill
     pub fn unregister(&self, name: &str) -> Option<Skill> {
         self.skills.write().remove(name)
@@ -73,11 +55,6 @@ impl SkillRegistry {
         } else {
             false
         }
-    }
-
-    /// Get count of registered skills
-    pub fn count(&self) -> usize {
-        self.skills.read().len()
     }
 
     /// Check if a skill exists
@@ -193,29 +170,6 @@ Use hash to quickly check if files are identical."#,
         .with_default_enabled(false));
     }
 
-    /// Generate system prompt section from active skills
-    pub fn generate_skill_prompt(&self, active_skills: &[String]) -> Option<String> {
-        if active_skills.is_empty() {
-            return None;
-        }
-
-        let mut prompt = String::from("\n\n## Active Skills\n\n");
-        prompt.push_str("The following skills are available for this conversation:\n\n");
-
-        for skill_name in active_skills {
-            if let Some(skill) = self.get(skill_name) {
-                prompt.push_str(&format!("### {}\n", skill.name));
-                prompt.push_str(&format!("{}\n\n", skill.description));
-                prompt.push_str(&format!(
-                    "Instructions: {}\n",
-                    skill.instructions
-                ));
-                prompt.push_str(&format!("Tools: {}\n\n", skill.tool_names.join(", ")));
-            }
-        }
-
-        Some(prompt)
-    }
 }
 
 impl Default for SkillRegistry {
@@ -234,7 +188,7 @@ mod tests {
     fn test_skill_registry_new() {
         let registry = SkillRegistry::new();
         // Should have built-in skills
-        assert!(registry.count() > 0);
+        assert!(!registry.list().is_empty());
     }
 
     #[test]
@@ -253,40 +207,6 @@ mod tests {
         let registry = SkillRegistry::new();
         let skills = registry.list();
         assert!(!skills.is_empty());
-    }
-
-    #[test]
-    fn test_skill_registry_list_by_tag() {
-        let registry = SkillRegistry::new();
-        let file_skills = registry.list_by_tag("file");
-        assert!(!file_skills.is_empty());
-        assert!(file_skills.iter().all(|s| s.tags.contains(&"file".to_string())));
-    }
-
-    #[test]
-    fn test_skill_registry_get_skills_for_tool() {
-        let registry = SkillRegistry::new();
-        let skills = registry.get_skills_for_tool("read_file");
-        assert!(!skills.is_empty());
-        assert!(skills.iter().all(|s| s.has_tool("read_file")));
-    }
-
-    #[test]
-    fn test_skill_registry_generate_prompt() {
-        let registry = SkillRegistry::new();
-        
-        let prompt = registry.generate_skill_prompt(&["file_ops".to_string()]);
-        assert!(prompt.is_some());
-        let prompt_str = prompt.unwrap();
-        assert!(prompt_str.contains("file_ops"));
-        assert!(prompt_str.contains("File Operations"));
-    }
-
-    #[test]
-    fn test_skill_registry_generate_prompt_empty() {
-        let registry = SkillRegistry::new();
-        let prompt = registry.generate_skill_prompt(&[]);
-        assert!(prompt.is_none());
     }
 
     #[test]

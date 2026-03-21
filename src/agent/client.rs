@@ -153,7 +153,12 @@ impl Agent {
     }
 
     /// Send a message and get a response (with tool calling loop)
-    pub async fn send_message(&self, _session_key: &str, message: &str) -> Result<String> {
+    /// 
+    /// # Arguments
+    /// * `session_key` - Session identifier (unused, kept for API compatibility)
+    /// * `message` - User message to send
+    /// * `skill_prompt` - Optional skill instructions to inject into system prompt
+    pub async fn send_message(&self, _session_key: &str, message: &str, skill_prompt: Option<&str>) -> Result<String> {
         let config = self.config.read().clone();
 
         // Determine provider based on model name or explicit config
@@ -182,7 +187,7 @@ impl Agent {
 
             match provider {
                 ModelProvider::Anthropic => {
-                    let response = self.send_anthropic_with_tools(&config, &messages, &tools).await?;
+                    let response = self.send_anthropic_with_tools(&config, &messages, &tools, skill_prompt).await?;
                     
                     // Extract text content
                     let text_content: Option<String> = response["content"]
@@ -236,7 +241,7 @@ impl Agent {
                     }
                 }
                 ModelProvider::OpenAI => {
-                    let response = self.send_openai_with_tools(&config, &messages, &tools).await?;
+                    let response = self.send_openai_with_tools(&config, &messages, &tools, skill_prompt).await?;
                     
                     // Check for tool_calls in response
                     let has_tool_calls = response["choices"]
@@ -298,6 +303,7 @@ impl Agent {
         config: &AgentConfig,
         messages: &[serde_json::Value],
         tools: &[Tool],
+        skill_prompt: Option<&str>,
     ) -> Result<serde_json::Value> {
         if config.api_key.is_none() {
             return Err(Error::Agent("API key not configured".into()));
@@ -306,6 +312,14 @@ impl Agent {
         let api_key = config.api_key.clone().unwrap();
         let model = config.model.clone();
         let api_base = config.api_base.clone();
+
+        // Build base system prompt
+        let base_system = "You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You have access to tools to help you answer questions. You should introduce yourself as TinyClaw powered by GLM-5 when asked.";
+        let system = if let Some(skills) = skill_prompt {
+            format!("{}\n\n{}", base_system, skills)
+        } else {
+            base_system.to_string()
+        };
 
         // Convert tools to Anthropic format
         let anthropic_tools: Vec<serde_json::Value> = tools
@@ -324,7 +338,7 @@ impl Agent {
             "model": model,
             "max_tokens": 1024,
             "messages": messages,
-            "system": "You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You have access to tools to help you answer questions. You should introduce yourself as TinyClaw powered by GLM-5 when asked.",
+            "system": system,
             "tools": anthropic_tools
         });
 
@@ -369,6 +383,7 @@ impl Agent {
         config: &AgentConfig,
         messages: &[serde_json::Value],
         tools: &[Tool],
+        skill_prompt: Option<&str>,
     ) -> Result<serde_json::Value> {
         if config.api_key.is_none() {
             return Err(Error::Agent("API key not configured".into()));
@@ -377,6 +392,21 @@ impl Agent {
         let api_key = config.api_key.clone().unwrap();
         let model = config.model.clone();
         let api_base = config.api_base.clone();
+
+        // Build system message with skill context
+        let base_system = "You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You have access to tools to help you answer questions. You should introduce yourself as TinyClaw powered by GLM-5 when asked.";
+        let system_content = if let Some(skills) = skill_prompt {
+            format!("{}\n\n{}", base_system, skills)
+        } else {
+            base_system.to_string()
+        };
+
+        // Build messages with system prompt prepended
+        let mut all_messages = vec![serde_json::json!({
+            "role": "system",
+            "content": system_content
+        })];
+        all_messages.extend(messages.iter().cloned());
 
         // Convert tools to OpenAI format
         let openai_tools: Vec<serde_json::Value> = tools
@@ -396,7 +426,7 @@ impl Agent {
         // Build request with tools
         let request = serde_json::json!({
             "model": model,
-            "messages": messages,
+            "messages": all_messages,
             "max_tokens": 1024,
             "tools": openai_tools
         });
@@ -653,7 +683,7 @@ impl Agent {
     ) -> Result<String> {
         // For now, just send the message without history
         // History management will be added in later iterations
-        self.send_message(_session_key, message).await
+        self.send_message(_session_key, message, None).await
     }
 }
 

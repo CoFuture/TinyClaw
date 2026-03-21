@@ -9,7 +9,6 @@
 //! - Grouping of related tools
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// A skill that bundles related tools with usage guidance
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,12 +43,6 @@ impl Skill {
         }
     }
 
-    /// Add a tool name to this skill
-    pub fn with_tool(mut self, tool_name: impl Into<String>) -> Self {
-        self.tool_names.push(tool_name.into());
-        self
-    }
-
     /// Add multiple tool names to this skill
     pub fn with_tools<T: Into<String>>(mut self, tool_names: impl IntoIterator<Item = T>) -> Self {
         self.tool_names.extend(tool_names.into_iter().map(|t| t.into()));
@@ -73,16 +66,6 @@ impl Skill {
         self.tags.extend(tags.into_iter().map(|t| t.into()));
         self
     }
-
-    /// Check if this skill uses a specific tool
-    pub fn has_tool(&self, tool_name: &str) -> bool {
-        self.tool_names.iter().any(|t| t == tool_name)
-    }
-
-    /// Get the tool names as a set for fast lookup
-    pub fn tool_names_set(&self) -> HashSet<&str> {
-        self.tool_names.iter().map(|s| s.as_str()).collect()
-    }
 }
 
 #[cfg(test)]
@@ -104,13 +87,12 @@ mod tests {
     #[test]
     fn test_skill_with_tools() {
         let skill = Skill::new("test", "Test", "Test instructions")
-            .with_tool("read_file")
-            .with_tool("write_file");
+            .with_tools(["read_file", "write_file"]);
         
         assert_eq!(skill.tool_names.len(), 2);
-        assert!(skill.has_tool("read_file"));
-        assert!(skill.has_tool("write_file"));
-        assert!(!skill.has_tool("exec"));
+        assert!(skill.tool_names.contains(&"read_file".to_string()));
+        assert!(skill.tool_names.contains(&"write_file".to_string()));
+        assert!(!skill.tool_names.contains(&"exec".to_string()));
     }
 
     #[test]

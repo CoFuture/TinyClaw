@@ -7,7 +7,7 @@ use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
 use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
-use crate::agent::Agent;
+use crate::agent::{Agent, SessionSkillManager};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -54,6 +54,7 @@ pub struct HandlerContext {
     pub config: Arc<RwLock<Config>>,
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
+    pub skill_manager: Arc<SessionSkillManager>,
 }
 
 impl HandlerContext {
@@ -64,6 +65,7 @@ impl HandlerContext {
         config: Arc<RwLock<Config>>,
         agent: Arc<Agent>,
         shutdown_tx: broadcast::Sender<()>,
+        skill_manager: Arc<SessionSkillManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -72,6 +74,7 @@ impl HandlerContext {
             config,
             agent,
             shutdown_tx,
+            skill_manager,
         }
     }
 }
@@ -264,6 +267,30 @@ fn map_error_to_response(id: Option<String>, error: &Error) -> ResponseError {
     }
 }
 
+/// Generate system prompt supplement from active skills for a session
+fn generate_skill_prompt(ctx: &HandlerContext, session_key: &str) -> Option<String> {
+    let active_skills = ctx.skill_manager.get_active_skills(session_key);
+    if active_skills.is_empty() {
+        return None;
+    }
+
+    let mut prompt = String::from("\n\n## Active Skills\n\n");
+    prompt.push_str("The following skills are available for this conversation:\n\n");
+
+    for skill_name in &active_skills {
+        if let Some(skill) = ctx.skill_manager.get_skill(skill_name) {
+            prompt.push_str(&format!("### {}\n", skill.name));
+            prompt.push_str(&format!("{}\n\n", skill.description));
+            prompt.push_str(&format!("Instructions: {}\n", skill.instructions));
+            if !skill.tool_names.is_empty() {
+                prompt.push_str(&format!("Tools: {}\n\n", skill.tool_names.join(", ")));
+            }
+        }
+    }
+
+    Some(prompt)
+}
+
 /// Handle ping
 async fn handle_ping(_id: Option<String>) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "pong": true }))
@@ -353,7 +380,7 @@ async fn handle_sessions_send(
     );
     
     // Forward to agent
-    ctx.agent.send_message(session_key, message).await?;
+    ctx.agent.send_message(session_key, message, None).await?;
 
     Ok(serde_json::json!({ "sent": true }))
 }
@@ -383,8 +410,11 @@ async fn handle_agent_turn(
         crate::types::Message::user(message),
     );
 
+    // Generate skill prompt for this session
+    let skill_prompt = generate_skill_prompt(ctx, session_key);
+    
     // Send to agent and get response
-    let response: String = ctx.agent.send_message(session_key, message).await?;
+    let response: String = ctx.agent.send_message(session_key, message, skill_prompt.as_deref()).await?;
 
     // Add assistant response to history
     ctx.history_manager.add_message(

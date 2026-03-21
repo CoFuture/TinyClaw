@@ -130,8 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metrics: metrics.clone(),
         rate_limiter: rate_limiter.clone(),
         server_state: server_state.clone(),
-        skill_registry,
-        skill_manager,
+        skill_registry: skill_registry.clone(),
+        skill_manager: skill_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -143,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.clone(),
         agent.clone(),
         shutdown_tx.clone(),
+        skill_manager.clone(), // skill_manager was already cloned into http_state, clone again for WS
     );
     
     let ws_handle = tokio::spawn(async move {
