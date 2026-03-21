@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Streaming event types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +83,7 @@ pub struct StreamingResponse {
 
 impl StreamingResponse {
     /// Create a new streaming response
+    #[allow(dead_code)]
     pub fn new(session_id: String, request_id: String) -> Self {
         Self {
             session_id,
@@ -92,6 +93,7 @@ impl StreamingResponse {
     }
 
     /// Set the sender channel
+    #[allow(dead_code)]
     pub fn set_sender(&mut self, sender: mpsc::Sender<StreamingEvent>) {
         self.sender = Some(sender);
     }
