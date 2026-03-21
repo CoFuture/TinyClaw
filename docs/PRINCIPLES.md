@@ -49,34 +49,41 @@ cargo clippy 2>&1 | grep "^warning"
 
 ## 模块架构
 
-### OpenClaw 核心模块 (需要实现)
+### OpenClaw 核心模块 (已实现)
 1. **Gateway** - WebSocket 服务器 ✅ 已实现
-2. **Agent Runtime** - Agent 运行时引擎 🔄 待实现
+2. **Agent Runtime** - Agent 运行时引擎 ✅ 已实现 (工具调用循环)
 3. **Channels** - 消息通道 (Telegram, Discord 等) 🔄 待实现
 4. **Sessions** - 会话管理 ✅ 已实现
 5. **Tools** - 工具系统 ✅ 已实现
-6. **Providers** - AI 模型提供商 🔄 部分实现
+6. **Providers** - AI 模型提供商 ✅ 已实现 (Anthropic/OpenAI/Ollama)
 
-### Agent Runtime 核心功能 (待实现)
-1. **pi-agent-core** - Agent 核心运行时
-   - 工具调用循环
-   - 消息处理
-   - 状态管理
+### Agent Runtime 核心功能 (已实现)
+1. **Agent Runtime** - Agent 核心运行时
+   - ✅ 工具调用循环 (v1.5.0)
+   - ✅ 消息处理
+   - ✅ 状态管理
 
-2. **pi-ai** - AI 集成层
-   - 多模型支持
-   - 模型切换
-   - Token 管理
+2. **AI 集成层** - AI 集成
+   - ✅ 多模型支持 (Anthropic, OpenAI, Ollama)
+   - ✅ 模型切换
+   - ❌ Token 管理 (待实现)
 
-3. **pi-coding-agent** - 编码 Agent
-   - 代码执行
-   - 文件操作
-   - 项目结构
+3. **Tools 工具系统**
+   - ✅ exec - 执行 Shell 命令
+   - ✅ read_file - 读取文件
+   - ✅ write_file - 写入文件
+   - ✅ list_dir - 列出目录
+   - ✅ http_request - HTTP 请求
 
-4. **pi-tui** - 终端界面
-   - 实时输出
-   - 命令输入
-   - 进度显示
+4. **TUI 终端界面**
+   - ✅ 基础 TUI 实现
+   - ❌ 实时输出 (待增强)
+
+5. **HTTP API** - HTTP 服务器
+   - ✅ Web 管理界面 (admin.html)
+   - ✅ REST API 端点
+   - ✅ 指标收集 (metrics)
+   - ✅ 速率限制 (ratelimit)
 
 ## 版本规范
 
@@ -133,6 +140,11 @@ tiny_claw/
 1. 单元测试：每个公共函数
 2. 集成测试：模块间交互
 
+### 覆盖率要求
+- **目标**: 代码行覆盖率 ≥ 60%
+- **核心模块** (agent/client.rs, gateway/messages.rs, http/routes.rs): ≥ 70%
+- **辅助模块** (tools.rs, history.rs, session.rs): ≥ 80%
+
 ### 运行测试
 ```bash
 # 运行所有测试
@@ -142,8 +154,12 @@ cargo test
 cargo test <test_name>
 
 # 查看测试覆盖率
-cargo test -- --nocapture
+cargo tarpaulin --out Json
 ```
+
+### 覆盖率检查
+- 每次 PR 必须通过覆盖率检查
+- 覆盖率下降超过 5% 必须修复
 
 ## 文档规范
 

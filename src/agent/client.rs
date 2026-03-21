@@ -1,6 +1,6 @@
 //! AI Model client with multi-provider support
 
-use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
+use crate::agent::tools::{Tool, ToolExecutor};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
 use parking_lot::RwLock;
@@ -10,6 +10,7 @@ use tracing::{debug, error, info};
 
 /// Anthropic API request
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct AnthropicRequest {
     model: String,
     max_tokens: u32,
@@ -20,6 +21,7 @@ struct AnthropicRequest {
 
 /// Anthropic API message
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
 struct Message {
     role: String,
     content: String,
@@ -55,6 +57,7 @@ struct Usage {
 
 /// OpenAI API request
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct OpenAIRequest {
     model: String,
     messages: Vec<Message>,
@@ -124,6 +127,7 @@ impl Agent {
     }
 
     /// Get list of available tools
+    #[allow(dead_code)]
     pub fn list_tools(&self) -> Vec<Tool> {
         self.tool_executor.list_tools()
     }
@@ -172,8 +176,8 @@ impl Agent {
                     // Check for tool_use in response
                     let tool_calls = response["content"]
                         .as_array()
-                        .and_then(|arr| {
-                            Some(arr.iter().filter_map(|c| c.get("tool_use").cloned()).collect::<Vec<_>>())
+                        .map(|arr| {
+                            arr.iter().filter_map(|c| c.get("tool_use").cloned()).collect::<Vec<_>>()
                         })
                         .map(|v| !v.is_empty())
                         .unwrap_or(false);
@@ -392,6 +396,7 @@ impl Agent {
     }
 
     /// Send message to Anthropic API
+    #[allow(dead_code)]
     async fn send_anthropic(&self, config: &AgentConfig, message: &str) -> Result<String> {
         // Check if API key is set
         if config.api_key.is_none() {
@@ -450,6 +455,7 @@ impl Agent {
     }
 
     /// Send message to OpenAI API
+    #[allow(dead_code)]
     async fn send_openai(&self, config: &AgentConfig, message: &str) -> Result<String> {
         if config.api_key.is_none() {
             return Err(Error::Agent("API key not configured".into()));
