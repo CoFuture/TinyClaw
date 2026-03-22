@@ -240,12 +240,6 @@ impl Agent {
         }
     }
 
-    /// Check if a turn is currently active for a session.
-    pub fn is_turn_active(&self, session_key: &str) -> bool {
-        let cancellations = self.turn_cancellations.read();
-        cancellations.contains_key(session_key)
-    }
-
     /// Clean up cancellation channel after turn ends.
     fn cleanup_turn_cancellation(&self, session_key: &str) {
         let mut cancellations = self.turn_cancellations.write();

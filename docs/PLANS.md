@@ -360,6 +360,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.4.0 | TUI Bug Fix - 修复 unreachable pattern bug：`:rc` 命令因重复 `KeyCode::Char('c')` 无法到达；合并 `:rc` 检查到单个 'c' 处理；移除 dead `is_turn_active` 方法；cargo clippy 0 警告；cargo test 176 tests |
 | v5.3.0 | Session Turn Cancellation - Agent 取消机制：turn_cancellations HashMap、start_turn_cancellation/cancel_turn/is_turn_active 方法；Gateway session.cancel 方法 + 处理器；TurnCancelled 事件；TUI :cancel/:stop 命令；WebUI 取消按钮(思考中显示)；Ollama 流式取消(send_ollama_streaming 支持取消检查)；cargo clippy 0 警告；cargo test 176 tests |
 | v5.2.0 | WebUI 会话管理增强 - API新增 durationSecs/lastMessagePreview/isActive 字段；新增"消息数列"显示消息数量；新增"时长"列显示相对时间(秒/分钟/小时/天)；新增活动状态指示器(绿=活跃/灰=空闲)；支持点击列头排序(ID/标签/类型/消息数/时长/最后活跃)；搜索支持最后消息预览；cargo clippy 0 警告；cargo test 176 tests |
 | v5.1.0 | TUI 输入历史导航 - Up/Down 箭头在输入面板中循环浏览历史消息；AppState 新增 input_history/input_history_index/input_history_saved；辅助方法: add_to_input_history/input_history_up/down/is_navigating_history；Enter发送前添加历史；键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消导航；历史位置提示 '↑↓ 3/10'；每个会话历史限制 100 条；cargo clippy 0 警告；cargo test 176 tests |
@@ -394,4 +395,27 @@
 
 ---
 
-*更新时间: 2026-03-22 10:02*
+## 当前迭代规划 (v5.5.0)
+
+### 本轮目标
+待定（根据 P0 优先级选择）
+
+---
+
+## 迭代历史
+
+### v5.4.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Bug Fix** - 修复 TUI unreachable pattern bug
+  - 之前的 `KeyCode::Char('c')` handler（`:rc` reconnect）因重复匹配永远无法到达
+  - 将 `:rc` 检查合并到单个 'c' 处理逻辑中，现在正确处理 `:c` + `:rc` 序列
+- **Code Cleanup** - 移除 dead code `is_turn_active` 方法（未被使用）
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: Agent 错误处理增强、TUI 视觉优化
+
+---
+
+### v5.3.0 (已完成 ✅)

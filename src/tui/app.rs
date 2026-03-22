@@ -698,6 +698,25 @@ impl TuiApp {
                                     }
                                 }
                                 // No more chars buffered, treat as single 'c'
+                                // Check if it's :rc (reconnect) before treating as single 'c'
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(c_key)) = event::read() {
+                                        if let KeyCode::Char('c') = c_key.code {
+                                            // Got :rc - reconnect
+                                            self.state.set_error(None);
+                                            self.state.set_connected(false);
+                                            return Ok(true);
+                                        }
+                                        // Was ':c' followed by something else - add 'c' to buffer
+                                        // (the other char was already consumed above)
+                                        if self.state.active_panel == 2 {
+                                            self.state.input_buffer.push('c');
+                                            self.state.completion.reset();
+                                        }
+                                        return Ok(true);
+                                    }
+                                }
+                                // No more chars buffered, treat as single 'c'
                                 if self.state.active_panel == 2 {
                                     self.state.input_buffer.push('c');
                                     self.state.completion.reset();
@@ -728,30 +747,6 @@ impl TuiApp {
                                     } else {
                                         self.state.set_error(Some("Cannot delete main session".to_string()));
                                     }
-                                }
-                            }
-                            KeyCode::Char('c') => {
-                                // Check for :rc (reconnect)
-                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
-                                    if let Ok(crossterm::event::Event::Key(c_key)) = event::read() {
-                                        if let KeyCode::Char('c') = c_key.code {
-                                            // Got :rc - reconnect
-                                            self.state.set_error(None);
-                                            self.state.set_connected(false);
-                                            return Ok(true);
-                                        }
-                                        // Was :c but not :rc - add 'c' to buffer
-                                        if self.state.active_panel == 2 {
-                                            self.state.input_buffer.push('c');
-                                            self.state.completion.reset();
-                                        }
-                                        return Ok(true);
-                                    }
-                                }
-                                // No more chars buffered, treat as single 'c'
-                                if self.state.active_panel == 2 {
-                                    self.state.input_buffer.push('c');
-                                    self.state.completion.reset();
                                 }
                             }
                             _ => {}
