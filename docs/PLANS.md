@@ -360,6 +360,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.5.0 | TUI 视觉增强 - 错误显示红色样式（标题、边框、消息）；标题栏思考状态指示器 "⚙ Thinking..." (黄色+粗体)；cargo clippy 0 警告；cargo test 176 tests |
 | v5.4.0 | TUI Bug Fix - 修复 unreachable pattern bug：`:rc` 命令因重复 `KeyCode::Char('c')` 无法到达；合并 `:rc` 检查到单个 'c' 处理；移除 dead `is_turn_active` 方法；cargo clippy 0 警告；cargo test 176 tests |
 | v5.3.0 | Session Turn Cancellation - Agent 取消机制：turn_cancellations HashMap、start_turn_cancellation/cancel_turn/is_turn_active 方法；Gateway session.cancel 方法 + 处理器；TurnCancelled 事件；TUI :cancel/:stop 命令；WebUI 取消按钮(思考中显示)；Ollama 流式取消(send_ollama_streaming 支持取消检查)；cargo clippy 0 警告；cargo test 176 tests |
 | v5.2.0 | WebUI 会话管理增强 - API新增 durationSecs/lastMessagePreview/isActive 字段；新增"消息数列"显示消息数量；新增"时长"列显示相对时间(秒/分钟/小时/天)；新增活动状态指示器(绿=活跃/灰=空闲)；支持点击列头排序(ID/标签/类型/消息数/时长/最后活跃)；搜索支持最后消息预览；cargo clippy 0 警告；cargo test 176 tests |
@@ -395,7 +396,7 @@
 
 ---
 
-## 当前迭代规划 (v5.5.0)
+## 当前迭代规划 (v5.6.0)
 
 ### 本轮目标
 待定（根据 P0 优先级选择）
@@ -403,6 +404,23 @@
 ---
 
 ## 迭代历史
+
+### v5.5.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI 错误显示增强** - 增强 TUI 错误提示视觉效果
+  - 错误标题使用红色 + 粗体样式
+  - 错误边框使用红色
+  - 错误消息使用浅红色显示
+  - 提示文字使用深灰色
+- **TUI 思考状态指示器** - 在标题栏显示思考状态
+  - 当 agent 正在思考时显示 "⚙ Thinking..." (黄色 + 粗体)
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: WebUI 增强、Agent 错误处理
+
+---
 
 ### v5.4.0 (已完成 ✅)
 
@@ -414,7 +432,7 @@
 - cargo clippy 0 警告
 - cargo test 176 tests
 
-**下一步**: Agent 错误处理增强、TUI 视觉优化
+**下一步**: TUI 错误显示增强、思考状态指示器
 
 ---
 

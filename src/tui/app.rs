@@ -892,7 +892,7 @@ impl TuiApp {
     }
 
     fn draw_title_bar(&self, f: &mut ratatui::Frame<'_>, area: Rect) {
-        use ratatui::{style::{Color, Style}, text::{Line, Span}};
+        use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}};
         
         let connection_str = if self.state.connected { 
             "● Connected" 
@@ -906,7 +906,7 @@ impl TuiApp {
             .unwrap_or("none");
         
         // Build title line with styled spans
-        let spans: Vec<Span> = vec![
+        let mut spans: Vec<Span> = vec![
             Span::raw(" TinyClaw v"),
             Span::raw(&self.version),
             Span::raw(" | "),
@@ -914,6 +914,12 @@ impl TuiApp {
             Span::raw(" | Session: "),
             Span::styled(session_str, Style::default().fg(Color::Cyan)),
         ];
+        
+        // Add thinking indicator if agent is processing
+        if self.state.loading {
+            spans.push(Span::raw(" | "));
+            spans.push(Span::styled("⚙ Thinking...", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        }
         
         let paragraph = Paragraph::new(Line::from(spans))
             .alignment(Alignment::Center);
@@ -923,21 +929,35 @@ impl TuiApp {
 
     fn draw_error_overlay(&self, f: &mut ratatui::Frame<'_>) {
         use ratatui::widgets::Clear;
+        use ratatui::style::{Color, Modifier, Style};
+        use ratatui::text::Span;
 
         let size = f.area();
         
         let error_msg = self.state.error_message.as_deref().unwrap_or("Unknown error");
+        
+        // Build error content with color styling
         let error_content: Vec<Line> = vec![
-            Line::from(" ⚠ Connection Issue "),
+            Line::from(vec![
+                Span::styled(" ⚠ Error ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            ]),
             Line::from(""),
-            Line::from(error_msg),
+            Line::from(vec![
+                Span::styled(error_msg, Style::default().fg(Color::LightRed)),
+            ]),
             Line::from(""),
-            Line::from(" Press :r to retry or Esc to dismiss "),
+            Line::from(vec![
+                Span::styled(" Press :r to retry or Esc to dismiss ", Style::default().fg(Color::DarkGray)),
+            ]),
         ];
 
         let block = Block::default()
-            .title(" Error ")
-            .borders(Borders::ALL);
+            .title(vec![
+                Span::styled(" Error ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            ])
+            .title_style(Style::default().fg(Color::Red))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red));
 
         let inner_rect = Layout::default()
             .direction(Direction::Vertical)
