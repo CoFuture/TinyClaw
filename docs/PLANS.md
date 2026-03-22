@@ -357,8 +357,9 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ## 待办事项池
 
 ### Agent 自主执行能力（真正能做事的关键！）
-- [ ] **任务抽象与执行** - Agent 自动规划多步骤任务并执行
-- [ ] **后台任务队列** - 支持异步执行，状态追踪
+- [x] **任务抽象与执行** ✅ v5.9.0
+- [x] **后台任务队列** ✅ v5.9.0
+- [ ] **定时任务系统** - cron 风格定时执行
 - [x] 上下文管理机制 ✅ v3.7.0
 - [x] Skill 机制 ✅ v3.0.0
 - [x] 断路器保护 ✅ v5.6.0
@@ -453,38 +454,57 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v5.9.0)
+## 当前迭代规划 (v6.0.0)
 
 ### 本轮目标
-**Agent 自主任务执行能力** - 让 Agent 能帮你完成复杂的多步骤任务
+**定时任务触发系统** - 让 Agent 能够定时自动执行任务
 
-> 这是"真正能做事"的核心：不是回答问题，而是规划和执行任务
-
-**核心理念**：
-- TinyClaw 和 OpenClaw 的核心区别是**精简架构**，但在**做事情的能力上不应该有明显区别**
-- Skill 机制 + 任务队列 = Agent 自主执行能力
-- 不堆砌工具，而是让现有工具能被组合使用
-
-**当前问题**：
-- Agent 只是"问一句答一句"的被动响应模式
-- 需要变成"你说一件事，Agent 自动完成"的主动模式
+> 真正实现 24/7 运行的智能助手
 
 **计划完成**:
-- [ ] **任务抽象** - 定义 Task 结构（描述、步骤、状态、结果）
-- [ ] **后台任务队列** - 支持异步执行长时间任务
-- [ ] **任务状态追踪** - 进行中/完成/失败 状态管理
-- [ ] **Gateway API** - 支持创建任务、查询状态、获取结果
-- [ ] **集成 Skill 机制** - 利用现有 Skill 作为任务能力
-- [ ] 完整测试覆盖
+- [ ] **定时任务调度器** - 支持 cron 风格表达式
+- [ ] **周期性任务** - 按固定间隔重复执行
+- [ ] **提醒系统** - 定时提醒用户
+- [ ] **Gateway API** - 创建/列表/删除定时任务
+- [ ] 集成现有 Task 机制
+- 完整测试覆盖
 - cargo clippy 0 警告
 - cargo test 通过
 
-**设计原则**：
-- 保持精简：复Skill + 任务队列，不增加新工具
-- 参考 OpenClaw 的任务模型，但简化实现
-- 与现有 Session 机制解耦
+**下一步**: 主动提醒 + 任务组合执行
 
-**下一步**: 定时任务触发、主动提醒
+---
+
+## 迭代历史
+
+### v5.9.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 自主任务执行能力** - 后台任务系统基础设施
+  - 新增 `agent/task.rs`：`Task`、`TaskState`、`TaskStep`、`TaskSummary` 结构
+  - `TaskState` 枚举：Pending/Running/Completed/Failed/Cancelled
+  - `TaskStep` 结构：步骤描述、结果、成功状态、时间戳
+  - `TaskSummary`：用于列表展示的任务摘要
+- **TaskManager 后台任务管理**
+  - 新增 `agent/task_manager.rs`
+  - 任务创建、列表、查询、启动、取消、删除
+  - 异步执行支持，任务状态追踪
+  - 任务计数统计
+- **Gateway API 扩展**
+  - 新增 JSON-RPC 方法：`task.create`、`task.list`、`task.get`、`task.start`、`task.cancel`、`task.remove`
+  - 协议常量定义在 `protocol.rs`
+- **事件系统增强**
+  - 新增事件类型：`task.created`、`task.started`、`task.progress`、`task.completed`、`task.failed`、`task.cancelled`
+  - SSE 事件过滤和名称映射更新
+- **HandlerContext 集成**
+  - TaskManager 集成到 HandlerContext
+  - 主程序和 WebSocket 服务器初始化更新
+- **完整测试覆盖**
+  - 16 个新测试（Task 和 TaskManager）
+  - 总测试数：207 tests
+- cargo clippy 0 警告
+
+**下一步**: 任务步骤解析、步骤执行追踪
 
 ---
 
