@@ -17,6 +17,7 @@ mod gateway;
 mod http;
 mod metrics;
 mod persistence;
+mod preferences;
 mod ratelimit;
 mod tui;
 mod types;
@@ -30,6 +31,7 @@ use gateway::session::SessionManager;
 use http::routes::{create_router, HttpState};
 use metrics::MetricsCollector;
 use persistence::HistoryManager;
+use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
 use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler};
 
@@ -165,6 +167,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     scheduler.start();
     info!("Scheduled task scheduler started");
 
+    // Create preferences manager with persistence
+    let preferences_path = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("preferences.json");
+    // Ensure parent directory exists
+    if let Some(parent) = preferences_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let preferences_manager = Arc::new(PreferencesManager::new_with_persistence(&preferences_path));
+    info!("User preferences loaded from: {:?}", preferences_path);
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -192,6 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         skill_manager: skill_manager.clone(),
         event_emitter: event_emitter.clone(),
         scheduler: scheduler.clone(),
+        preferences: preferences_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -210,6 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         task_manager.clone(), // TaskManager for background task execution
         scheduler.clone(), // Scheduler for scheduled task triggering
         suggestion_engines_ws, // Suggestion engines for proactive suggestions
+        preferences_manager.clone(), // User preferences manager
     );
     
     let ws_handle = tokio::spawn(async move {

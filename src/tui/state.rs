@@ -210,6 +210,14 @@ pub struct AppState {
     pub input_history_saved: Option<String>,
     /// AI provider circuit breaker state: "closed", "open", or "half_open"
     pub circuit_breaker_state: String,
+    /// Whether we're in search mode
+    pub search_mode: bool,
+    /// Current search query
+    pub search_query: String,
+    /// Search result indices in current messages
+    pub search_results: Vec<usize>,
+    /// Current highlighted search result index (in search_results)
+    pub search_index: Option<usize>,
 }
 
 impl Default for AppState {
@@ -234,6 +242,10 @@ impl Default for AppState {
             input_history_index: None,
             input_history_saved: None,
             circuit_breaker_state: "closed".to_string(),
+            search_mode: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_index: None,
         }
     }
 }
@@ -416,5 +428,127 @@ impl AppState {
             .filter(|s| s.to_lowercase().starts_with(&prefix))
             .cloned()
             .collect()
+    }
+
+    // ========================================================================
+    // Search functionality
+    // ========================================================================
+
+    /// Enter search mode
+    pub fn enter_search_mode(&mut self) {
+        self.search_mode = true;
+        self.search_query.clear();
+        self.search_results.clear();
+        self.search_index = None;
+    }
+
+    /// Exit search mode
+    pub fn exit_search_mode(&mut self) {
+        self.search_mode = false;
+        self.search_query.clear();
+        self.search_results.clear();
+        self.search_index = None;
+    }
+
+    /// Update search query and find matching messages
+    pub fn search(&mut self, query: &str) {
+        self.search_query = query.to_string();
+        self.search_results.clear();
+        self.search_index = None;
+
+        if query.is_empty() {
+            return;
+        }
+
+        let query_lower = query.to_lowercase();
+        let messages = self.get_current_messages();
+        // Collect indices first to avoid borrow conflict
+        let matching_indices: Vec<usize> = messages.iter()
+            .enumerate()
+            .filter(|(_, msg)| msg.content.to_lowercase().contains(&query_lower))
+            .map(|(idx, _)| idx)
+            .collect();
+        
+        self.search_results = matching_indices;
+
+        if !self.search_results.is_empty() {
+            self.search_index = Some(0);
+            // Scroll to first result
+            self.scroll_offset = self.search_results[0].saturating_sub(2);
+        }
+    }
+
+    /// Navigate to next search result
+    pub fn search_next(&mut self) -> bool {
+        if self.search_results.is_empty() {
+            return false;
+        }
+
+        let idx = self.search_index.unwrap_or(0);
+        let next_idx = (idx + 1) % self.search_results.len();
+        self.search_index = Some(next_idx);
+        self.scroll_offset = self.search_results[next_idx].saturating_sub(2);
+        true
+    }
+
+    /// Navigate to previous search result
+    pub fn search_prev(&mut self) -> bool {
+        if self.search_results.is_empty() {
+            return false;
+        }
+
+        let idx = self.search_index.unwrap_or(0);
+        let prev_idx = if idx == 0 {
+            self.search_results.len() - 1
+        } else {
+            idx - 1
+        };
+        self.search_index = Some(prev_idx);
+        self.scroll_offset = self.search_results[prev_idx].saturating_sub(2);
+        true
+    }
+
+    /// Get search status string (e.g., "3/10" or None)
+    #[allow(dead_code)]
+    pub fn search_status(&self) -> Option<String> {
+        if !self.search_mode || self.search_results.is_empty() {
+            return None;
+        }
+        let idx = self.search_index.unwrap_or(0) + 1;
+        Some(format!("{}/{}", idx, self.search_results.len()))
+    }
+
+    /// Check if a message is a search result (for highlighting)
+    #[allow(dead_code)]
+    pub fn is_search_result(&self, msg_idx: usize) -> bool {
+        self.search_results.contains(&msg_idx)
+    }
+
+    /// Check if a message is the currently selected search result
+    #[allow(dead_code)]
+    pub fn is_selected_search_result(&self, msg_idx: usize) -> bool {
+        if let Some(idx) = self.search_index {
+            self.search_results.get(idx) == Some(&msg_idx)
+        } else {
+            false
+        }
+    }
+
+    // ========================================================================
+    // Navigation helpers
+    // ========================================================================
+
+    /// Scroll to the bottom of messages
+    pub fn scroll_to_bottom(&mut self) {
+        let msg_count = self.get_current_messages().len();
+        if msg_count > 1 {
+            self.scroll_offset = msg_count.saturating_sub(1);
+        }
+    }
+
+    /// Get whether search is active and has results
+    #[allow(dead_code)]
+    pub fn has_search_results(&self) -> bool {
+        !self.search_results.is_empty()
     }
 }

@@ -62,6 +62,8 @@ pub struct HandlerContext {
     pub scheduler: Arc<Scheduler>,
     /// Per-session suggestion engines for proactive suggestions (Arc for Clone)
     pub suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
+    /// User preferences manager
+    pub preferences: Arc<crate::preferences::PreferencesManager>,
 }
 
 impl HandlerContext {
@@ -77,6 +79,7 @@ impl HandlerContext {
         task_manager: Arc<TaskManager>,
         scheduler: Arc<Scheduler>,
         suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
+        preferences: Arc<crate::preferences::PreferencesManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -89,6 +92,7 @@ impl HandlerContext {
             task_manager,
             scheduler,
             suggestion_engines,
+            preferences,
         }
     }
 

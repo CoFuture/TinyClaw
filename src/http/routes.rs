@@ -7,6 +7,7 @@ use crate::gateway::server::ServerState;
 use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
+use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
 use crate::ratelimit::RateLimiter;
 use crate::types::{SessionHistory, Role};
 use axum::{
@@ -43,6 +44,7 @@ pub struct HttpState {
     pub skill_manager: Arc<SessionSkillManager>,
     pub event_emitter: Arc<EventEmitter>,
     pub scheduler: Arc<Scheduler>,
+    pub preferences: Arc<PreferencesManager>,
 }
 
 /// Health check response
@@ -793,6 +795,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/scheduled/{schedule_id}/enable", axum::routing::post(scheduled_enable))
         .route("/api/scheduled/{schedule_id}/disable", axum::routing::post(scheduled_disable))
         .route("/api/scheduled/{schedule_id}/fire", axum::routing::post(scheduled_fire_now))
+        // User preferences API
+        .route("/api/preferences", get(preferences_get))
+        .route("/api/preferences", axum::routing::patch(preferences_update))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1312,4 +1317,24 @@ async fn scheduled_fire_now(
             "error": e
         }))),
     }
+}
+
+// ============================================================================
+// User Preferences API Handlers
+// ============================================================================
+
+/// Get user preferences
+async fn preferences_get(
+    State(state): State<Arc<HttpState>>,
+) -> Json<UserPreferences> {
+    Json(state.preferences.get())
+}
+
+/// Update user preferences (partial update)
+async fn preferences_update(
+    State(state): State<Arc<HttpState>>,
+    Json(update): Json<UserPreferencesUpdate>,
+) -> Json<UserPreferences> {
+    state.preferences.update(update);
+    Json(state.preferences.get())
 }

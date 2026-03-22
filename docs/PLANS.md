@@ -417,6 +417,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v6.3.0 | 会话上下文持久化 + TUI 增强 - 新增 `preferences.rs` 模块：`UserPreferences`/`PreferencesManager` 结构，支持 user_name、language、timezone、default_skills、agent_persona 等字段；JSON 持久化到 `~/.config/tiny_claw/preferences.json`；HTTP API `/api/preferences` GET/PATCH；TUI 增强：gg 滚动到底部，`:f`/Ctrl+F 搜索模式，n/N 导航，实时匹配计数；cargo clippy 0 警告；cargo test 241 tests |
 | v5.8.0 | Agent Turn Execution Log - 新增 `agent/turn_log.rs`：`TurnAction`/`TurnLogEntry`/`TurnLog`/`TurnLogSummary` 结构；新增 `Event::TurnLogUpdated` 和 `Event::TurnLogCompleted` SSE 事件；Runtime 集成：每个 Turn 创建 TurnLog，工具执行时记录（名称/输入/输出/成功/耗时），Turn 结束时发送 TurnLogCompleted；3个新测试；cargo clippy 0 警告；cargo test 191 tests |
 | v5.7.0 | Structured Tool Error Reporting + Agent Self-Correction - 新增 `agent/error_recovery.rs`：ToolErrorKind 枚举(9种错误类型)、ErrorRecovery 结构(包含 retryable 和 suggestion)；集成到 runtime.rs 和 client.rs，工具失败时返回结构化错误报告帮助 Agent 自我修正；12个新测试；cargo clippy 0 警告；cargo test 188 tests |
 | v5.6.0 | Agent 韧性增强 - 集成断路器保护 AI API：execute_protected() 包装 retry + 断路器；指标系统增强 (circuit_breaker_state)；Gateway JSON-RPC 方法；TUI 标题栏熔断指示器 (🟢/🟡/🔴)；WebUI 熔断状态显示；cargo clippy 0 警告；cargo test 176 tests |
@@ -462,8 +463,22 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 **Agent 能力增强 + 交互体验优化**
 
 **计划完成**:
-- [ ] **会话上下文持久化** - 跨会话记住用户偏好
-- [ ] **TUI 增强** - 交互式 TUI 完善
+- [x] **会话上下文持久化** - 跨会话记住用户偏好
+  - 新增 `preferences.rs` 模块：`UserPreferences`、`PreferencesManager` 结构
+  - 支持字段：user_name、user_bio、preferred_language、default_skills、agent_persona、timezone、theme、streaming_enabled
+  - JSON 文件持久化到 `~/.config/tiny_claw/preferences.json`
+  - 自动加载并注入 Agent 系统提示词（`to_system_prompt_addition()` 方法）
+  - HTTP API：`GET /api/preferences` 和 `PATCH /api/preferences`
+  - 4 个单元测试
+- [x] **TUI 增强** - 交互式 TUI 完善
+  - 新增 `gg` 快捷键滚动到消息底部
+  - 新增 `:f` 命令或 `Ctrl+F` 进入搜索模式
+  - 搜索模式支持 `/` 开始搜索、实时显示匹配结果 (`n`/`N` 导航)
+  - 搜索状态显示：匹配计数和高亮
+  - Esc 退出搜索模式
+- [x] 代码质量
+  - cargo clippy 0 警告
+  - cargo test 241 tests (新增 4 个 preferences 测试)
 
 **下一步**: 邮件/日历集成、多模态支持
 

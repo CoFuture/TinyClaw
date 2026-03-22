@@ -540,6 +540,16 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Enter => {
+                    // Handle search mode
+                    if self.state.search_mode {
+                        // Perform search with current query
+                        if self.state.input_buffer.starts_with('/') {
+                            let query = self.state.input_buffer.trim_start_matches('/').to_string();
+                            self.state.search(&query);
+                        }
+                        return Ok(true);
+                    }
+                    
                     // Handle rename mode
                     if self.state.rename_mode {
                         if let Some(ref session_id) = self.state.current_session_id {
@@ -763,6 +773,33 @@ impl TuiApp {
                                     }
                                 }
                             }
+                            KeyCode::Char('f') => {
+                                // Enter search mode
+                                self.state.enter_search_mode();
+                                self.state.input_buffer.clear();
+                                self.state.input_buffer.push('/');
+                            }
+                            KeyCode::Char('g') => {
+                                // Scroll to bottom - gg in vim style (first 'g')
+                                // Store that we got first 'g', wait for second 'g'
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(g_key)) = event::read() {
+                                        if let KeyCode::Char('g') = g_key.code {
+                                            // Got 'gg' - scroll to bottom
+                                            self.state.scroll_to_bottom();
+                                            return Ok(true);
+                                        }
+                                        // Not 'gg', add 'g' to buffer
+                                        if self.state.active_panel == 2 {
+                                            self.state.input_buffer.push('g');
+                                            self.state.completion.reset();
+                                        }
+                                        return Ok(true);
+                                    }
+                                }
+                                // Single 'g' - just scroll to bottom for now
+                                self.state.scroll_to_bottom();
+                            }
                             _ => {}
                         }
                     }
@@ -783,6 +820,13 @@ impl TuiApp {
                     self.state.reset_input_history_navigation();
                     return Ok(true);
                 }
+                KeyCode::Char('f') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    // Ctrl+F - enter search mode
+                    self.state.enter_search_mode();
+                    self.state.input_buffer.clear();
+                    self.state.input_buffer.push('/');
+                    return Ok(true);
+                }
                 KeyCode::Char('c') => {
                     if self.state.active_panel == 0 {
                         // Number key for session selection
@@ -800,6 +844,36 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Char(c) => {
+                    // Handle search mode
+                    if self.state.search_mode {
+                        // In search mode, typing updates the search query
+                        if c == '/' {
+                            // '/' is already in buffer from entering search mode
+                            self.state.input_buffer.push(c);
+                        } else {
+                            self.state.input_buffer.push(c);
+                            // Update search results as user types (after the '/')
+                            if self.state.input_buffer.starts_with('/') {
+                                let query = self.state.input_buffer.trim_start_matches('/').to_string();
+                                self.state.search(&query);
+                            }
+                        }
+                        return Ok(true);
+                    }
+                    
+                    // Handle search navigation when not in input panel
+                    if self.state.search_mode {
+                        if c == 'n' {
+                            // Next search result
+                            self.state.search_next();
+                            return Ok(true);
+                        } else if c == 'N' || c == 'p' {
+                            // Previous search result (Shift+N or p)
+                            self.state.search_prev();
+                            return Ok(true);
+                        }
+                    }
+                    
                     if self.state.active_panel == 2 {
                         // If navigating history, reset and start fresh
                         if self.state.is_navigating_history() {
@@ -821,6 +895,22 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Backspace => {
+                    // Handle search mode backspace
+                    if self.state.search_mode {
+                        if !self.state.input_buffer.is_empty() {
+                            self.state.input_buffer.pop();
+                            // Update search results
+                            if self.state.input_buffer.starts_with('/') {
+                                let query = self.state.input_buffer.trim_start_matches('/').to_string();
+                                self.state.search(&query);
+                            } else {
+                                self.state.search_results.clear();
+                                self.state.search_index = None;
+                            }
+                        }
+                        return Ok(true);
+                    }
+                    
                     if self.state.active_panel == 2 {
                         // If navigating history, reset
                         if self.state.is_navigating_history() {
@@ -842,6 +932,8 @@ impl TuiApp {
                         // Cancel history navigation - restore saved buffer
                         self.state.input_buffer = self.state.input_history_saved.take().unwrap_or_default();
                         self.state.reset_input_history_navigation();
+                    } else if self.state.search_mode {
+                        self.state.exit_search_mode();
                     } else {
                         return Ok(false); // Quit
                     }
