@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 
 /// Event types for real-time streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,14 +63,28 @@ pub enum Event {
         tool_call_id: String,
         output: String,
     },
-    
+
+    /// Turn execution log was updated (new action recorded)
+    #[serde(rename = "turn.log_updated")]
+    TurnLogUpdated {
+        session_id: String,
+        entry: TurnLogEntry,
+    },
+
+    /// Turn execution log was completed
+    #[serde(rename = "turn.log_completed")]
+    TurnLogCompleted {
+        session_id: String,
+        summary: TurnLogSummary,
+    },
+
     /// Session created
     #[serde(rename = "session.created")]
     SessionCreated {
         session_id: String,
         kind: String,
     },
-    
+
     /// Session ended
     #[serde(rename = "session.ended")]
     SessionEnded {

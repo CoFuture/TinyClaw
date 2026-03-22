@@ -7,23 +7,47 @@
 
 ## 项目愿景
 
-**TinyClaw** - OpenClaw 的 Rust 实现子集，一个**小而精**的生产级 AI Agent Gateway。
+**TinyClaw** - **真正能帮你做事的 AI Agent**，本地运行的智能助手。
+
+> "The AI that actually does things" —— 一个真正能帮你做事的 AI 助手。
+
+### 核心理念（与 OpenClaw 一致）
+
+| 理念 | 说明 |
+|------|------|
+| **AI as Teammate** | 不是聊天工具，而是能自主工作的"数字员工" |
+| **数据主权** | 你的数据、上下文、记忆都保存在本地设备上 |
+| **可 hackable** | 完全开源，像 20 年前用 Linux 的感觉，你可以掌控并定制 |
 
 ### 长期目标
-1. **Agent 能力提升** - 对标 OpenClaw，实现上下文管理、Skill 机制
-2. **交互体验打磨** - WebUI 完善、TUI 支持、实时反馈
-3. **稳定可靠** - 保持代码精简、高质量、可维护
+
+1. **真正能做事** - 邮件、日历、智能家居、信息查询、文件处理等
+2. **24/7 持续运行** - 定时任务、自动执行、主动提醒
+3. **多渠道接入** - 支持多种协议接入（WebSocket、HTTP、CLI）
+4. **稳定可靠** - 保持 Rust 代码精简、高质量、可维护
+
+### 与 OpenClaw 的关系
+
+TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
+- ✅ 核心 Agent Runtime（工具调用循环、上下文管理）
+- ✅ WebSocket Gateway（JSON-RPC 协议）
+- ✅ HTTP Server + WebUI/TUI
+- ✅ 基础工具集（文件、代码、系统）
+- ❌ 不做多渠道（20+ 消息平台）- 聚焦核心
+- ❌ 不做语音/视觉 - 保持精简
 
 ---
 
-## 优先级定义
+## 优先级定义（面向"真正能做事"）
 
 | 优先级 | 领域 | 说明 |
 |--------|------|------|
-| P0 | **Agent 能力** | 上下文管理、Skill 机制、工具扩展 |
-| P0 | **交互体验** | WebUI 完善、TUI、实时反馈 |
-| P1 | **多 Session** | 并发会话管理、Session 隔离 |
-| P1 | **稳定性** | 错误处理、重试机制、断路器 |
+| **P0** | **Agent 自主执行** | 自动规划+执行多步骤任务、任务队列、主动执行 |
+| **P0** | **核心工具扩展** | 邮件、天气、信息查询、提醒、日程 |
+| **P0** | **定时任务/自动化** | 定时执行、周期任务、主动提醒 |
+| **P1** | **多 Session** | 并发会话管理、Session 隔离 |
+| **P1** | **交互体验** | WebUI 完善、TUI、实时反馈 |
+| **P2** | **稳定性** | 错误处理、重试机制、断路器 |
 
 ---
 
@@ -332,12 +356,27 @@
 
 ## 待办事项池
 
-### Agent 能力增强
-- [x] 上下文管理机制 (Context struct + 压缩策略) ✅ v3.7.0
-- [x] Skill 机制 (轻量级工具集) ✅ v3.0.0
-- [x] Skill 持久化 (自定义技能保存到 JSON) ✅ v4.0.0
-- [ ] 工具扩展 (更多内置工具)
-- [x] Agent 配置文件支持 (YAML/JSON) ✅ v4.3.0
+### Agent 自主执行能力（真正能做事的关键！）
+- [ ] **任务规划与执行** - Agent 自动规划多步骤任务并执行
+- [ ] **任务队列** - 支持后台任务队列，异步执行
+- [x] 上下文管理机制 ✅ v3.7.0
+- [x] Skill 机制 ✅ v3.0.0
+- [x] 断路器保护 ✅ v5.6.0
+- [x] 结构化错误报告 + 自我修正 ✅ v5.7.0
+
+### 核心工具扩展（让 Agent 能做事）
+- [ ] **天气查询** - 获取指定城市天气信息
+- [ ] **信息搜索** - 搜索网络获取实时信息
+- [ ] **提醒/定时** - 设置提醒、定时执行任务
+- [x] 文件操作 (read/write/cp/mv/rm/cat/grep/glob/find) ✅
+- [x] 代码分析 ✅
+- [x] 系统命令执行 ✅
+- [x] HTTP 请求 ✅
+
+### 定时任务/自动化
+- [ ] **定时任务系统** - 支持 cron 风格定时执行
+- [ ] **主动提醒** - 基于条件的主动通知
+- [ ] **周期性检查** - 定期检查并报告
 
 ### 交互体验
 - [x] WebUI 技能管理面板 ✅ v3.0.0
@@ -352,16 +391,17 @@
 - [x] 命令行客户端 ✅ v3.8.0
 - [x] WebUI 聊天 Markdown + 代码高亮 ✅ v4.2.0
 - [x] TUI Tab 命令补全 ✅ v4.3.0
-- [x] TUI 视觉优化 (彩色角色标签+时间戳) ✅ v4.4.0
+- [x] TUI 视觉优化 ✅ v4.4.0
 - [x] TUI 命令帮助系统增强 ✅ v4.6.0
 - [x] WebUI 聊天消息复制/清空/搜索 ✅ v5.0.0
-- [x] TUI 输入历史导航 (Up/Down 箭头) ✅ v5.1.0
-- [x] Session Turn Cancellation (TUI :cancel, WebUI 取消按钮) ✅ v5.3.0
+- [x] TUI 输入历史导航 ✅ v5.1.0
+- [x] Session Turn Cancellation ✅ v5.3.0
+- [x] Session Rename ✅ v4.8.0
 
 ### 稳定性
-- [x] 错误处理增强 ✅ v5.7.0
 - [x] 日志优化 (结构化日志) ✅ v4.1.0
 - [x] 监控指标 ✅ v3.9.0
+- [x] 错误处理增强 ✅ v5.7.0
 
 ---
 
@@ -407,22 +447,26 @@
 
 ---
 
-## 当前迭代规划 (v5.7.0)
+## 当前迭代规划 (v5.8.0)
 
 ### 本轮目标
-**Structured Tool Error Reporting + Agent Self-Correction** - 帮助 Agent 理解工具失败原因并自我修正
+**天气查询工具** - 让 Agent 能真正帮你查询天气信息
+
+> 这是"真正能做事"愿景的第一步：扩展核心工具集
 
 **计划完成**:
-- [x] 错误分类系统 (`ToolErrorKind` enum) - 9种错误类型：NotFound, PermissionDenied, InvalidArgument, SyntaxError, NetworkError, Timeout, ToolNotFound, ResourceBusy, OutOfSpace, Unknown
-- [x] 错误恢复指导 (`ErrorRecovery` struct) - 每种错误包含 retryable 标志和建议
-- [x] 结构化错误报告格式化 - 包含错误类型、是否可重试、恢复建议
-- [x] 集成到 `AgentRuntime` (`runtime.rs`) - 工具失败时使用结构化报告
-- [x] 集成到 `Agent::send_message_with_history` (`client.rs`) - Anthropic/OpenAI API 调用时使用结构化报告
-- [x] 完整测试覆盖 (12 个新测试)
+- [ ] 新增 `weather` 工具 - 获取指定城市/位置的天气信息
+  - 使用免费天气 API（如 wttr.in 或 Open-Meteo）
+  - 支持参数：城市名称、日期（今天/明天/后天）
+  - 返回：温度、天气状况、湿度、风力等
+- [ ] 集成到 `ToolExecutor` - 注册 weather 工具
+- [ ] 添加工具 schema 定义 - 用于 Agent 知道如何调用
+- [ ] 添加到默认技能 - 让新会话自动可用
+- [ ] 完整测试覆盖
 - cargo clippy 0 警告
-- cargo test 188 tests
+- cargo test 通过
 
-**下一步**: 多 Session 并发支持、WebUI 进一步增强
+**下一步**: 信息搜索工具、提醒工具
 
 ---
 
