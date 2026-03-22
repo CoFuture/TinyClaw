@@ -183,6 +183,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_notes_manager = Arc::new(SessionNotesManager::new());
     info!("Session notes manager initialized");
 
+    // Create suggestion manager for interactive suggestions
+    let suggestion_manager = Arc::new(crate::agent::SuggestionManager::new());
+    info!("Suggestion manager initialized");
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -212,6 +216,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         scheduler: scheduler.clone(),
         preferences: preferences_manager.clone(),
         session_notes: session_notes_manager.clone(),
+        suggestion_manager: suggestion_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -232,6 +237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         suggestion_engines_ws, // Suggestion engines for proactive suggestions
         preferences_manager.clone(), // User preferences manager
         session_notes_manager.clone(), // Session notes manager
+        suggestion_manager.clone(), // Suggestion manager for interactive suggestions
     );
     
     let ws_handle = tokio::spawn(async move {

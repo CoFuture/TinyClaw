@@ -3,6 +3,7 @@
 use crate::agent::tools::ToolExecutor;
 use crate::agent::suggestion::SuggestionEngine;
 use crate::agent::session_notes::SessionNotesManager;
+use crate::agent::SuggestionManager;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -67,6 +68,8 @@ pub struct HandlerContext {
     pub preferences: Arc<crate::preferences::PreferencesManager>,
     /// Session notes manager
     pub session_notes: Arc<SessionNotesManager>,
+    /// Suggestion manager for tracking active suggestions and feedback
+    pub suggestion_manager: Arc<SuggestionManager>,
 }
 
 impl HandlerContext {
@@ -84,6 +87,7 @@ impl HandlerContext {
         suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
         preferences: Arc<crate::preferences::PreferencesManager>,
         session_notes: Arc<SessionNotesManager>,
+        suggestion_manager: Arc<SuggestionManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -98,6 +102,7 @@ impl HandlerContext {
             suggestion_engines,
             preferences,
             session_notes,
+            suggestion_manager,
         }
     }
 
@@ -165,6 +170,9 @@ pub async fn handle_request(
         methods::SESSION_NOTES_ADD => handle_session_notes_add(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_NOTES_UPDATE => handle_session_notes_update(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_NOTES_DELETE => handle_session_notes_delete(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_SUGGESTIONS_LIST => handle_session_suggestions_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_SUGGESTIONS_ACCEPT => handle_session_suggestions_accept(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_SUGGESTIONS_DISMISS => handle_session_suggestions_dismiss(ctx, jsonrpc_id.clone(), params).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -714,11 +722,22 @@ async fn handle_agent_turn(
         engine.generate_suggestions(&history, &response)
     };
 
+    // Filter suggestions based on previous feedback (dismissed patterns)
+    let filtered_suggestions: Vec<_> = suggestions
+        .into_iter()
+        .filter(|s| !ctx.suggestion_manager.should_filter(session_key, s))
+        .collect();
+
+    // Store suggestions in manager for tracking
+    if !filtered_suggestions.is_empty() {
+        ctx.suggestion_manager.set_suggestions(session_key, filtered_suggestions.clone());
+    }
+
     // Emit suggestion generated event if we have suggestions
-    if !suggestions.is_empty() {
+    if !filtered_suggestions.is_empty() {
         ctx.event_emitter.emit(Event::SuggestionGenerated {
             session_id: session_key.to_string(),
-            suggestions,
+            suggestions: filtered_suggestions,
         });
     }
 
@@ -1390,6 +1409,92 @@ async fn handle_session_notes_delete(
         "success": deleted,
         "sessionId": session_id,
         "noteId": note_id,
+    }))
+}
+
+/// Handle session.suggestions.list - list suggestions for a session
+async fn handle_session_suggestions_list(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+
+    let suggestions = ctx.suggestion_manager.list_summaries(session_id);
+
+    Ok(serde_json::json!({
+        "sessionId": session_id,
+        "suggestions": suggestions,
+        "count": suggestions.len(),
+    }))
+}
+
+/// Handle session.suggestions.accept - accept a suggestion
+async fn handle_session_suggestions_accept(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+    let suggestion_id = params
+        .get("suggestionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("suggestionId required".to_string()))?;
+
+    match ctx.suggestion_manager.accept(session_id, suggestion_id) {
+        Some(suggestion) => {
+            // Emit event
+            ctx.event_emitter.emit(Event::SuggestionAccepted {
+                session_id: session_id.to_string(),
+                suggestion_id: suggestion_id.to_string(),
+                suggestion_type: format!("{:?}", suggestion.suggestion_type),
+            });
+            Ok(serde_json::json!({
+                "success": true,
+                "sessionId": session_id,
+                "suggestionId": suggestion_id,
+                "suggestion": suggestion,
+            }))
+        }
+        None => Err(Error::Protocol("Suggestion not found".to_string())),
+    }
+}
+
+/// Handle session.suggestions.dismiss - dismiss a suggestion
+async fn handle_session_suggestions_dismiss(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+    let suggestion_id = params
+        .get("suggestionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("suggestionId required".to_string()))?;
+
+    let dismissed = ctx.suggestion_manager.dismiss(session_id, suggestion_id);
+
+    if dismissed {
+        // Emit event
+        ctx.event_emitter.emit(Event::SuggestionDismissed {
+            session_id: session_id.to_string(),
+            suggestion_id: suggestion_id.to_string(),
+        });
+    }
+
+    Ok(serde_json::json!({
+        "success": dismissed,
+        "sessionId": session_id,
+        "suggestionId": suggestion_id,
     }))
 }
 

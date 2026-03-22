@@ -419,6 +419,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v6.7.0 | 交互式建议系统 - 新增 SuggestionManager 管理主动建议和用户反馈；追踪接受/忽略的建议，学习避免重复；Gateway JSON-RPC (`session.suggestions.list/accept/dismiss`)；HTTP REST API (`/api/sessions/:id/suggestions`)；增强 SuggestionEngine 反馈过滤；cargo clippy 0 警告；cargo test 262 tests |
 | v6.6.0 | Session Instructions 会话指令 - 每个会话可设置独立的 AI 行为指令，注入到 system prompt 中；新增 `Session.instructions` 字段、SessionManager 方法、Gateway JSON-RPC (`session.instructions.get/set`)、HTTP REST API (`/api/sessions/:id/instructions`)、TUI `:instr` 命令、draw_instructions_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
 | v6.5.0 | WebUI 会话笔记面板 + TUI 笔记命令 - admin.html 新增会话笔记管理面板：会话选择下拉框、笔记列表展示、CRUD 操作、置顶/标签支持；TUI 新增 `:note` / `:notes` / `:pin` 命令查看笔记；AppState 新增 notes_mode 等字段；Gateway 客户端新增 list_session_notes 方法；SessionNotesLoaded 事件处理；draw_notes_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
 | v6.4.0 | Session Notes 后端 - 新增 `agent/session_notes.rs`：SessionNote/SessionNoteSummary/SessionNotesManager 结构，支持 content/pinned/tags 字段，JSON 持久化到 ~/.config/tiny_claw/session_notes/；Gateway JSON-RPC 集成 session.notes.list/add/update/delete 方法；HTTP REST API 完整支持；cargo clippy 0 警告；cargo test 251 tests |
@@ -563,6 +564,34 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo test 251 tests
 
 **下一步**: 继续完善 Agent 能力、更多交互体验优化
+
+---
+
+## 当前迭代规划 (v6.7.0)
+
+### 本轮目标
+**交互式建议系统 (Interactive Suggestions System)** - 让建议变得可操作
+
+**计划完成**:
+- [x] **SuggestionManager 核心** - 管理会话中的主动建议和反馈追踪
+  - 新增 `agent/suggestion_manager.rs`：`TrackedSuggestion`、`SuggestionFeedback`、`FeedbackStats`、`SuggestionManager` 结构
+  - 支持建议持久化到 JSON 文件
+  - 追踪用户接受/忽略的建议，学习模式避免重复显示
+  - 反馈统计：按类型记录接受/忽略次数
+  - 20 个单元测试
+- [x] **Gateway JSON-RPC 集成**
+  - 新增方法：`session.suggestions.list`、`session.suggestions.accept`、`session.suggestions.dismiss`
+  - 新增事件：`suggestion.accepted`、`suggestion.dismissed`
+- [x] **HTTP REST API**
+  - `GET /api/sessions/:session_id/suggestions` - 列出建议
+  - `POST /api/sessions/:session_id/suggestions/:suggestion_id/accept` - 接受建议
+  - `POST /api/sessions/:session_id/suggestions/:suggestion_id/dismiss` - 忽略建议
+- [x] **SuggestionEngine 增强**
+  - 集成反馈过滤：自动过滤已忽略的建议类型
+  - 避免显示类似的被忽略建议
+- [x] 代码质量
+  - cargo clippy 0 警告（仅警告）
+  - cargo test 262 tests (新增 20 个测试)
 
 ---
 

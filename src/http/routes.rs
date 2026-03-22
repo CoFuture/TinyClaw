@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -46,6 +46,7 @@ pub struct HttpState {
     pub scheduler: Arc<Scheduler>,
     pub preferences: Arc<PreferencesManager>,
     pub session_notes: Arc<SessionNotesManager>,
+    pub suggestion_manager: Arc<SuggestionManager>,
 }
 
 /// Health check response
@@ -681,6 +682,8 @@ async fn sse_events(
                                     Event::ScheduledTaskUpdated { .. } => true,
                                     Event::ScheduledTaskDeleted { .. } => true,
                                     Event::SuggestionGenerated { session_id, .. } => session_id == filter,
+                                    Event::SuggestionAccepted { session_id, .. } => session_id == filter,
+                                    Event::SuggestionDismissed { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -713,6 +716,8 @@ async fn sse_events(
                                     Event::ScheduledTaskUpdated { .. } => "scheduled.updated",
                                     Event::ScheduledTaskDeleted { .. } => "scheduled.deleted",
                                     Event::SuggestionGenerated { .. } => "suggestion.generated",
+                                    Event::SuggestionAccepted { .. } => "suggestion.accepted",
+                                    Event::SuggestionDismissed { .. } => "suggestion.dismissed",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",
@@ -807,6 +812,10 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // Session instructions API
         .route("/api/sessions/:session_id/instructions", get(session_instructions_get))
         .route("/api/sessions/:session_id/instructions", axum::routing::put(session_instructions_set))
+        // Session suggestions API
+        .route("/api/sessions/:session_id/suggestions", get(suggestions_list))
+        .route("/api/sessions/:session_id/suggestions/:suggestion_id/accept", axum::routing::post(suggestions_accept))
+        .route("/api/sessions/:session_id/suggestions/:suggestion_id/dismiss", axum::routing::post(suggestions_dismiss))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1449,5 +1458,66 @@ async fn session_instructions_set(
         "success": success,
         "sessionId": session_id,
         "instructions": instructions,
+    }))
+}
+
+/// List suggestions for a session
+async fn suggestions_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let suggestions = state.suggestion_manager.list_summaries(&session_id);
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "suggestions": suggestions,
+        "count": suggestions.len(),
+    }))
+}
+
+/// Accept a suggestion
+async fn suggestions_accept(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, suggestion_id)): axum::extract::Path<(String, String)>,
+) -> Json<serde_json::Value> {
+    match state.suggestion_manager.accept(&session_id, &suggestion_id) {
+        Some(suggestion) => {
+            // Emit suggestion accepted event
+            state.event_emitter.emit(Event::SuggestionAccepted {
+                session_id: session_id.clone(),
+                suggestion_id: suggestion_id.clone(),
+                suggestion_type: format!("{:?}", suggestion.suggestion_type),
+            });
+            Json(serde_json::json!({
+                "success": true,
+                "sessionId": session_id,
+                "suggestionId": suggestion_id,
+                "suggestion": suggestion,
+            }))
+        }
+        None => Json(serde_json::json!({
+            "success": false,
+            "error": "Suggestion not found",
+            "sessionId": session_id,
+            "suggestionId": suggestion_id,
+        })),
+    }
+}
+
+/// Dismiss a suggestion
+async fn suggestions_dismiss(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, suggestion_id)): axum::extract::Path<(String, String)>,
+) -> Json<serde_json::Value> {
+    let dismissed = state.suggestion_manager.dismiss(&session_id, &suggestion_id);
+    if dismissed {
+        state.event_emitter.emit(Event::SuggestionDismissed {
+            session_id: session_id.clone(),
+            suggestion_id: suggestion_id.clone(),
+        });
+    }
+    Json(serde_json::json!({
+        "success": dismissed,
+        "sessionId": session_id,
+        "suggestionId": suggestion_id,
     }))
 }

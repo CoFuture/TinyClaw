@@ -80,6 +80,7 @@ pub async fn start_server(
                             ctx.suggestion_engines.clone(),
                             ctx.preferences.clone(),
                             ctx.session_notes.clone(),
+                            ctx.suggestion_manager.clone(),
                         );
                         let server_state = server_state.clone();
                         tokio::spawn(handle_connection(stream, ctx, server_state));

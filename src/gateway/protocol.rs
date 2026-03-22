@@ -295,6 +295,12 @@ pub mod methods {
     pub const SESSION_NOTES_UPDATE: &str = "session.notes.update";
     /// Session notes delete
     pub const SESSION_NOTES_DELETE: &str = "session.notes.delete";
+    /// Session suggestions list
+    pub const SESSION_SUGGESTIONS_LIST: &str = "session.suggestions.list";
+    /// Session suggestion accept
+    pub const SESSION_SUGGESTIONS_ACCEPT: &str = "session.suggestions.accept";
+    /// Session suggestion dismiss
+    pub const SESSION_SUGGESTIONS_DISMISS: &str = "session.suggestions.dismiss";
 }
 
 /// Event types for notifications

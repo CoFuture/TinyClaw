@@ -71,7 +71,7 @@ impl Suggestion {
 }
 
 /// Type of suggestion
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SuggestionType {
     /// Follow-up question or clarification
     #[serde(rename = "follow_up")]

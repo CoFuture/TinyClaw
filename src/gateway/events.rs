@@ -179,6 +179,21 @@ pub enum Event {
         suggestions: Vec<Suggestion>,
     },
     
+    /// Suggestion was accepted by user
+    #[serde(rename = "suggestion.accepted")]
+    SuggestionAccepted {
+        session_id: String,
+        suggestion_id: String,
+        suggestion_type: String,
+    },
+    
+    /// Suggestion was dismissed by user
+    #[serde(rename = "suggestion.dismissed")]
+    SuggestionDismissed {
+        session_id: String,
+        suggestion_id: String,
+    },
+    
     /// Error occurred
     #[serde(rename = "error")]
     Error {
