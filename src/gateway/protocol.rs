@@ -235,6 +235,8 @@ pub mod methods {
     pub const SESSIONS_DELETE: &str = "sessions.delete";
     /// Sessions rename
     pub const SESSION_RENAME: &str = "session.rename";
+    /// Session cancel (cancel ongoing turn)
+    pub const SESSION_CANCEL: &str = "session.cancel";
     /// Exec command
     pub const EXEC: &str = "exec";
     /// Tool execute

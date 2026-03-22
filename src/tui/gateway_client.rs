@@ -61,6 +61,8 @@ pub enum TuiGatewayEvent {
     SessionDeleted { session_id: String },
     /// Session renamed (triggers list refresh)
     SessionRenamed { session_id: String, label: Option<String> },
+    /// Turn cancelled (agent turn was cancelled)
+    TurnCancelled { session_id: String },
 }
 
 /// Session info from gateway
@@ -310,6 +312,12 @@ impl TuiGatewayClient {
                             let _ = event_tx.send(TuiGatewayEvent::TurnThinking { session_id });
                         }
                     }
+                    "turn.cancelled" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::TurnCancelled { session_id });
+                        }
+                    }
                     "assistant.text" => {
                         if let Some(params) = resp.params {
                             if let Some(text) = params.get("text") {
@@ -439,6 +447,21 @@ impl TuiGatewayClient {
             params: serde_json::json!({
                 "sessionKey": session_id,
                 "label": new_label
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Cancel an ongoing turn for a session
+    pub async fn cancel_turn(&self, session_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-cancel-{}", session_id)),
+            method: methods::SESSION_CANCEL.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id
             }),
         });
 

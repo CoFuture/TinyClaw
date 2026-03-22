@@ -2386,6 +2386,7 @@
                 <div class="chat-input-container">
                     <input type="text" id="chatInput" placeholder="输入消息..." disabled onkeypress="if(event.key==='Enter')sendChatMessage()">
                     <button class="btn" id="chatSendBtn" onclick="sendChatMessage()" disabled>发送</button>
+                    <button class="btn" id="chatCancelBtn" onclick="cancelChatTurn()" style="display:none;background:#f44336;">取消</button>
                 </div>
             `;
             grid.parentNode.insertBefore(chatCard, grid);
@@ -2699,6 +2700,38 @@
             chatWs.send(JSON.stringify(request));
         }
         
+        /// Cancel the ongoing agent turn
+        function cancelChatTurn() {
+            if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
+            const request = {
+                id: String(chatMessageId++),
+                method: 'session.cancel',
+                params: { sessionKey: chatCurrentSession }
+            };
+            
+            chatWs.send(JSON.stringify(request));
+        }
+        
+        /// Show or hide the cancel button
+        function showChatCancelButton(show) {
+            const cancelBtn = document.getElementById('chatCancelBtn');
+            const sendBtn = document.getElementById('chatSendBtn');
+            const input = document.getElementById('chatInput');
+            
+            if (show) {
+                cancelBtn.style.display = 'inline-block';
+                sendBtn.style.display = 'none';
+                input.disabled = true;
+            } else {
+                cancelBtn.style.display = 'none';
+                sendBtn.style.display = 'inline-block';
+                input.disabled = false;
+            }
+        }
+        
         /// Add a message to per-session local history cache
         function addChatMessageToHistory(sessionId, msg) {
             if (!chatMessageHistories[sessionId]) {
@@ -2805,8 +2838,16 @@
             }
             
             if (eventType === 'turn.thinking') {
-                // Show thinking indicator
+                // Show thinking indicator and cancel button
                 showThinkingIndicator();
+                showChatCancelButton(true);
+            } else if (eventType === 'turn.cancelled') {
+                // Turn was cancelled - hide indicators and cancel button
+                hideActivityIndicator();
+                showChatCancelButton(false);
+                addChatMessage('[已取消]', 'system');
+                streamingMsgElement = null;
+                streamingTextBuffer = '';
             } else if (eventType === 'assistant.tool_use' && data.tool) {
                 // Show tool use indicator
                 showToolUseIndicator(data.tool);
@@ -2842,6 +2883,7 @@
             } else if (eventType === 'turn.ended') {
                 // Turn ended - finalize any streaming message and hide indicators
                 hideActivityIndicator();
+                showChatCancelButton(false);
                 if (streamingMsgElement && streamingTextBuffer) {
                     finalizeStreamingMessage(streamingMsgElement, streamingTextBuffer, 'assistant');
                 }
@@ -3048,7 +3090,7 @@
                 
                 // Handle all event types
                 const eventTypes = [
-                    'connected', 'turn.started', 'turn.thinking', 'turn.ended',
+                    'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat'
                 ];

@@ -27,6 +27,12 @@ pub enum Event {
         response: String,
     },
     
+    /// Turn was cancelled
+    #[serde(rename = "turn.cancelled")]
+    TurnCancelled {
+        session_id: String,
+    },
+    
     /// Assistant sent text
     #[serde(rename = "assistant.text")]
     AssistantText {

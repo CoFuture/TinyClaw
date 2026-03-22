@@ -347,6 +347,12 @@ impl TuiApp {
                     }
                 }
             }
+            TuiGatewayEvent::TurnCancelled { session_id } => {
+                info!("Turn cancelled for session: {}", session_id);
+                self.state.set_loading(false);
+                self.state.set_idle();
+                self.state.set_error(Some("Turn cancelled".to_string()));
+            }
             TuiGatewayEvent::Pong => {
                 debug!("Received pong");
             }
@@ -623,6 +629,79 @@ impl TuiApp {
                                 // No more chars buffered, treat as single 'r' -> reconnect
                                 self.state.set_error(None);
                                 self.state.set_connected(false);
+                            }
+                            KeyCode::Char('c') => {
+                                // Check for :cancel
+                                // First check if 'a' is already buffered
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(a_key)) = event::read() {
+                                        if let KeyCode::Char('a') = a_key.code {
+                                            // Got :ca, check for :can
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(n_key)) = event::read() {
+                                                    if let KeyCode::Char('n') = n_key.code {
+                                                        // Got :can, check for :canc
+                                                        if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                            if let Ok(crossterm::event::Event::Key(c_key)) = event::read() {
+                                                                if let KeyCode::Char('c') = c_key.code {
+                                                                    // Got :canc - check for :cance
+                                                                    if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                        if let Ok(crossterm::event::Event::Key(e_key)) = event::read() {
+                                                                            if let KeyCode::Char('e') = e_key.code {
+                                                                                // Got :cance - it's :cancel!
+                                                                                let client = self.gateway_client.clone();
+                                                                                let session_id = self.state.current_session_id.clone();
+                                                                                if let Some(sid) = session_id {
+                                                                                    tokio::spawn(async move {
+                                                                                        let client = client.read().await;
+                                                                                        if let Err(e) = client.cancel_turn(&sid).await {
+                                                                                            error!("Failed to cancel turn: {}", e);
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                                self.state.input_buffer = String::new();
+                                                                                return Ok(true);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    // Not :cance, add 'canc' to buffer
+                                                                    if self.state.active_panel == 2 {
+                                                                        self.state.input_buffer.push('c');
+                                                                        self.state.input_buffer.push('a');
+                                                                        self.state.input_buffer.push('n');
+                                                                        self.state.input_buffer.push('c');
+                                                                        self.state.completion.reset();
+                                                                    }
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                        }
+                                                        // Not :canc, add 'can' to buffer
+                                                        if self.state.active_panel == 2 {
+                                                            self.state.input_buffer.push('c');
+                                                            self.state.input_buffer.push('a');
+                                                            self.state.input_buffer.push('n');
+                                                            self.state.completion.reset();
+                                                        }
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :can, add 'ca' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('c');
+                                                self.state.input_buffer.push('a');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // No more chars buffered, treat as single 'c'
+                                if self.state.active_panel == 2 {
+                                    self.state.input_buffer.push('c');
+                                    self.state.completion.reset();
+                                }
                             }
                             KeyCode::Char('n') => {
                                 // Create new session

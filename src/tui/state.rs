@@ -141,6 +141,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Rename current session",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":cancel",
+        aliases: &["stop"],
+        description: "Cancel ongoing turn",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",

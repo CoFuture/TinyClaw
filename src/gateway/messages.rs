@@ -103,6 +103,7 @@ pub async fn handle_request(
         methods::SESSIONS_HISTORY => handle_sessions_history(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSIONS_DELETE => handle_sessions_delete(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_RENAME => handle_session_rename(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_CANCEL => handle_session_cancel(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::AGENT_SPAWN => handle_agent_spawn(ctx, jsonrpc_id.clone(), params).await,
         methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -429,6 +430,37 @@ async fn handle_session_rename(
     }))
 }
 
+/// Handle session.cancel - cancel an ongoing agent turn
+async fn handle_session_cancel(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+
+    // Try to cancel the turn
+    let was_active = ctx.agent.cancel_turn(session_key);
+    
+    if was_active {
+        // Emit cancellation event
+        ctx.event_emitter.emit(Event::TurnCancelled {
+            session_id: session_key.to_string(),
+        });
+        info!(session_id = %session_key, "Cancelled ongoing turn");
+    } else {
+        debug!(session_id = %session_key, "No active turn to cancel");
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "sessionId": session_key,
+        "cancelled": was_active,
+    }))
+}
+
 /// Handle sessions.send
 async fn handle_sessions_send(
     ctx: &HandlerContext,
@@ -503,7 +535,7 @@ async fn handle_agent_turn(
     let session_id_clone = session_key.to_string();
     let event_emitter_clone = ctx.event_emitter.clone();
     
-    let response: String = ctx.agent.send_message_streaming(
+    let response: Result<String> = ctx.agent.send_message_streaming(
         session_key,
         message,
         &[],
@@ -514,7 +546,21 @@ async fn handle_agent_turn(
                 text: chunk,
             });
         },
-    ).await?;
+    ).await;
+
+    // Handle cancellation specially
+    if response.is_err() {
+        let err = response.as_ref().err().unwrap();
+        if matches!(err, crate::common::Error::Cancelled) {
+            // Emit cancellation event
+            ctx.event_emitter.emit(Event::TurnCancelled {
+                session_id: session_key.to_string(),
+            });
+            return Err(Error::Cancelled);
+        }
+    }
+
+    let response = response?;
 
     // Add assistant response to history
     ctx.history_manager.add_message(

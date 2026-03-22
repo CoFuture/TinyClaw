@@ -136,24 +136,54 @@
 
 ---
 
-## 当前迭代规划 (v5.2.0)
+## 当前迭代规划 (v5.3.0)
 
 ### 本轮目标
-**WebUI 会话管理增强** - 会话列表优化
+**Session Turn Cancellation** - 取消正在进行的 Agent Turn
 
 **计划完成**:
-- [x] API 增强 - 新增会话字段
-  - `durationSecs`: 创建以来的秒数
-  - `lastMessagePreview`: 最后用户消息预览（截断至50字符）
-  - `isActive`: 是否活跃（5分钟内有活动）
-- [x] WebUI 会话列表增强
+- [x] Agent 取消机制
+  - Agent 结构新增 `turn_cancellations` HashMap
+  - `start_turn_cancellation` - 为会话创建取消通道
+  - `cancel_turn` - 触发取消
+  - `is_turn_active` - 检查是否有活动中的 Turn
+- [x] Gateway `session.cancel` 方法
+  - 新增 `SESSION_CANCEL` 方法常量
+  - 新增 `handle_session_cancel` 处理器
+  - 调用 `agent.cancel_turn` 触发取消
+- [x] 事件系统增强
+  - 新增 `TurnCancelled` 事件变体
+  - SSE 事件过滤支持 `turn.cancelled`
+- [x] TUI 支持
+  - 新增 `:cancel` / `:stop` 命令
+  - `cancel_turn` TUI 网关客户端方法
+  - 处理 `TurnCancelled` 事件显示取消状态
+- [x] WebUI 支持
+  - 新增"取消"按钮（思考中显示）
+  - `cancelChatTurn` JavaScript 函数
+  - SSE 事件处理 `turn.cancelled`
+- [x] Ollama 流式取消支持
+  - 修改 `send_ollama_streaming` 支持取消检查
+  - 使用 100ms 超时轮询检查取消信号
+- [x] cargo clippy 0 警告
+- [x] cargo test 176 tests
+
+---
+
+### v5.2.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI 会话管理增强** - 会话列表优化
+  - API 新增字段：`durationSecs`、`lastMessagePreview`、`isActive`
   - 新增"消息"列显示消息数量
   - 新增"时长"列显示相对时间（秒/分钟/小时/天）
   - 新增活动状态指示器（绿色=活跃，灰色=空闲）
   - 支持点击列头排序（ID/标签/类型/消息数/时长/最后活跃）
   - 搜索支持最后消息预览
-- [x] cargo clippy 0 警告
-- [x] cargo test 176 tests
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: Session Turn Cancellation
 
 ---
 
@@ -317,6 +347,7 @@
 - [x] TUI 命令帮助系统增强 ✅ v4.6.0
 - [x] WebUI 聊天消息复制/清空/搜索 ✅ v5.0.0
 - [x] TUI 输入历史导航 (Up/Down 箭头) ✅ v5.1.0
+- [x] Session Turn Cancellation (TUI :cancel, WebUI 取消按钮) ✅ v5.3.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -329,6 +360,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.3.0 | Session Turn Cancellation - Agent 取消机制：turn_cancellations HashMap、start_turn_cancellation/cancel_turn/is_turn_active 方法；Gateway session.cancel 方法 + 处理器；TurnCancelled 事件；TUI :cancel/:stop 命令；WebUI 取消按钮(思考中显示)；Ollama 流式取消(send_ollama_streaming 支持取消检查)；cargo clippy 0 警告；cargo test 176 tests |
 | v5.2.0 | WebUI 会话管理增强 - API新增 durationSecs/lastMessagePreview/isActive 字段；新增"消息数列"显示消息数量；新增"时长"列显示相对时间(秒/分钟/小时/天)；新增活动状态指示器(绿=活跃/灰=空闲)；支持点击列头排序(ID/标签/类型/消息数/时长/最后活跃)；搜索支持最后消息预览；cargo clippy 0 警告；cargo test 176 tests |
 | v5.1.0 | TUI 输入历史导航 - Up/Down 箭头在输入面板中循环浏览历史消息；AppState 新增 input_history/input_history_index/input_history_saved；辅助方法: add_to_input_history/input_history_up/down/is_navigating_history；Enter发送前添加历史；键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消导航；历史位置提示 '↑↓ 3/10'；每个会话历史限制 100 条；cargo clippy 0 警告；cargo test 176 tests |
 | v5.0.0 | WebUI 聊天体验增强 - 消息复制按钮(hover显示)、清空聊天按钮、实时搜索过滤(显示匹配计数)；CSS 增强：copy按钮动画、hidden-by-search隐藏、search-count显示；cargo clippy 0 警告；cargo test 176 tests |

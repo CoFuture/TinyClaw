@@ -4,9 +4,14 @@ use crate::agent::retry::{with_retry, RetrySettings};
 use crate::agent::tools::{Tool, ToolExecutor};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
+use futures_util::StreamExt;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::broadcast;
+use tokio::time::timeout;
 use tracing::{debug, error, info};
 
 /// Anthropic API request
@@ -126,6 +131,8 @@ pub struct Agent {
     retry_config: RetrySettings,
     http_client: reqwest::Client,
     tool_executor: Arc<ToolExecutor>,
+    /// Active turn cancellation channels (session_id -> sender)
+    turn_cancellations: RwLock<HashMap<String, broadcast::Sender<()>>>,
 }
 
 /// History message for passing conversation context to API methods
@@ -190,6 +197,7 @@ impl Agent {
             retry_config: RetrySettings::default(),
             http_client: reqwest::Client::new(),
             tool_executor: Arc::new(ToolExecutor::new()),
+            turn_cancellations: RwLock::new(HashMap::new()),
         }
     }
 
@@ -201,7 +209,47 @@ impl Agent {
             retry_config: retry,
             http_client: reqwest::Client::new(),
             tool_executor: Arc::new(ToolExecutor::new()),
+            turn_cancellations: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Start a new turn cancellation channel for a session.
+    /// Returns a receiver that will be notified when cancel is called.
+    /// If a turn is already active, returns None.
+    pub fn start_turn_cancellation(&self, session_key: &str) -> Option<broadcast::Receiver<()>> {
+        let mut cancellations = self.turn_cancellations.write();
+        // Check if a turn is already active
+        if cancellations.contains_key(session_key) {
+            return None;
+        }
+        let (tx, rx) = broadcast::channel(1);
+        cancellations.insert(session_key.to_string(), tx);
+        Some(rx)
+    }
+
+    /// Cancel an ongoing turn for a session.
+    /// Returns true if a turn was cancelled, false if no turn was active.
+    pub fn cancel_turn(&self, session_key: &str) -> bool {
+        let mut cancellations = self.turn_cancellations.write();
+        if let Some(tx) = cancellations.remove(session_key) {
+            // Drop the sender to notify the receiver
+            let _ = tx.send(());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if a turn is currently active for a session.
+    pub fn is_turn_active(&self, session_key: &str) -> bool {
+        let cancellations = self.turn_cancellations.read();
+        cancellations.contains_key(session_key)
+    }
+
+    /// Clean up cancellation channel after turn ends.
+    fn cleanup_turn_cancellation(&self, session_key: &str) {
+        let mut cancellations = self.turn_cancellations.write();
+        cancellations.remove(session_key);
     }
 
     /// Update retry settings
@@ -752,7 +800,7 @@ pub async fn send_message_with_history(
 
     /// Send message to Ollama API with streaming support.
     /// Calls the callback for each text chunk as it arrives via SSE.
-    async fn send_ollama_streaming<F>(&self, config: &AgentConfig, message: &str, mut on_chunk: F) -> Result<String>
+    async fn send_ollama_streaming<F>(&self, config: &AgentConfig, message: &str, mut on_chunk: F, mut cancel_rx: broadcast::Receiver<()>) -> Result<String>
     where
         F: FnMut(String) + Send,
     {
@@ -794,31 +842,65 @@ pub async fn send_message_with_history(
         let mut full_response = String::new();
         let mut stream = resp.bytes_stream();
         let mut buffer = Vec::new();
+        let check_interval = Duration::from_millis(100);
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let cancelled_clone = cancelled.clone();
+
+        // Spawn a task to watch for cancellation
+        let cancelled_flag = cancelled_clone;
+        tokio::spawn(async move {
+            let _ = cancel_rx.recv().await;
+            cancelled_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
         
-        use futures_util::StreamExt;
-        
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(std::io::Error::other)?;
-            buffer.extend_from_slice(&chunk);
+        while !cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            // Use timeout to periodically check for cancellation
+            let result = timeout(check_interval, stream.next()).await;
             
-            // Process complete lines (each SSE line starts with "data: ")
-            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
-                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
-                let line_str = String::from_utf8_lossy(&line);
-                let line_str = line_str.trim();
-                
-                if let Some(json_str) = line_str.strip_prefix("data: ") {
-                    if let Ok(stream_resp) = serde_json::from_str::<OllamaStreamResponse>(json_str) {
-                        if !stream_resp.response.is_empty() {
-                            full_response.push_str(&stream_resp.response);
-                            on_chunk(stream_resp.response);
-                        }
-                        if stream_resp.done {
+            match result {
+                Ok(Some(chunk_result)) => {
+                    let chunk = match chunk_result {
+                        Ok(c) => c,
+                        Err(e) => {
+                            debug!("Stream error: {}", e);
                             break;
+                        }
+                    };
+                    buffer.extend_from_slice(&chunk);
+                    
+                    // Process complete lines (each SSE line starts with "data: ")
+                    while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                        let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                        let line_str = String::from_utf8_lossy(&line);
+                        let line_str = line_str.trim();
+                        
+                        if let Some(json_str) = line_str.strip_prefix("data: ") {
+                            if let Ok(stream_resp) = serde_json::from_str::<OllamaStreamResponse>(json_str) {
+                                if !stream_resp.response.is_empty() {
+                                    full_response.push_str(&stream_resp.response);
+                                    on_chunk(stream_resp.response);
+                                }
+                                if stream_resp.done {
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
+                Ok(None) => {
+                    // Stream ended
+                    break;
+                }
+                Err(_) => {
+                    // Timeout - check if cancelled and continue
+                    continue;
+                }
             }
+        }
+
+        if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            debug!("Ollama streaming cancelled: {} chars accumulated", full_response.len());
+            return Err(Error::Cancelled);
         }
 
         debug!("Ollama streaming complete: {} chars", full_response.len());
@@ -842,6 +924,17 @@ pub async fn send_message_with_history(
         skill_prompt: Option<&str>,
         on_partial: impl FnMut(String) + Send + 'static,
     ) -> Result<String> {
+        // Start cancellation tracking for this turn
+        let cancel_rx = match self.start_turn_cancellation(session_key) {
+            Some(rx) => rx,
+            None => {
+                return Err(Error::Agent(format!(
+                    "A turn is already in progress for session '{}'",
+                    session_key
+                )));
+            }
+        };
+
         let config = self.config.read().clone();
 
         // Determine provider
@@ -857,7 +950,7 @@ pub async fn send_message_with_history(
 
         // For non-streaming providers (Anthropic, OpenAI), fall back to regular method
         // Ollama supports native streaming
-        if provider == ModelProvider::Ollama {
+        let result = if provider == ModelProvider::Ollama {
             // Build prompt from history + current message
             let mut prompt = String::new();
             for (role, content) in history {
@@ -865,12 +958,17 @@ pub async fn send_message_with_history(
             }
             prompt.push_str(&format!("user: {}\nassistant:", message));
             
-            let full_response = self.send_ollama_streaming(&config, &prompt, on_partial).await?;
-            return Ok(full_response);
-        }
+            self.send_ollama_streaming(&config, &prompt, on_partial, cancel_rx).await
+        } else {
+            // Fall back to non-streaming for other providers
+            // Release the cancellation channel since we won't use it for non-streaming
+            self.cleanup_turn_cancellation(session_key);
+            self.send_message_with_history(session_key, message, history, skill_prompt).await
+        };
 
-        // Fall back to non-streaming for other providers
-        self.send_message_with_history(session_key, message, history, skill_prompt).await
+        // Clean up cancellation channel after turn ends
+        self.cleanup_turn_cancellation(session_key);
+        result
     }
 
     /// Send a message and get a response (with tool calling loop)
