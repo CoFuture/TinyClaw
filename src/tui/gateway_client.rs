@@ -55,6 +55,8 @@ pub enum TuiGatewayEvent {
     SessionHistoryLoaded { session_id: String, history: SessionHistory },
     /// Session deleted
     SessionDeleted { session_id: String },
+    /// Session renamed (triggers list refresh)
+    SessionRenamed { session_id: String, label: Option<String> },
 }
 
 /// Session info from gateway
@@ -259,7 +261,17 @@ impl TuiGatewayClient {
                                     session_id: session_id.to_string(),
                                     history,
                                 });
+                                return;
                             }
+                        }
+                        // Check if this is a session.rename response
+                        if result_obj.get("success").and_then(|v| v.as_bool()) == Some(true) {
+                            let label = result_obj.get("label").and_then(|v| v.as_str()).map(String::from);
+                            let _ = event_tx.send(TuiGatewayEvent::SessionRenamed {
+                                session_id: session_id.to_string(),
+                                label,
+                            });
+                            return;
                         }
                     }
                     // Check if this is a sessions.delete response
@@ -394,6 +406,22 @@ impl TuiGatewayClient {
             method: methods::SESSIONS_DELETE.to_string(),
             params: serde_json::json!({
                 "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Rename a session
+    pub async fn rename_session(&self, session_id: &str, new_label: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-rename-{}", session_id)),
+            method: methods::SESSION_RENAME.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "label": new_label
             }),
         });
 

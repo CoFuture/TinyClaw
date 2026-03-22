@@ -163,6 +163,54 @@
 
 ---
 
+### v4.8.0 (已完成 ✅)
+
+**完成事项**:
+- **Session Rename 支持** - 会话重命名功能
+  - 新增 `session.rename` 网关方法，支持通过 WebSocket 重命名会话
+  - 新增 `PATCH /api/sessions/{id}` HTTP 端点，支持通过 REST API 重命名会话
+  - 新增 `SessionManager::rename` 方法，支持更新会话标签
+- **TUI 会话重命名** - 命令行界面会话管理增强
+  - 新增 `:ren` / `:rename` 命令进入重命名模式
+  - 新增 `rename_mode` 状态，输入区域显示"Enter new session name..."
+  - 按 Enter 确认新名称，Esc 取消重命名
+  - 重命名后自动刷新会话列表
+- **TUI 增强**
+  - 帮助栏更新：显示 `:ren Rename` 和 `:c Reconnect` 命令
+  - 命令解析优化：支持多字符命令（`:rc` reconnects，`:ren` renames）
+- **HTTP API 增强**
+  - `/api/sessions` 返回每条会话的消息数量 (`messageCount`)
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: WebUI 会话面板增强、更多会话管理功能
+
+---
+
+### v4.7.0 (已完成 ✅)
+
+**完成事项**:
+- Agent 流式响应支持 (Ollama)
+  - 新增 `send_ollama_streaming` 方法：通过 SSE 逐块接收 AI 响应
+  - 新增 `send_message_streaming` 方法：支持流式回调，Ollama 自动使用流式
+  - 新增 `AssistantPartial` 事件：流式文本片段实时推送
+  - Gateway `handle_agent_turn` 集成流式路径，实时发射 partial 事件
+- WebUI 实时流式显示
+  - SSE 事件流新增 `assistant.partial` 事件类型
+  - 实时文本缓冲区 + 流式消息元素动态更新
+  - 流式结束动画：`▊` 闪烁指示器，完成后自动消失
+  - CSS 动画增强：streaming 消息透明度 + blink 动画
+- SSE 事件过滤增强
+  - `AssistantPartial` 加入 session filter 逻辑
+  - `AssistantPartial` 加入 event name match
+- 依赖更新：reqwest 添加 `stream` feature
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: Session Rename 支持
+
+---
+
 ### v4.6.0 (已完成 ✅)
 
 **完成事项**:
@@ -238,6 +286,8 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.8.0 | Session Rename 支持 - session.rename 网关方法、PATCH /api/sessions/{id} HTTP 端点、SessionManager::rename 方法；TUI :ren/:rename 命令进入重命名模式、rename_mode 状态管理、Enter 确认/Esc 取消；帮助栏更新显示新命令；/api/sessions 返回 messageCount；cargo clippy 0 警告；cargo test 176 tests |
+| v4.7.0 | Agent 流式响应支持 (Ollama) - send_ollama_streaming/send_message_streaming 方法、AssistantPartial 事件；WebUI 实时流式显示 - SSE assistant.partial、流式缓冲区、▊ 闪烁指示器；SSE 事件过滤增强；cargo clippy 0 警告；cargo test 176 tests |
 | v4.6.0 | TUI 命令帮助系统增强 - 结构化命令元数据(TuiCommandMeta)：名称、别名、描述、分类；命令分类：Session/Connection/Navigation；Tab补全支持所有命令别名；帮助面板重构：按分类展示命令、颜色高亮；cargo clippy 0 警告；cargo test 176 tests |
 | v4.5.0 | WebUI 配置编辑器增强 - JSON/YAML 格式切换、语法验证（绿/红边框反馈）、一键重置默认配置、复制到剪贴板；cargo clippy 0 警告；cargo test 176 tests |
 | v4.4.0 | TUI 视觉优化 - 消息面板增强：角色标签颜色区分 (User=绿, Assistant=青, System=黄, Tool=紫)、每条消息显示时间戳 (HH:MM:SS)、多行内容正确缩进；输入区域优化：命令模式标题变化 (:前缀显示为"Command")、字符计数显示；标题栏增强：连接状态和当前 session 名称使用不同颜色区分；cargo clippy 0 警告；cargo test 176 tests |

@@ -397,6 +397,17 @@ impl TuiApp {
                 // Save new session to persistence
                 self.save_session_history(&session_id);
             }
+            TuiGatewayEvent::SessionRenamed { session_id, label } => {
+                info!("Session renamed: {} -> {:?}", session_id, label);
+                // Refresh the sessions list to get updated labels
+                let client = self.gateway_client.clone();
+                tokio::spawn(async move {
+                    let client = client.read().await;
+                    if let Err(e) = client.list_sessions().await {
+                        error!("Failed to refresh sessions list after rename: {}", e);
+                    }
+                });
+            }
         }
     }
 
@@ -464,6 +475,26 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Enter => {
+                    // Handle rename mode
+                    if self.state.rename_mode {
+                        if let Some(ref session_id) = self.state.current_session_id {
+                            let new_label = self.state.input_buffer.trim().to_string();
+                            if !new_label.is_empty() {
+                                let client = self.gateway_client.clone();
+                                let sid = session_id.clone();
+                                tokio::spawn(async move {
+                                    let client = client.read().await;
+                                    if let Err(e) = client.rename_session(&sid, &new_label).await {
+                                        error!("Failed to rename session: {}", e);
+                                    }
+                                });
+                            }
+                        }
+                        self.state.rename_mode = false;
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
                     if self.state.current_session_id.is_some() && !self.state.input_buffer.is_empty() {
                         let content = self.state.input_buffer.clone();
                         let client = self.gateway_client.clone();
@@ -511,7 +542,36 @@ impl TuiApp {
                                 self.state.show_help = !self.state.show_help;
                             }
                             KeyCode::Char('r') => {
-                                // Reconnect
+                                // Check for :ren (rename) - need to peek next chars
+                                // First check if 'e' is already in the event buffer
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(e_key)) = event::read() {
+                                        if let KeyCode::Char('e') = e_key.code {
+                                            // Got :re, check for :ren
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(n_key)) = event::read() {
+                                                    if let KeyCode::Char('n') = n_key.code {
+                                                        // Got :ren - enter rename mode
+                                                        if self.state.current_session_id.is_some() {
+                                                            self.state.rename_mode = true;
+                                                            self.state.input_buffer = String::new();
+                                                            return Ok(true);
+                                                        }
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :ren, add 're' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('r');
+                                                self.state.input_buffer.push('e');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // No more chars buffered, treat as single 'r' -> reconnect
                                 self.state.set_error(None);
                                 self.state.set_connected(false);
                             }
@@ -540,6 +600,30 @@ impl TuiApp {
                                     } else {
                                         self.state.set_error(Some("Cannot delete main session".to_string()));
                                     }
+                                }
+                            }
+                            KeyCode::Char('c') => {
+                                // Check for :rc (reconnect)
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(c_key)) = event::read() {
+                                        if let KeyCode::Char('c') = c_key.code {
+                                            // Got :rc - reconnect
+                                            self.state.set_error(None);
+                                            self.state.set_connected(false);
+                                            return Ok(true);
+                                        }
+                                        // Was :c but not :rc - add 'c' to buffer
+                                        if self.state.active_panel == 2 {
+                                            self.state.input_buffer.push('c');
+                                            self.state.completion.reset();
+                                        }
+                                        return Ok(true);
+                                    }
+                                }
+                                // No more chars buffered, treat as single 'c'
+                                if self.state.active_panel == 2 {
+                                    self.state.input_buffer.push('c');
+                                    self.state.completion.reset();
                                 }
                             }
                             _ => {}
@@ -602,6 +686,9 @@ impl TuiApp {
                 KeyCode::Esc => {
                     if self.state.show_help {
                         self.state.show_help = false;
+                    } else if self.state.rename_mode {
+                        self.state.rename_mode = false;
+                        self.state.input_buffer.clear();
                     } else {
                         return Ok(false); // Quit
                     }

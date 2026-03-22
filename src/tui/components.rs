@@ -208,7 +208,15 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let display_text: String;
     let hint: Option<String>;
     
-    if state.current_session_id.is_none() {
+    if state.rename_mode {
+        // Rename mode - prompt for new session name
+        display_text = if state.input_buffer.is_empty() {
+            " Enter new session name... ".to_string()
+        } else {
+            format!(" New name: {}", state.input_buffer)
+        };
+        hint = Some("Press Enter to rename, Esc to cancel".to_string());
+    } else if state.current_session_id.is_none() {
         display_text = " (select a session first) ".to_string();
         hint = None;
     } else if state.input_buffer.is_empty() {
@@ -276,7 +284,7 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 /// Draw the help bar at the bottom
 pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect) {
-    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | 🤔 Thinking | 🔧 Tool Execution ";
+    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :c Reconnect | 🤔 Thinking | 🔧 Tool ";
     
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)

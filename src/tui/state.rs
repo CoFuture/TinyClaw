@@ -135,9 +135,15 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Delete current session",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":ren",
+        aliases: &["rename"],
+        description: "Rename current session",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
-        full_name: ":r",
+        full_name: ":rc",
         aliases: &["reconnect"],
         description: "Reconnect to gateway",
         category: CommandCategory::Connection,
@@ -188,6 +194,8 @@ pub struct AppState {
     pub completion: CompletionState,
     /// Current agent activity state
     pub agent_activity: AgentActivity,
+    /// Whether we're in rename mode (waiting for new session name)
+    pub rename_mode: bool,
 }
 
 impl Default for AppState {
@@ -201,6 +209,7 @@ impl Default for AppState {
             show_help: false,
             active_panel: 1,
             gateway_status: TuiGatewayStatus::Disconnected,
+            rename_mode: false,
             connected: false,
             loading: false,
             error_message: None,

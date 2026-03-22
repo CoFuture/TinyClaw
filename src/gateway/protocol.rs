@@ -233,6 +233,8 @@ pub mod methods {
     pub const SESSIONS_HISTORY: &str = "sessions.history";
     /// Sessions delete
     pub const SESSIONS_DELETE: &str = "sessions.delete";
+    /// Sessions rename
+    pub const SESSION_RENAME: &str = "session.rename";
     /// Exec command
     pub const EXEC: &str = "exec";
     /// Tool execute

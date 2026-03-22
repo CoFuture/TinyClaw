@@ -283,6 +283,55 @@ async fn session_delete(
     )
 }
 
+/// Session rename request
+#[derive(Deserialize)]
+pub struct SessionRenameRequest {
+    pub label: Option<String>,
+}
+
+/// Session rename response
+#[derive(Serialize)]
+pub struct SessionRenameResponse {
+    pub success: bool,
+    pub session_id: String,
+    pub label: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Session rename handler
+async fn session_rename(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    Json(request): Json<SessionRenameRequest>,
+) -> (HttpStatusCode, Json<SessionRenameResponse>) {
+    // Update session label
+    let success = state.session_manager.rename(&session_id, request.label.clone());
+    
+    if !success {
+        return (
+            HttpStatusCode::NOT_FOUND,
+            Json(SessionRenameResponse {
+                success: false,
+                session_id,
+                label: None,
+                error: Some("Session not found".to_string()),
+            }),
+        );
+    }
+
+    info!("HTTP: Renamed session {} to {:?}", session_id, request.label);
+
+    (
+        HttpStatusCode::OK,
+        Json(SessionRenameResponse {
+            success: true,
+            session_id,
+            label: request.label,
+            error: None,
+        }),
+    )
+}
+
 /// Config get handler - returns public config only (no secrets)
 async fn config_get(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
     let config = state.config.read();
@@ -390,6 +439,10 @@ async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::
         .iter()
         .map(|s| {
             let session = s.read();
+            let msg_count = state.history_manager
+                .get(&session.id)
+                .map(|h| h.read().messages.len())
+                .unwrap_or(0);
             serde_json::json!({
                 "id": session.id,
                 "label": session.label,
@@ -405,6 +458,7 @@ async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::
                 },
                 "createdAt": session.created_at.to_rfc3339(),
                 "lastActive": session.last_active.to_rfc3339(),
+                "messageCount": msg_count,
             })
         })
         .collect();
@@ -650,6 +704,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{id}/messages", get(session_messages))
         .route("/api/sessions/{id}/export", get(session_export))
         .route("/api/sessions/{id}", axum::routing::delete(session_delete))
+        .route("/api/sessions/{id}", axum::routing::patch(session_rename))
         .route("/api/sessions/import", post(session_import))
         .route("/api/tools", get(tools_list))
         // Skill management API

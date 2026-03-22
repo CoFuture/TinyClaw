@@ -102,6 +102,7 @@ pub async fn handle_request(
         methods::SESSIONS_SEND => handle_sessions_send(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::SESSIONS_HISTORY => handle_sessions_history(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSIONS_DELETE => handle_sessions_delete(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_RENAME => handle_session_rename(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::AGENT_SPAWN => handle_agent_spawn(ctx, jsonrpc_id.clone(), params).await,
         methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -388,6 +389,43 @@ async fn handle_sessions_delete(
     Ok(serde_json::json!({
         "deleted": true,
         "sessionId": session_key,
+    }))
+}
+
+/// Handle session.rename
+async fn handle_session_rename(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionKey required".to_string()))?
+        .to_string();
+
+    // Label is optional - if null or omitted, clears the label
+    let new_label = params
+        .get("label")
+        .and_then(|v| v.as_str().map(String::from))
+        .or_else(|| {
+            params.get("label")
+                .and_then(|v| v.as_str().map(String::from))
+        });
+
+    // Update session label
+    let success = ctx.session_manager.rename(&session_key, new_label.clone());
+    
+    if !success {
+        return Err(Error::SessionNotFound(session_key.to_string()));
+    }
+
+    info!(session_id = %session_key, ?new_label, "Renamed session");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "sessionId": session_key,
+        "label": new_label,
     }))
 }
 

@@ -117,6 +117,19 @@ impl SessionManager {
         self.sessions.write().remove(id)
     }
 
+    /// Update a session's label (rename)
+    /// Returns true if successful, false if session not found
+    pub fn rename(&self, id: &SessionId, new_label: Option<String>) -> bool {
+        let sessions = self.sessions.write();
+        if let Some(session) = sessions.get(id) {
+            session.write().label = new_label;
+            session.write().last_active = chrono::Utc::now();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get or create main session
     pub fn get_or_create_main(&self) -> Arc<RwLock<Session>> {
         let sessions = self.sessions.read();
