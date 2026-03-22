@@ -16,4 +16,5 @@ pub use client::Agent;
 pub use skill::Skill;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
+#[allow(unused_imports)]
 pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};

@@ -6,6 +6,7 @@ use crate::agent::client::Agent;
 use crate::agent::context::{AgentContext, ExecutionState};
 use crate::agent::context_manager::{ContextManager, ContextOptions};
 use crate::agent::tools::{ToolExecutor, ToolResult};
+use crate::agent::turn_log::{TurnLog, TurnLogEntry, TurnAction};
 use crate::common::Result;
 use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
@@ -13,6 +14,7 @@ use crate::gateway::session::SessionManager;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{info, warn};
 
 /// Tool call from the model
@@ -122,6 +124,23 @@ impl AgentRuntime {
         // Add user message to history
         context.add_user_message(user_message);
         
+        // Start turn execution log
+        let mut turn_log = TurnLog::new();
+        let emit_events = self.config.read().emit_events;
+        let session_id = context.session_id.clone();
+
+        // Helper to emit TurnLogUpdated events
+        let emit_log_update = |entry: TurnLogEntry| {
+            if emit_events {
+                if let Some(emitter) = &self.event_emitter {
+                    emitter.emit(Event::TurnLogUpdated {
+                        session_id: session_id.clone(),
+                        entry,
+                    });
+                }
+            }
+        };
+
         // Main tool calling loop
         loop {
             context.increment_turn();
@@ -129,12 +148,25 @@ impl AgentRuntime {
             if context.max_turns_reached() {
                 warn!(session_id = %context.session_id, "Max turns reached, stopping loop");
                 context.set_state(ExecutionState::Finished);
+
+                // Emit completed log
+                if emit_events {
+                    if let Some(emitter) = &self.event_emitter {
+                        emitter.emit(Event::TurnLogCompleted {
+                            session_id: session_id.clone(),
+                            summary: turn_log.summary(),
+                        });
+                    }
+                }
+
                 return Ok("Maximum turns reached. I need to stop here.".to_string());
             }
             
             // Get response from model
             context.set_state(ExecutionState::Thinking);
+            let response_start = Instant::now();
             let response = self.get_model_response(context).await?;
+            let response_duration_ms = response_start.elapsed().as_millis() as u64;
             
             // Check if we have text to return
             if let Some(text) = &response.text {
@@ -144,6 +176,16 @@ impl AgentRuntime {
                         if tool_calls.is_empty() {
                             // Empty response with no tools, we're done
                             context.set_state(ExecutionState::Finished);
+
+                            if emit_events {
+                                if let Some(emitter) = &self.event_emitter {
+                                    emitter.emit(Event::TurnLogCompleted {
+                                        session_id: session_id.clone(),
+                                        summary: turn_log.summary(),
+                                    });
+                                }
+                            }
+
                             return Ok(text.clone());
                         }
                     }
@@ -153,12 +195,36 @@ impl AgentRuntime {
                         context.add_assistant_message(text);
                         context.set_state(ExecutionState::Finished);
                         
+                        // Record response in turn log
+                        turn_log.record_response(text, response_duration_ms);
+                        emit_log_update(TurnLogEntry {
+                            offset_ms: 0,
+                            action: TurnAction::Response {
+                                preview: if text.len() > 120 {
+                                    format!("{}...", &text[..120])
+                                } else {
+                                    text.clone()
+                                },
+                                duration_ms: response_duration_ms,
+                            },
+                        });
+
                         // Emit event
-                        if self.config.read().emit_events {
+                        if emit_events {
                             if let Some(emitter) = &self.event_emitter {
                                 emitter.emit(Event::AssistantText {
-                                    session_id: context.session_id.clone(),
+                                    session_id: session_id.clone(),
                                     text: text.clone(),
+                                });
+                            }
+                        }
+
+                        // Emit turn log completed
+                        if emit_events {
+                            if let Some(emitter) = &self.event_emitter {
+                                emitter.emit(Event::TurnLogCompleted {
+                                    session_id: session_id.clone(),
+                                    summary: turn_log.summary(),
                                 });
                             }
                         }
@@ -176,23 +242,25 @@ impl AgentRuntime {
                     });
                     
                     // Emit tool use event
-                    if self.config.read().emit_events {
+                    if emit_events {
                         if let Some(emitter) = &self.event_emitter {
                             emitter.emit(Event::AssistantToolUse {
-                                session_id: context.session_id.clone(),
+                                session_id: session_id.clone(),
                                 tool: tool_call.name.clone(),
                                 input: tool_call.arguments.clone(),
                             });
                         }
                     }
                     
-                    // Execute tool
+                    // Execute tool with timing
+                    let tool_start = Instant::now();
                     let result = self.execute_tool(&tool_call.name, &tool_call.arguments).await;
+                    let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
                     
                     // Format tool result - use structured error report on failure
-                    let tool_result_str = match &result {
-                        Ok(r) => format_tool_result_for_history(&tool_call.name, r),
-                        Err(e) => format!("Tool execution error: {}", e),
+                    let (tool_result_str, tool_success) = match &result {
+                        Ok(r) => (format_tool_result_for_history(&tool_call.name, r), r.success),
+                        Err(e) => (format!("Tool execution error: {}", e), false),
                     };
                     
                     context.history_manager.add_message(
@@ -204,11 +272,37 @@ impl AgentRuntime {
                         ),
                     );
                     
+                    // Record in turn log
+                    turn_log.record_tool(
+                        &tool_call.name,
+                        tool_call.arguments.clone(),
+                        &tool_result_str,
+                        tool_success,
+                        tool_duration_ms,
+                    );
+
+                    // Emit turn log update
+                    let log_entry = TurnLogEntry {
+                        offset_ms: tool_start.elapsed().as_millis() as u64,
+                        action: TurnAction::Tool {
+                            name: tool_call.name.clone(),
+                            input: tool_call.arguments.clone(),
+                            output_preview: if tool_result_str.len() > 200 {
+                                format!("{}...", &tool_result_str[..200])
+                            } else {
+                                tool_result_str.clone()
+                            },
+                            success: tool_success,
+                            duration_ms: tool_duration_ms,
+                        },
+                    };
+                    emit_log_update(log_entry);
+                    
                     // Emit tool result event
-                    if self.config.read().emit_events {
+                    if emit_events {
                         if let Some(emitter) = &self.event_emitter {
                             emitter.emit(Event::ToolResult {
-                                session_id: context.session_id.clone(),
+                                session_id: session_id.clone(),
                                 tool_call_id: tool_call.id.clone(),
                                 output: tool_result_str,
                             });
@@ -219,6 +313,16 @@ impl AgentRuntime {
                 // No tool calls and no text, we're done
                 if response.text.is_none() || response.text.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
                     context.set_state(ExecutionState::Finished);
+
+                    if emit_events {
+                        if let Some(emitter) = &self.event_emitter {
+                            emitter.emit(Event::TurnLogCompleted {
+                                session_id: session_id.clone(),
+                                summary: turn_log.summary(),
+                            });
+                        }
+                    }
+
                     return Ok("I don't have anything more to say.".to_string());
                 }
             }

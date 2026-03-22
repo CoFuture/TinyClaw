@@ -409,6 +409,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.8.0 | Agent Turn Execution Log - 新增 `agent/turn_log.rs`：`TurnAction`/`TurnLogEntry`/`TurnLog`/`TurnLogSummary` 结构；新增 `Event::TurnLogUpdated` 和 `Event::TurnLogCompleted` SSE 事件；Runtime 集成：每个 Turn 创建 TurnLog，工具执行时记录（名称/输入/输出/成功/耗时），Turn 结束时发送 TurnLogCompleted；3个新测试；cargo clippy 0 警告；cargo test 191 tests |
 | v5.7.0 | Structured Tool Error Reporting + Agent Self-Correction - 新增 `agent/error_recovery.rs`：ToolErrorKind 枚举(9种错误类型)、ErrorRecovery 结构(包含 retryable 和 suggestion)；集成到 runtime.rs 和 client.rs，工具失败时返回结构化错误报告帮助 Agent 自我修正；12个新测试；cargo clippy 0 警告；cargo test 188 tests |
 | v5.6.0 | Agent 韧性增强 - 集成断路器保护 AI API：execute_protected() 包装 retry + 断路器；指标系统增强 (circuit_breaker_state)；Gateway JSON-RPC 方法；TUI 标题栏熔断指示器 (🟢/🟡/🔴)；WebUI 熔断状态显示；cargo clippy 0 警告；cargo test 176 tests |
 | v5.5.0 | TUI 视觉增强 - 错误显示红色样式（标题、边框、消息）；标题栏思考状态指示器 "⚙ Thinking..." (黄色+粗体)；cargo clippy 0 警告；cargo test 176 tests |
@@ -450,27 +451,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ## 当前迭代规划 (v5.8.0)
 
 ### 本轮目标
-**天气查询工具** - 让 Agent 能真正帮你查询天气信息
+**Agent Turn 执行日志 (Agent Turn Execution Log)** - 记录并展示 Agent 每个 Turn 的完整执行过程
 
-> 这是"真正能做事"愿景的第一步：扩展核心工具集
+> 让用户清楚看到 Agent 在每个 Turn 中做了什么：调用了哪些工具、耗时多少、结果如何
 
 **计划完成**:
-- [ ] 新增 `weather` 工具 - 获取指定城市/位置的天气信息
-  - 使用免费天气 API（如 wttr.in 或 Open-Meteo）
-  - 支持参数：城市名称、日期（今天/明天/后天）
-  - 返回：温度、天气状况、湿度、风力等
-- [ ] 集成到 `ToolExecutor` - 注册 weather 工具
-- [ ] 添加工具 schema 定义 - 用于 Agent 知道如何调用
-- [ ] 添加到默认技能 - 让新会话自动可用
-- [ ] 完整测试覆盖
+- [x] TurnLog 模块 (`agent/turn_log.rs`)
+  - `TurnAction` 枚举：Tool, Thinking, Response
+  - `TurnLogEntry` 结构：offset_ms, action
+  - `TurnLog` 结构：new, record_tool, record_response, summary
+  - `TurnLogSummary` 结构：tool_count, successful_tools, duration_ms, tools_used
+- [x] 事件系统集成
+  - 新增 `Event::TurnLogUpdated` 和 `Event::TurnLogCompleted` 事件类型
+  - SSE 事件流支持 (`turn.log_updated`, `turn.log_completed`)
+  - Session 过滤支持
+- [x] Runtime 集成 (`runtime.rs`)
+  - 每个 Turn 创建 TurnLog
+  - 工具执行时记录到日志（名称、输入、输出、成功/失败、耗时）
+  - Turn 结束时记录 Response
+  - Turn 结束时发送 TurnLogCompleted 事件
+- [x] 完整测试覆盖 (3 个新测试)
 - cargo clippy 0 警告
-- cargo test 通过
+- cargo test 191 tests (新增 3 个 turn_log 测试)
 
-**下一步**: 信息搜索工具、提醒工具
+**下一步**: WebUI/TUI Turn Log 可视化、Turn Log 历史记录
 
 ---
 
 ## 迭代历史
+
+### v5.7.0 (已完成 ✅)
+
+**完成事项**:
+- **Structured Tool Error Reporting** - 工具执行失败时返回结构化错误报告
+  - 新增 `agent/error_recovery.rs`
+  - `ToolErrorKind` 枚举：9种错误类型 (NotFound, PermissionDenied, InvalidArgument, etc.)
+  - `ErrorRecovery` 结构：包含 kind, retryable, suggestion, message
+  - 集成到 `runtime.rs` 和 `client.rs`：工具失败时返回结构化报告
+  - 帮助 Agent 理解错误原因并自我修正
+- **cargo clippy 0 警告**
+- **cargo test 188 tests** (新增 12 个错误恢复测试)
+
+**下一步**: Agent Turn 执行日志、WebUI/TUI 状态可视化
+
+---
 
 ### v5.6.0 (已完成 ✅)
 
