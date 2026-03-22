@@ -435,14 +435,38 @@ async fn shutdown(State(state): State<Arc<HttpState>> ) -> (HttpStatusCode, Json
 /// Sessions list handler
 async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
     let sessions = state.session_manager.list();
+    let now = chrono::Utc::now();
     let session_infos: Vec<serde_json::Value> = sessions
         .iter()
         .map(|s| {
             let session = s.read();
-            let msg_count = state.history_manager
-                .get(&session.id)
-                .map(|h| h.read().messages.len())
-                .unwrap_or(0);
+            let history = state.history_manager.get(&session.id);
+            let msg_count = history.as_ref().map(|h| h.read().messages.len()).unwrap_or(0);
+            
+            // Get last message preview
+            let last_message_preview = history
+                .as_ref()
+                .and_then(|h| {
+                    let msgs = h.read();
+                    msgs.messages.iter()
+                        .rev()
+                        .find(|m| m.role == crate::types::Role::User)
+                        .map(|m| {
+                            let content = m.content.chars().take(50).collect::<String>();
+                            if m.content.len() > 50 {
+                                format!("{}...", content)
+                            } else {
+                                content
+                            }
+                        })
+                });
+            
+            // Calculate duration since creation (in seconds)
+            let duration_secs = (now - session.created_at).num_seconds();
+            
+            // Check if session is active (last active within 5 minutes)
+            let is_active = (now - session.last_active).num_seconds() < 300;
+            
             serde_json::json!({
                 "id": session.id,
                 "label": session.label,
@@ -459,6 +483,9 @@ async fn sessions_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::
                 "createdAt": session.created_at.to_rfc3339(),
                 "lastActive": session.last_active.to_rfc3339(),
                 "messageCount": msg_count,
+                "durationSecs": duration_secs,
+                "lastMessagePreview": last_message_preview,
+                "isActive": is_active,
             })
         })
         .collect();

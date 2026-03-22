@@ -136,22 +136,41 @@
 
 ---
 
-## 当前迭代规划 (v5.1.0)
+## 当前迭代规划 (v5.2.0)
 
 ### 本轮目标
-**TUI 输入体验增强** - 输入历史导航
+**WebUI 会话管理增强** - 会话列表优化
 
 **计划完成**:
-- [x] TUI 输入历史导航
-  - Up/Down 箭头在输入面板中循环浏览历史消息
+- [x] API 增强 - 新增会话字段
+  - `durationSecs`: 创建以来的秒数
+  - `lastMessagePreview`: 最后用户消息预览（截断至50字符）
+  - `isActive`: 是否活跃（5分钟内有活动）
+- [x] WebUI 会话列表增强
+  - 新增"消息"列显示消息数量
+  - 新增"时长"列显示相对时间（秒/分钟/小时/天）
+  - 新增活动状态指示器（绿色=活跃，灰色=空闲）
+  - 支持点击列头排序（ID/标签/类型/消息数/时长/最后活跃）
+  - 搜索支持最后消息预览
+- [x] cargo clippy 0 警告
+- [x] cargo test 176 tests
+
+---
+
+### v5.1.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI 输入历史导航** - Up/Down 箭头在输入面板中循环浏览历史消息
   - AppState 新增 input_history, input_history_index, input_history_saved
   - 辅助方法: add_to_input_history, input_history_up/down, is_navigating_history
   - Enter 发送前将当前缓冲区添加到历史
   - 键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消历史导航
-  - 显示历史位置提示: '↑↓ 3/10 (Enter to select, any key to cancel)'
+  - 显示历史位置提示: '↑↓ 3/10'
   - 每个会话历史限制 100 条
-- [x] cargo clippy 0 警告
-- [x] cargo test 176 tests
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: WebUI 会话管理增强
 
 ---
 
@@ -310,6 +329,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.2.0 | WebUI 会话管理增强 - API新增 durationSecs/lastMessagePreview/isActive 字段；新增"消息数列"显示消息数量；新增"时长"列显示相对时间(秒/分钟/小时/天)；新增活动状态指示器(绿=活跃/灰=空闲)；支持点击列头排序(ID/标签/类型/消息数/时长/最后活跃)；搜索支持最后消息预览；cargo clippy 0 警告；cargo test 176 tests |
 | v5.1.0 | TUI 输入历史导航 - Up/Down 箭头在输入面板中循环浏览历史消息；AppState 新增 input_history/input_history_index/input_history_saved；辅助方法: add_to_input_history/input_history_up/down/is_navigating_history；Enter发送前添加历史；键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消导航；历史位置提示 '↑↓ 3/10'；每个会话历史限制 100 条；cargo clippy 0 警告；cargo test 176 tests |
 | v5.0.0 | WebUI 聊天体验增强 - 消息复制按钮(hover显示)、清空聊天按钮、实时搜索过滤(显示匹配计数)；CSS 增强：copy按钮动画、hidden-by-search隐藏、search-count显示；cargo clippy 0 警告；cargo test 176 tests |
 | v4.9.0 | Agent 执行状态可视化 - TUI 新增 TurnStarted/TurnThinking 事件处理、WebUI SSE 新增 thinking/tool_use 指示器、CSS 动画增强；cargo clippy 0 警告；cargo test 176 tests |

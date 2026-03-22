@@ -359,6 +359,17 @@
         .status-dot.error {
             background: #f44336;
         }
+        .status-dot.active {
+            background: #00ff88;
+            box-shadow: 0 0 8px rgba(0,255,136,0.5);
+        }
+        .status-dot.idle {
+            background: #666;
+        }
+        .sort-icon {
+            font-size: 10px;
+            opacity: 0.5;
+        }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -1115,11 +1126,12 @@
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>标签</th>
-                        <th>类型</th>
-                        <th>创建时间</th>
-                        <th>最后活跃</th>
+                        <th onclick="sortSessions('id')" style="cursor:pointer;">ID <span class="sort-icon">↕</span></th>
+                        <th onclick="sortSessions('label')" style="cursor:pointer;">标签 <span class="sort-icon">↕</span></th>
+                        <th onclick="sortSessions('kind')" style="cursor:pointer;">类型 <span class="sort-icon">↕</span></th>
+                        <th onclick="sortSessions('messageCount')" style="cursor:pointer;">消息 <span class="sort-icon">↕</span></th>
+                        <th onclick="sortSessions('duration')" style="cursor:pointer;">时长 <span class="sort-icon">↕</span></th>
+                        <th onclick="sortSessions('lastActive')" style="cursor:pointer;">最后活跃 <span class="sort-icon">↕</span></th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -1403,15 +1415,58 @@
             return div.innerHTML;
         }
         
+        // Session sorting state
+        let sessionSortField = 'lastActive';
+        let sessionSortAsc = false;
+        
+        function formatDuration(secs) {
+            if (secs < 60) return secs + '秒';
+            if (secs < 3600) return Math.floor(secs / 60) + '分钟';
+            if (secs < 86400) return Math.floor(secs / 3600) + '小时';
+            return Math.floor(secs / 86400) + '天';
+        }
+        
+        function sortSessions(field) {
+            if (sessionSortField === field) {
+                sessionSortAsc = !sessionSortAsc;
+            } else {
+                sessionSortField = field;
+                sessionSortAsc = true;
+            }
+            // Update sort icons
+            document.querySelectorAll('th span.sort-icon').forEach(span => span.textContent = '↕');
+            event.target.closest('th').querySelector('.sort-icon').textContent = sessionSortAsc ? '↑' : '↓';
+            renderSessions(window.sessionsData || []);
+        }
+        
         function renderSessions(sessions) {
+            window.sessionsData = sessions; // Cache for sorting
             const tbody = document.getElementById('sessionList');
             const searchTerm = document.getElementById('sessionSearch').value.toLowerCase();
             
-            const filtered = sessions.filter(s => 
+            let filtered = sessions.filter(s => 
                 (s.id || '').toLowerCase().includes(searchTerm) ||
                 (s.label || '').toLowerCase().includes(searchTerm) ||
-                (s.kind || '').toLowerCase().includes(searchTerm)
+                (s.kind || '').toLowerCase().includes(searchTerm) ||
+                (s.lastMessagePreview || '').toLowerCase().includes(searchTerm)
             );
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let valA, valB;
+                switch (sessionSortField) {
+                    case 'id': valA = a.id || ''; valB = b.id || ''; break;
+                    case 'label': valA = a.label || ''; valB = b.label || ''; break;
+                    case 'kind': valA = a.kind || ''; valB = b.kind || ''; break;
+                    case 'messageCount': valA = a.messageCount || 0; valB = b.messageCount || 0; break;
+                    case 'duration': valA = a.durationSecs || 0; valB = b.durationSecs || 0; break;
+                    case 'lastActive': valA = new Date(a.lastActive || 0).getTime(); valB = new Date(b.lastActive || 0).getTime(); break;
+                    default: valA = 0; valB = 0;
+                }
+                if (valA < valB) return sessionSortAsc ? -1 : 1;
+                if (valA > valB) return sessionSortAsc ? 1 : -1;
+                return 0;
+            });
             
             if (filtered.length > 0) {
                 tbody.innerHTML = filtered.map(s => `
@@ -1419,8 +1474,9 @@
                         <td><code>${s.id.substring(0, 8)}...</code></td>
                         <td>${s.label || '-'}</td>
                         <td><span class="session-kind">${s.kind}</span></td>
-                        <td>${new Date(s.createdAt).toLocaleString('zh-CN')}</td>
-                        <td>${new Date(s.lastActive).toLocaleString('zh-CN')}</td>
+                        <td>${s.messageCount || 0}</td>
+                        <td>${formatDuration(s.durationSecs || 0)}</td>
+                        <td>${s.isActive ? '<span class="status-dot active"></span> ' : '<span class="status-dot idle"></span> '}${new Date(s.lastActive).toLocaleString('zh-CN')}</td>
                         <td>
                             <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="event.stopPropagation(); showSessionDetails('${s.id}')">查看</button>
                             ${s.kind !== 'main' ? `<button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px; margin-left: 4px;" onclick="event.stopPropagation(); deleteSession('${s.id}')">删除</button>` : ''}
@@ -1428,7 +1484,7 @@
                     </tr>
                 `).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="6">暂无会话</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7">暂无会话</td></tr>';
             }
         }
 
