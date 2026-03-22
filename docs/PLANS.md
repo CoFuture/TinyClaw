@@ -136,38 +136,37 @@
 
 ---
 
-## 当前迭代规划 (v5.0.0)
+## 当前迭代规划 (v5.1.0)
 
 ### 本轮目标
-**WebUI 聊天体验增强** - 消息复制、清空聊天、搜索功能
+**TUI 输入体验增强** - 输入历史导航
 
 **计划完成**:
-- [x] WebUI 聊天工具栏
-  - 新增 `.chat-toolbar` 布局：包含搜索框和清空按钮
-  - 搜索框 `.chat-search-input`：placeholder "搜索消息..."
-  - 清空按钮 `.chat-btn-icon.clear`：hover 时变红提示
-- [x] 消息复制功能
-  - 用户/AI 消息 hover 时显示右上角"复制"按钮
-  - 点击后显示"已复制"反馈（1.5秒后恢复）
-  - 使用 `navigator.clipboard.writeText` 复制原文
-- [x] 清空聊天功能
-  - 点击"清空"按钮清除当前会话的本地消息显示
-  - 同时清除 `chatMessageHistories` 中对应会话的缓存
-  - 搜索框也会被清空
-- [x] 聊天搜索功能
-  - `onChatSearchInput()` 实时过滤消息内容
-  - 不匹配的消息添加 `.hidden-by-search` 类隐藏
-  - 搜索结果计数显示：当前可见数/总数
-  - 搜索框为空时显示全部消息
-- [x] CSS 样式增强
-  - `.msg-copy-btn`：默认 opacity:0，hover 时 opacity:1
-  - `.copied` 状态：文字变绿色
-  - `.hidden-by-search`：display:none
-  - `.chat-search-count`：淡灰色显示搜索结果计数
+- [x] TUI 输入历史导航
+  - Up/Down 箭头在输入面板中循环浏览历史消息
+  - AppState 新增 input_history, input_history_index, input_history_saved
+  - 辅助方法: add_to_input_history, input_history_up/down, is_navigating_history
+  - Enter 发送前将当前缓冲区添加到历史
+  - 键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消历史导航
+  - 显示历史位置提示: '↑↓ 3/10 (Enter to select, any key to cancel)'
+  - 每个会话历史限制 100 条
+- [x] cargo clippy 0 警告
+- [x] cargo test 176 tests
 
-#### 基础修复 (持续)
-- `cargo clippy` 无警告
-- `cargo test` 全部通过 (176 tests)
+---
+
+### v5.0.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI 聊天体验增强** - 消息复制、清空聊天、搜索功能
+  - 新增 `.chat-toolbar` 布局：包含搜索框和清空按钮
+  - 用户/AI 消息 hover 时显示"复制"按钮，点击后显示"已复制"反馈
+  - 点击"清空"清除当前会话消息和搜索框
+  - `onChatSearchInput()` 实时过滤，搜索结果计数显示
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: TUI 输入历史导航、WebUI 会话管理增强
 
 ---
 
@@ -298,6 +297,7 @@
 - [x] TUI 视觉优化 (彩色角色标签+时间戳) ✅ v4.4.0
 - [x] TUI 命令帮助系统增强 ✅ v4.6.0
 - [x] WebUI 聊天消息复制/清空/搜索 ✅ v5.0.0
+- [x] TUI 输入历史导航 (Up/Down 箭头) ✅ v5.1.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -310,6 +310,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.1.0 | TUI 输入历史导航 - Up/Down 箭头在输入面板中循环浏览历史消息；AppState 新增 input_history/input_history_index/input_history_saved；辅助方法: add_to_input_history/input_history_up/down/is_navigating_history；Enter发送前添加历史；键入/Backspace/Ctrl+C/Ctrl+D/Esc 取消导航；历史位置提示 '↑↓ 3/10'；每个会话历史限制 100 条；cargo clippy 0 警告；cargo test 176 tests |
 | v5.0.0 | WebUI 聊天体验增强 - 消息复制按钮(hover显示)、清空聊天按钮、实时搜索过滤(显示匹配计数)；CSS 增强：copy按钮动画、hidden-by-search隐藏、search-count显示；cargo clippy 0 警告；cargo test 176 tests |
 | v4.9.0 | Agent 执行状态可视化 - TUI 新增 TurnStarted/TurnThinking 事件处理、WebUI SSE 新增 thinking/tool_use 指示器、CSS 动画增强；cargo clippy 0 警告；cargo test 176 tests |
 | v4.8.0 | Session Rename 支持 - session.rename 网关方法、PATCH /api/sessions/{id} HTTP 端点、SessionManager::rename 方法；TUI :ren/:rename 命令进入重命名模式、rename_mode 状态管理、Enter 确认/Esc 取消；帮助栏更新显示新命令；/api/sessions 返回 messageCount；cargo clippy 0 警告；cargo test 176 tests |
@@ -341,4 +342,4 @@
 
 ---
 
-*更新时间: 2026-03-22 09:02*
+*更新时间: 2026-03-22 10:02*
