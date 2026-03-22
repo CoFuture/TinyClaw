@@ -1,6 +1,6 @@
 //! TUI UI components
 
-use crate::tui::state::AppState;
+use crate::tui::state::{AppState, AgentActivityType};
 use ratatui::{
     layout::Alignment,
     layout::Rect,
@@ -40,6 +40,34 @@ pub fn draw_sessions_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     let list = List::new(items).block(block);
     f.render_widget(list, area);
+}
+
+/// Get the activity indicator line based on agent activity state
+fn get_activity_indicator(state: &AppState) -> Option<Line<'static>> {
+    if !state.loading {
+        return None;
+    }
+    match state.agent_activity.activity_type {
+        AgentActivityType::Thinking => {
+            Some(Line::from(vec![
+                Span::styled("🤔 ", Style::default().fg(Color::Yellow)),
+                Span::styled("thinking...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]))
+        }
+        AgentActivityType::UsingTool => {
+            let tool_name = state.agent_activity.tool_name.as_deref().unwrap_or("unknown");
+            Some(Line::from(vec![
+                Span::styled("🔧 ", Style::default().fg(Color::Magenta)),
+                Span::styled(format!("using tool: {}", tool_name), Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC)),
+            ]))
+        }
+        AgentActivityType::Waiting | AgentActivityType::Idle => {
+            Some(Line::from(vec![
+                Span::styled("⏳ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("waiting...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]))
+        }
+    }
 }
 
 /// Draw the message view panel with enhanced formatting
@@ -128,7 +156,13 @@ pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
                 }
                 crate::types::Role::Tool => {
                     let tool_name = msg.tool_name.as_deref().unwrap_or("tool").to_string();
-                    let content = msg.content.trim().to_string();
+                    let content = msg.content.trim();
+                    // Show first line of content, truncate if long
+                    let first_line = if content.len() > 100 {
+                        format!("{}...", &content[..100])
+                    } else {
+                        content.to_string()
+                    };
                     result.push(Line::from(vec![
                         Span::raw("["),
                         Span::styled(ts, Style::default().fg(Color::DarkGray)),
@@ -136,18 +170,16 @@ pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
                         Span::styled("Tool", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
                         Span::raw(" "),
                         Span::styled(tool_name, Style::default().fg(Color::Magenta)),
-                        Span::raw(": "),
-                        Span::raw(content),
+                        Span::raw(" → "),
+                        Span::raw(first_line),
                     ]));
                 }
             }
         }
         
         // Add loading indicator if active
-        if state.loading {
-            result.push(Line::from(vec![
-                Span::styled("typing...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
-            ]));
+        if let Some(indicator) = get_activity_indicator(state) {
+            result.push(indicator);
         }
         
         result
@@ -244,7 +276,7 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 /// Draw the help bar at the bottom
 pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect) {
-    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help ";
+    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | 🤔 Thinking | 🔧 Tool Execution ";
     
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)

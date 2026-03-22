@@ -4,6 +4,30 @@ use crate::types::{Message, SessionHistory};
 use crate::tui::gateway_client::TuiGatewayStatus;
 use std::collections::HashMap;
 
+/// Agent activity type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AgentActivityType {
+    /// Idle / not doing anything
+    #[default]
+    Idle,
+    /// Agent is thinking/generating
+    Thinking,
+    /// Agent is executing a tool
+    UsingTool,
+    /// Waiting for response
+    #[allow(dead_code)]
+    Waiting,
+}
+
+/// Current agent activity state
+#[derive(Debug, Clone, Default)]
+pub struct AgentActivity {
+    /// Activity type
+    pub activity_type: AgentActivityType,
+    /// Tool name if using a tool
+    pub tool_name: Option<String>,
+}
+
 /// Completion candidates for tab completion
 #[derive(Debug, Clone, Default)]
 pub struct CompletionState {
@@ -162,6 +186,8 @@ pub struct AppState {
     pub retry_count: u32,
     /// Tab completion state
     pub completion: CompletionState,
+    /// Current agent activity state
+    pub agent_activity: AgentActivity,
 }
 
 impl Default for AppState {
@@ -180,6 +206,7 @@ impl Default for AppState {
             error_message: None,
             retry_count: 0,
             completion: CompletionState::default(),
+            agent_activity: AgentActivity::default(),
         }
     }
 }
@@ -218,6 +245,24 @@ impl AppState {
 
     pub fn set_loading(&mut self, loading: bool) {
         self.loading = loading;
+    }
+
+    pub fn set_thinking(&mut self) {
+        self.agent_activity = AgentActivity {
+            activity_type: AgentActivityType::Thinking,
+            tool_name: None,
+        };
+    }
+
+    pub fn set_using_tool(&mut self, tool_name: &str) {
+        self.agent_activity = AgentActivity {
+            activity_type: AgentActivityType::UsingTool,
+            tool_name: Some(tool_name.to_string()),
+        };
+    }
+
+    pub fn set_idle(&mut self) {
+        self.agent_activity = AgentActivity::default();
     }
 
     pub fn set_error(&mut self, msg: Option<String>) {

@@ -37,7 +37,7 @@ pub enum TuiGatewayEvent {
     /// Text response from assistant
     AssistantText(String),
     /// Tool call started
-    ToolStart { tool: String, input: serde_json::Value },
+    ToolStart { tool: String, _input: serde_json::Value },
     /// Tool result received
     #[allow(dead_code)]
     ToolResult { tool: String, output: String },
@@ -292,7 +292,7 @@ impl TuiGatewayClient {
                         if let Some(params) = resp.params {
                             let tool = params.get("tool").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
                             let input = params.get("input").cloned().unwrap_or_default();
-                            let _ = event_tx.send(TuiGatewayEvent::ToolStart { tool, input });
+                            let _ = event_tx.send(TuiGatewayEvent::ToolStart { tool, _input: input });
                         }
                     }
                     "tool_result" => {

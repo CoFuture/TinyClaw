@@ -483,7 +483,7 @@ impl ChatClient {
                         "assistant.tool_use" => {
                             let tool = params.get("tool").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
                             let input = params.get("input").cloned().unwrap_or_default();
-                            let _ = event_tx.send(crate::tui::TuiGatewayEvent::ToolStart { tool, input });
+                            let _ = event_tx.send(crate::tui::TuiGatewayEvent::ToolStart { tool, _input: input });
                         }
                         "tool_result" => {
                             let output = params.get("output").and_then(|v| v.as_str()).unwrap_or("").to_string();

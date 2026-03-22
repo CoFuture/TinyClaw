@@ -249,9 +249,10 @@ impl TuiApp {
                     }
                 }
             }
-            TuiGatewayEvent::ToolStart { tool, input } => {
-                info!("Tool call: {} with {:?}", tool, input);
-                // Could display in a status area
+            TuiGatewayEvent::ToolStart { tool, .. } => {
+                info!("Tool started: {}", tool);
+                self.state.set_using_tool(&tool);
+                // Add tool call message to history
                 if let Some(session_id) = &self.state.current_session_id {
                     if let Some(history) = self.state.session_histories.get_mut(session_id) {
                         use crate::types::{Message, Role};
@@ -261,18 +262,41 @@ impl TuiApp {
                             content: format!("[Calling tool: {}]", tool),
                             timestamp: chrono::Utc::now(),
                             tool_call_id: None,
-                            tool_name: Some(tool),
+                            tool_name: Some(tool.clone()),
                         });
                         self.save_current_history();
                     }
                 }
             }
-            TuiGatewayEvent::ToolResult { tool: _, output } => {
-                info!("Tool result: {}", output);
+            TuiGatewayEvent::ToolResult { tool, output } => {
+                info!("Tool result: {} = {}", tool, output);
+                // Add tool result to history
+                if let Some(session_id) = &self.state.current_session_id {
+                    if let Some(history) = self.state.session_histories.get_mut(session_id) {
+                        use crate::types::{Message, Role};
+                        // Truncate long outputs for display
+                        let display_output = if output.len() > 200 {
+                            format!("{}...[truncated]", &output[..200])
+                        } else {
+                            output.clone()
+                        };
+                        history.add_message(Message {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            role: Role::Tool,
+                            content: display_output,
+                            timestamp: chrono::Utc::now(),
+                            tool_call_id: None,
+                            tool_name: Some(tool.clone()),
+                        });
+                        self.save_current_history();
+                    }
+                }
+                self.state.set_idle();
             }
             TuiGatewayEvent::TurnEnded(response) => {
                 info!("Turn ended: {}", response);
                 self.state.set_loading(false);
+                self.state.set_idle();
                 // Add final response
                 if let Some(session_id) = &self.state.current_session_id {
                     if let Some(history) = self.state.session_histories.get_mut(session_id) {
@@ -473,6 +497,7 @@ impl TuiApp {
                         });
                         
                         self.state.input_buffer.clear();
+                        self.state.set_thinking();
                         self.state.set_loading(true);
                     }
                     return Ok(true);
