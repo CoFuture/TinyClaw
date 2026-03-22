@@ -357,21 +357,26 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ## 待办事项池
 
 ### Agent 自主执行能力（真正能做事的关键！）
-- [ ] **任务规划与执行** - Agent 自动规划多步骤任务并执行
-- [ ] **任务队列** - 支持后台任务队列，异步执行
+- [ ] **任务抽象与执行** - Agent 自动规划多步骤任务并执行
+- [ ] **后台任务队列** - 支持异步执行，状态追踪
 - [x] 上下文管理机制 ✅ v3.7.0
 - [x] Skill 机制 ✅ v3.0.0
 - [x] 断路器保护 ✅ v5.6.0
 - [x] 结构化错误报告 + 自我修正 ✅ v5.7.0
 
-### 核心工具扩展（让 Agent 能做事）
-- [ ] **天气查询** - 获取指定城市天气信息
-- [ ] **信息搜索** - 搜索网络获取实时信息
-- [ ] **提醒/定时** - 设置提醒、定时执行任务
+### 核心工具（参考 OpenClaw Skill，依赖外部 API）
+> 工具不求多，够用即可。关键是通过 Skill 组合实现复杂能力。
+
+**已有工具（够用）**：
 - [x] 文件操作 (read/write/cp/mv/rm/cat/grep/glob/find) ✅
 - [x] 代码分析 ✅
 - [x] 系统命令执行 ✅
 - [x] HTTP 请求 ✅
+
+**可选扩展（按需）**：
+- [ ] **天气查询** - 通过 Skill + 外部 API 实现
+- [ ] **信息搜索** - 通过 Skill + 外部 API 实现
+- [ ] **提醒** - 通过 Skill + 定时任务实现
 
 ### 定时任务/自动化
 - [ ] **定时任务系统** - 支持 cron 风格定时执行
@@ -448,33 +453,38 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v5.8.0)
+## 当前迭代规划 (v5.9.0)
 
 ### 本轮目标
-**Agent Turn 执行日志 (Agent Turn Execution Log)** - 记录并展示 Agent 每个 Turn 的完整执行过程
+**Agent 自主任务执行能力** - 让 Agent 能帮你完成复杂的多步骤任务
 
-> 让用户清楚看到 Agent 在每个 Turn 中做了什么：调用了哪些工具、耗时多少、结果如何
+> 这是"真正能做事"的核心：不是回答问题，而是规划和执行任务
+
+**核心理念**：
+- TinyClaw 和 OpenClaw 的核心区别是**精简架构**，但在**做事情的能力上不应该有明显区别**
+- Skill 机制 + 任务队列 = Agent 自主执行能力
+- 不堆砌工具，而是让现有工具能被组合使用
+
+**当前问题**：
+- Agent 只是"问一句答一句"的被动响应模式
+- 需要变成"你说一件事，Agent 自动完成"的主动模式
 
 **计划完成**:
-- [x] TurnLog 模块 (`agent/turn_log.rs`)
-  - `TurnAction` 枚举：Tool, Thinking, Response
-  - `TurnLogEntry` 结构：offset_ms, action
-  - `TurnLog` 结构：new, record_tool, record_response, summary
-  - `TurnLogSummary` 结构：tool_count, successful_tools, duration_ms, tools_used
-- [x] 事件系统集成
-  - 新增 `Event::TurnLogUpdated` 和 `Event::TurnLogCompleted` 事件类型
-  - SSE 事件流支持 (`turn.log_updated`, `turn.log_completed`)
-  - Session 过滤支持
-- [x] Runtime 集成 (`runtime.rs`)
-  - 每个 Turn 创建 TurnLog
-  - 工具执行时记录到日志（名称、输入、输出、成功/失败、耗时）
-  - Turn 结束时记录 Response
-  - Turn 结束时发送 TurnLogCompleted 事件
-- [x] 完整测试覆盖 (3 个新测试)
+- [ ] **任务抽象** - 定义 Task 结构（描述、步骤、状态、结果）
+- [ ] **后台任务队列** - 支持异步执行长时间任务
+- [ ] **任务状态追踪** - 进行中/完成/失败 状态管理
+- [ ] **Gateway API** - 支持创建任务、查询状态、获取结果
+- [ ] **集成 Skill 机制** - 利用现有 Skill 作为任务能力
+- [ ] 完整测试覆盖
 - cargo clippy 0 警告
-- cargo test 191 tests (新增 3 个 turn_log 测试)
+- cargo test 通过
 
-**下一步**: WebUI/TUI Turn Log 可视化、Turn Log 历史记录
+**设计原则**：
+- 保持精简：复Skill + 任务队列，不增加新工具
+- 参考 OpenClaw 的任务模型，但简化实现
+- 与现有 Session 机制解耦
+
+**下一步**: 定时任务触发、主动提醒
 
 ---
 
