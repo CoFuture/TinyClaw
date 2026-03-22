@@ -5,6 +5,7 @@ use tokio::sync::broadcast;
 use crate::agent::scheduled_task::ScheduledTaskSummary;
 use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 use crate::agent::task::TaskSummary;
+use crate::agent::suggestion::Suggestion;
 
 /// Event types for real-time streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +170,13 @@ pub enum Event {
     #[serde(rename = "scheduled.deleted")]
     ScheduledTaskDeleted {
         schedule_id: String,
+    },
+
+    /// Suggestions generated for a session
+    #[serde(rename = "suggestion.generated")]
+    SuggestionGenerated {
+        session_id: String,
+        suggestions: Vec<Suggestion>,
     },
     
     /// Error occurred

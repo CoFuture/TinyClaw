@@ -77,6 +77,7 @@ pub async fn start_server(
                             ctx.skill_manager.clone(),
                             ctx.task_manager.clone(),
                             ctx.scheduler.clone(),
+                            ctx.suggestion_engines.clone(),
                         );
                         let server_state = server_state.clone();
                         tokio::spawn(handle_connection(stream, ctx, server_state));

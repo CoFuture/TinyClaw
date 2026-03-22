@@ -677,6 +677,7 @@ async fn sse_events(
                                     Event::ScheduledTaskFailed { .. } => true,
                                     Event::ScheduledTaskUpdated { .. } => true,
                                     Event::ScheduledTaskDeleted { .. } => true,
+                                    Event::SuggestionGenerated { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -708,6 +709,7 @@ async fn sse_events(
                                     Event::ScheduledTaskFailed { .. } => "scheduled.failed",
                                     Event::ScheduledTaskUpdated { .. } => "scheduled.updated",
                                     Event::ScheduledTaskDeleted { .. } => "scheduled.deleted",
+                                    Event::SuggestionGenerated { .. } => "suggestion.generated",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",

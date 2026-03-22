@@ -196,6 +196,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn WebSocket server
     let server_config = config.clone();
+    let suggestion_engines: std::sync::Arc<parking_lot::RwLock<std::collections::HashMap<String, crate::agent::suggestion::SuggestionEngine>>> =
+        std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new()));
+    let suggestion_engines_ws = suggestion_engines.clone();
     let ws_ctx_clone = HandlerContext::new(
         session_manager.clone(),
         history_manager.clone(),
@@ -206,6 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         skill_manager.clone(), // skill_manager was already cloned into http_state, clone again for WS
         task_manager.clone(), // TaskManager for background task execution
         scheduler.clone(), // Scheduler for scheduled task triggering
+        suggestion_engines_ws, // Suggestion engines for proactive suggestions
     );
     
     let ws_handle = tokio::spawn(async move {

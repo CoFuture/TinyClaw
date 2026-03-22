@@ -1,6 +1,7 @@
 //! Message handlers
 
 use crate::agent::tools::ToolExecutor;
+use crate::agent::suggestion::SuggestionEngine;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -9,6 +10,7 @@ use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
 use crate::agent::{Agent, SessionSkillManager, TaskManager, Scheduler};
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info};
@@ -58,6 +60,8 @@ pub struct HandlerContext {
     pub skill_manager: Arc<SessionSkillManager>,
     pub task_manager: Arc<TaskManager>,
     pub scheduler: Arc<Scheduler>,
+    /// Per-session suggestion engines for proactive suggestions (Arc for Clone)
+    pub suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
 }
 
 impl HandlerContext {
@@ -72,6 +76,7 @@ impl HandlerContext {
         skill_manager: Arc<SessionSkillManager>,
         task_manager: Arc<TaskManager>,
         scheduler: Arc<Scheduler>,
+        suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
     ) -> Self {
         Self {
             session_manager,
@@ -83,7 +88,17 @@ impl HandlerContext {
             skill_manager,
             task_manager,
             scheduler,
+            suggestion_engines,
         }
+    }
+
+    /// Get or create a suggestion engine for a session
+    pub fn get_suggestion_engine(&self, session_key: &str) -> Arc<RwLock<SuggestionEngine>> {
+        let mut engines = self.suggestion_engines.write();
+        let engine = engines.entry(session_key.to_string()).or_default();
+        // Clone the engine state and wrap in a new RwLock for the returned Arc
+        let cloned_engine = engine.clone();
+        Arc::new(RwLock::new(cloned_engine))
     }
 }
 
@@ -603,6 +618,24 @@ async fn handle_agent_turn(
         session_id: session_key.to_string(),
         response: response.clone(),
     });
+
+    // Generate proactive suggestions based on conversation context
+    let suggestions = {
+        let engine = ctx.get_suggestion_engine(session_key);
+        let mut engine = engine.write();
+        let history = ctx.history_manager.get(session_key)
+            .map(|h| h.read().get_messages().to_vec())
+            .unwrap_or_default();
+        engine.generate_suggestions(&history, &response)
+    };
+
+    // Emit suggestion generated event if we have suggestions
+    if !suggestions.is_empty() {
+        ctx.event_emitter.emit(Event::SuggestionGenerated {
+            session_id: session_key.to_string(),
+            suggestions,
+        });
+    }
 
     Ok(serde_json::json!({
         "text": response

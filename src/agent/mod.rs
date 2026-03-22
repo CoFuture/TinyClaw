@@ -11,6 +11,7 @@ pub mod scheduler;
 pub mod skill;
 pub mod skill_manager;
 pub mod skill_registry;
+pub mod suggestion;
 pub mod task;
 pub mod task_manager;
 pub mod tools;
@@ -24,6 +25,8 @@ pub use scheduler::Scheduler;
 pub use skill::Skill;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
+#[allow(unused_imports)]
+pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, SuggestionType};
 pub use task::{TaskState, TaskSummary};
 pub use task_manager::TaskManager;
 #[allow(unused_imports)]

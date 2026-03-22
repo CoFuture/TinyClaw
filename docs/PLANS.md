@@ -359,7 +359,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ### Agent 自主执行能力（真正能做事的关键！）
 - [x] **任务抽象与执行** ✅ v5.9.0
 - [x] **后台任务队列** ✅ v5.9.0
-- [ ] **定时任务系统** - cron 风格定时执行
+- [x] **定时任务系统** ✅ v6.0.0
+- [x] **Agent 主动建议** ✅ v6.2.0
 - [x] 上下文管理机制 ✅ v3.7.0
 - [x] Skill 机制 ✅ v3.0.0
 - [x] 断路器保护 ✅ v5.6.0
@@ -403,6 +404,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - [x] TUI 输入历史导航 ✅ v5.1.0
 - [x] Session Turn Cancellation ✅ v5.3.0
 - [x] Session Rename ✅ v4.8.0
+- [x] Agent 主动建议 ✅ v6.2.0
 
 ### 稳定性
 - [x] 日志优化 (结构化日志) ✅ v4.1.0
@@ -454,13 +456,12 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v6.2.0)
+## 当前迭代规划 (v6.3.0)
 
 ### 本轮目标
 **Agent 能力增强 + 交互体验优化**
 
 **计划完成**:
-- [ ] **Agent 主动建议** - 基于上下文主动给用户建议
 - [ ] **会话上下文持久化** - 跨会话记住用户偏好
 - [ ] **TUI 增强** - 交互式 TUI 完善
 
@@ -469,6 +470,30 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ---
 
 ## 迭代历史
+
+### v6.2.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 主动建议 (Proactive Suggestions)** - 基于上下文主动给用户建议
+  - 新增 `agent/suggestion.rs`：`Suggestion`、`SuggestionType`、`SuggestionEngine` 结构
+  - 支持 5 种建议类型：FollowUp、Action、Information、Reminder、Task
+  - 关键词检测：file、error、bug、code、task、meeting 等
+  - 会话级建议引擎状态管理（跨 turn 保持上下文）
+  - 基于置信度排序，最多返回 3 条建议
+- **Gateway 事件集成**
+  - 新增 `suggestion.generated` SSE 事件类型
+  - HandlerContext 集成 suggestion_engines 状态
+  - 在 `handle_agent_turn` 结束后自动生成并推送建议
+- **HTTP SSE 事件过滤**
+  - 更新 `http/routes.rs` 支持 `SuggestionGenerated` 事件
+  - 支持按 session_id 过滤建议事件
+- **代码质量**
+  - cargo clippy 0 警告
+  - cargo test 237 tests (新增 11 个建议引擎测试)
+
+**下一步**: 会话上下文持久化、TUI 增强
+
+---
 
 ### v6.1.0 (已完成 ✅)
 
