@@ -100,6 +100,32 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+## v8.2.0 (已完成 ✅)
+
+**完成事项**:
+- **Turn History Statistics Dashboard** - 执行统计可视化面板
+  - **TurnStats 增强**：`src/agent/turn_history.rs`
+    - 新增 `tool_success_rate` 字段（工具成功率 0.0-1.0）
+    - 新增 `PeriodStat` 结构：period/timestamp/turns/successful/tools/avg_duration_ms
+    - 新增 `StatsPeriod` 枚举：Hourly/Daily/Weekly
+    - `get_stats_by_period()` 方法：按时间周期分组统计
+  - **HTTP API 增强**：`src/http/routes.rs`
+    - 新增 `GET /api/turns/stats/period` - 按时间周期的统计数据
+    - 支持 `period` 参数（hourly/daily/weekly）和 `limit` 参数
+  - **WebUI 统计面板**：`examples/admin.html` 新增完整统计仪表板
+    - 摘要卡片：总执行次数、工具成功率、平均耗时、工具执行数
+    - 时间周期选择器（按小时/按天/按周）和数据量选择器
+    - **📊 执行量趋势柱状图**：SVG 渲染，颜色编码（绿=高成功率/黄=中/红=低）
+    - **🔧 工具使用排行**：Top 10 工具横向条形图
+    - **💬 会话分布**：Top 10 会话横向条形图（多色区分）
+    - 自动刷新集成（随 admin 面板一起刷新）
+- cargo clippy 0 警告（仅 dead_code 警告）
+- cargo test 308 tests
+
+**下一步**: Agent 工具执行预览/确认机制、WebUI 交互增强
+
+---
+
 ### v7.3.0 (已完成 ✅)
 
 **完成事项**:

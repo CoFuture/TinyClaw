@@ -134,12 +134,42 @@ pub struct TurnStats {
     pub total_tools: u64,
     /// Successful tool executions
     pub successful_tools: u64,
+    /// Tool success rate (0.0 - 1.0)
+    pub tool_success_rate: f64,
     /// Average turn duration (ms)
     pub avg_duration_ms: f64,
     /// Tools by name (name -> count)
     pub tools_by_name: HashMap<String, u64>,
     /// Turns by session (session_id -> count)
     pub turns_by_session: HashMap<String, u64>,
+    /// Period statistics (for time-series charts)
+    pub period_stats: Vec<PeriodStat>,
+}
+
+/// Statistics for a single time period
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeriodStat {
+    /// Period label (e.g., "2026-03-22", "14:00")
+    pub period: String,
+    /// Period start timestamp
+    pub timestamp: i64,
+    /// Number of turns in this period
+    pub turns: u64,
+    /// Number of successful turns
+    pub successful: u64,
+    /// Number of tools executed
+    pub tools: u64,
+    /// Average duration in ms
+    pub avg_duration_ms: f64,
+}
+
+/// Period type for grouping statistics
+#[derive(Debug, Clone, Copy, Default)]
+pub enum StatsPeriod {
+    #[default]
+    Hourly,
+    Daily,
+    Weekly,
 }
 
 /// Turn history manager
@@ -365,6 +395,77 @@ impl TurnHistoryManager {
             stats.avg_duration_ms /= stats.total_turns as f64;
         }
         
+        // Calculate tool success rate
+        if stats.total_tools > 0 {
+            stats.tool_success_rate = stats.successful_tools as f64 / stats.total_tools as f64;
+        }
+        
+        stats
+    }
+
+    /// Get statistics grouped by time period
+    pub fn get_stats_by_period(&self, period: StatsPeriod, limit: usize) -> TurnStats {
+        use chrono::{Duration, Timelike};
+        
+        let records = self.records.read();
+        let now = chrono::Utc::now();
+        
+        // Calculate the start time based on period
+        let (start_time, _duration, formatter): (chrono::DateTime<chrono::Utc>, Duration, &dyn Fn(chrono::DateTime<chrono::Utc>) -> String) = match period {
+            StatsPeriod::Hourly => {
+                let start = now - Duration::hours(limit as i64);
+                (start, Duration::hours(1), &|dt| format!("{:02}:00", dt.hour()))
+            }
+            StatsPeriod::Daily => {
+                let start = now - Duration::days(limit as i64);
+                (start, Duration::days(1), &|dt| dt.format("%m-%d").to_string())
+            }
+            StatsPeriod::Weekly => {
+                let start = now - Duration::weeks(limit as i64);
+                (start, Duration::weeks(1), &|dt| dt.format("%Y-W%W").to_string())
+            }
+        };
+        
+        // Group turns by period
+        let mut period_map: HashMap<String, PeriodStat> = HashMap::new();
+        
+        for turns in records.values() {
+            for turn in turns {
+                if turn.created_at >= start_time {
+                    let period_key = formatter(turn.created_at);
+                    let entry = period_map.entry(period_key.clone()).or_insert(PeriodStat {
+                        period: period_key,
+                        timestamp: (turn.created_at.timestamp() / 3600) * 3600,
+                        turns: 0,
+                        successful: 0,
+                        tools: 0,
+                        avg_duration_ms: 0.0,
+                    });
+                    
+                    entry.turns += 1;
+                    if turn.success {
+                        entry.successful += 1;
+                    }
+                    entry.tools += turn.tools.len() as u64;
+                    entry.avg_duration_ms += turn.duration_ms as f64;
+                }
+            }
+        }
+        
+        // Calculate averages and sort by timestamp
+        let mut period_stats: Vec<PeriodStat> = period_map.into_values().collect();
+        for stat in &mut period_stats {
+            if stat.turns > 0 {
+                stat.avg_duration_ms /= stat.turns as f64;
+            }
+        }
+        period_stats.sort_by_key(|s| s.timestamp);
+        
+        // Limit results
+        period_stats.truncate(limit);
+        
+        let mut stats = TurnStats::default();
+        stats.period_stats = period_stats;
         stats
     }
 

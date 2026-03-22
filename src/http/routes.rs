@@ -832,6 +832,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/turns/{turn_id}", get(turns_get))
         .route("/api/turns/recent", get(turns_recent))
         .route("/api/turns/stats", get(turns_stats))
+        .route("/api/turns/stats/period", get(turns_stats_period))
         .route("/api/turns/export", get(turns_export))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
@@ -1713,6 +1714,35 @@ async fn turns_stats(
 ) -> Json<serde_json::Value> {
     let stats = state.turn_history.get_stats();
     Json(serde_json::json!({
+        "stats": stats,
+    }))
+}
+
+/// Get turn statistics grouped by time period
+async fn turns_stats_period(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    use crate::agent::turn_history::StatsPeriod;
+    
+    let period_str = params.get("period").map(|s| s.as_str()).unwrap_or("daily");
+    let limit: usize = params.get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
+    
+    let period = match period_str {
+        "hourly" | "hour" => StatsPeriod::Hourly,
+        "weekly" | "week" => StatsPeriod::Weekly,
+        _ => StatsPeriod::Daily,
+    };
+    
+    // Limit to reasonable range
+    let limit = limit.min(168); // Max 168 hours (1 week of hourly)
+    
+    let stats = state.turn_history.get_stats_by_period(period, limit);
+    Json(serde_json::json!({
+        "period": period_str,
+        "limit": limit,
         "stats": stats,
     }))
 }

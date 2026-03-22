@@ -1320,6 +1320,69 @@
             </div>
         </div>
         
+        <!-- Turn History Statistics Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📈 执行统计 <span id="statsPeriodLabel" style="font-size: 14px; color: #888; font-weight: normal;"></span></h2>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select id="statsPeriodSelect" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px;" onchange="loadTurnStats()">
+                    <option value="hourly">按小时</option>
+                    <option value="daily" selected>按天</option>
+                    <option value="weekly">按周</option>
+                </select>
+                <select id="statsLimitSelect" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px;" onchange="loadTurnStats()">
+                    <option value="24">最近 24 小时/天</option>
+                    <option value="7" selected>最近 7 小时/天</option>
+                    <option value="14">最近 14 小时/天</option>
+                    <option value="30">最近 30 小时/天</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadTurnStats()">🔄 刷新</button>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div id="turnStatsCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">总执行次数</div>
+                    <div style="color: #00d9ff; font-size: 24px; font-weight: bold;" id="statTotalTurns">-</div>
+                </div>
+                <div style="background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">工具成功率</div>
+                    <div style="color: #00ff88; font-size: 24px; font-weight: bold;" id="statToolSuccess">-</div>
+                </div>
+                <div style="background: rgba(255,183,77,0.1); border: 1px solid rgba(255,183,77,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">平均耗时</div>
+                    <div style="color: #ffb74d; font-size: 24px; font-weight: bold;" id="statAvgDuration">-</div>
+                </div>
+                <div style="background: rgba(186,104,200,0.1); border: 1px solid rgba(186,104,200,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">工具执行数</div>
+                    <div style="color: #ba68c8; font-size: 24px; font-weight: bold;" id="statTotalTools">-</div>
+                </div>
+            </div>
+            
+            <!-- Bar Chart -->
+            <div style="margin-bottom: 20px;">
+                <h3 style="color: #00d9ff; font-size: 13px; margin-bottom: 10px;">📊 执行量趋势</h3>
+                <div id="turnStatsChart" style="height: 120px; display: flex; align-items: flex-end; gap: 4px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; overflow-x: auto;">
+                    <div style="color: #666; text-align: center; width: 100%; font-size: 12px;">加载中...</div>
+                </div>
+            </div>
+            
+            <!-- Tool Usage Distribution -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h3 style="color: #00d9ff; font-size: 13px; margin-bottom: 10px;">🔧 工具使用排行</h3>
+                    <div id="toolUsageList" style="max-height: 200px; overflow-y: auto;">
+                        <div style="color: #666; font-size: 12px; text-align: center; padding: 20px;">加载中...</div>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="color: #00d9ff; font-size: 13px; margin-bottom: 10px;">💬 会话分布</h3>
+                    <div id="sessionDistribution" style="max-height: 200px; overflow-y: auto;">
+                        <div style="color: #666; font-size: 12px; text-align: center; padding: 20px;">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Turn History Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>📊 Agent 执行历史 <span class="tool-count-badge" id="turnCount">-</span></h2>
@@ -1568,6 +1631,13 @@
                     loadTurnHistory();
                 } catch (e) {
                     // Turn history API might not be available
+                }
+                
+                // Fetch turn statistics
+                try {
+                    loadTurnStats();
+                } catch (e) {
+                    // Turn stats API might not be available
                 }
                 
                 document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
@@ -1953,6 +2023,114 @@
                     </div>
                 `;
             }).join('');
+        }
+        
+        // Turn Statistics Dashboard
+        
+        async function loadTurnStats() {
+            const period = document.getElementById('statsPeriodSelect').value;
+            const limit = document.getElementById('statsLimitSelect').value;
+            const periodLabel = document.getElementById('statsPeriodLabel');
+            
+            // Update period label
+            const periodNames = { hourly: '每小时', daily: '每天', weekly: '每周' };
+            periodLabel.textContent = `| ${periodNames[period] || period}`;
+            
+            try {
+                // Fetch overall stats
+                const statsRes = await fetch(`${API_BASE}/api/turns/stats`);
+                const statsData = await statsRes.json();
+                const stats = statsData.stats;
+                
+                // Update summary cards
+                document.getElementById('statTotalTurns').textContent = stats.total_turns || 0;
+                document.getElementById('statToolSuccess').textContent = stats.tool_success_rate 
+                    ? `${(stats.tool_success_rate * 100).toFixed(1)}%` 
+                    : '-';
+                document.getElementById('statAvgDuration').textContent = stats.avg_duration_ms 
+                    ? `${Math.round(stats.avg_duration_ms)}ms` 
+                    : '-';
+                document.getElementById('statTotalTools').textContent = stats.total_tools || 0;
+                
+                // Render bar chart
+                const chartContainer = document.getElementById('turnStatsChart');
+                
+                // Fetch period stats
+                const periodRes = await fetch(`${API_BASE}/api/turns/stats/period?period=${period}&limit=${limit}`);
+                const periodData = await periodRes.json();
+                const periodStats = periodData.stats?.period_stats || [];
+                
+                if (periodStats.length === 0) {
+                    chartContainer.innerHTML = '<div style="color: #666; text-align: center; width: 100%; font-size: 12px;">暂无数据</div>';
+                } else {
+                    // Find max value for scaling
+                    const maxTurns = Math.max(...periodStats.map(s => s.turns), 1);
+                    
+                    chartContainer.innerHTML = periodStats.map(stat => {
+                        const height = Math.max(5, (stat.turns / maxTurns) * 100);
+                        const successRate = stat.turns > 0 ? stat.successful / stat.turns : 0;
+                        const color = successRate > 0.8 ? '#00ff88' : successRate > 0.5 ? '#ffb74d' : '#ff4757';
+                        const tooltip = `${stat.period}: ${stat.turns}次 (${stat.successful}成功, ${stat.tools}工具)`;
+                        return `<div style="flex: 1; min-width: 30px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;" title="${tooltip}">
+                            <div style="width: 100%; background: ${color}; border-radius: 3px 3px 0 0; height: ${height}px; min-height: 3px;" 
+                                 onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'"></div>
+                            <div style="font-size: 9px; color: #666; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40px;">${stat.period}</div>
+                        </div>`;
+                    }).join('');
+                }
+                
+                // Render tool usage list
+                const toolList = document.getElementById('toolUsageList');
+                const toolsByName = stats.tools_by_name || {};
+                const sortedTools = Object.entries(toolsByName).sort((a, b) => b[1] - a[1]).slice(0, 10);
+                
+                if (sortedTools.length === 0) {
+                    toolList.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 20px;">暂无数据</div>';
+                } else {
+                    const maxToolCount = sortedTools[0][1];
+                    toolList.innerHTML = sortedTools.map(([name, count]) => {
+                        const barWidth = Math.round((count / maxToolCount) * 100);
+                        return `<div style="margin-bottom: 6px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                                <span style="color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px;" title="${name}">${name}</span>
+                                <span style="color: #888;">${count}</span>
+                            </div>
+                            <div style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                                <div style="height: 100%; width: ${barWidth}%; background: #00d9ff; border-radius: 2px;"></div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+                
+                // Render session distribution
+                const sessionDist = document.getElementById('sessionDistribution');
+                const turnsBySession = stats.turns_by_session || {};
+                const sortedSessions = Object.entries(turnsBySession).sort((a, b) => b[1] - a[1]).slice(0, 10);
+                const sessionColors = ['#00d9ff', '#00ff88', '#ffb74d', '#ba68c8', '#4dd0e1', '#ff8a65', '#9575cd', '#4db6ac', '#dce775', '#90a4ae'];
+                
+                if (sortedSessions.length === 0) {
+                    sessionDist.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 20px;">暂无数据</div>';
+                } else {
+                    const maxSessionTurns = sortedSessions[0][1];
+                    sessionDist.innerHTML = sortedSessions.map(([sessionId, count], i) => {
+                        const barWidth = Math.round((count / maxSessionTurns) * 100);
+                        const color = sessionColors[i % sessionColors.length];
+                        return `<div style="margin-bottom: 6px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                                <span style="color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px;" title="${sessionId}">${sessionId.length > 12 ? sessionId.slice(0, 12) + '...' : sessionId}</span>
+                                <span style="color: #888;">${count}</span>
+                            </div>
+                            <div style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                                <div style="height: 100%; width: ${barWidth}%; background: ${color}; border-radius: 2px;"></div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch (e) {
+                console.error('Failed to load turn stats:', e);
+                document.getElementById('statTotalTurns').textContent = '!';
+                document.getElementById('turnStatsChart').innerHTML = '<div style="color: #ff4757; text-align: center; width: 100%; font-size: 12px;">加载失败</div>';
+            }
         }
         
         // Turn History Management
