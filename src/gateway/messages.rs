@@ -4,6 +4,7 @@ use crate::agent::tools::ToolExecutor;
 use crate::agent::suggestion::SuggestionEngine;
 use crate::agent::session_notes::SessionNotesManager;
 use crate::agent::SuggestionManager;
+use crate::agent::MemoryManager;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -70,6 +71,8 @@ pub struct HandlerContext {
     pub session_notes: Arc<SessionNotesManager>,
     /// Suggestion manager for tracking active suggestions and feedback
     pub suggestion_manager: Arc<SuggestionManager>,
+    /// Long-term memory manager for storing extracted facts
+    pub memory_manager: Arc<MemoryManager>,
 }
 
 impl HandlerContext {
@@ -88,6 +91,7 @@ impl HandlerContext {
         preferences: Arc<crate::preferences::PreferencesManager>,
         session_notes: Arc<SessionNotesManager>,
         suggestion_manager: Arc<SuggestionManager>,
+        memory_manager: Arc<MemoryManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -103,6 +107,7 @@ impl HandlerContext {
             preferences,
             session_notes,
             suggestion_manager,
+            memory_manager,
         }
     }
 

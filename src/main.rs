@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -187,6 +187,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let suggestion_manager = Arc::new(crate::agent::SuggestionManager::new());
     info!("Suggestion manager initialized");
 
+    // Create memory manager for long-term fact storage
+    let memory_manager = Arc::new(MemoryManager::new());
+    info!("Memory manager initialized");
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -217,6 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         preferences: preferences_manager.clone(),
         session_notes: session_notes_manager.clone(),
         suggestion_manager: suggestion_manager.clone(),
+        memory_manager: memory_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -238,6 +243,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         preferences_manager.clone(), // User preferences manager
         session_notes_manager.clone(), // Session notes manager
         suggestion_manager.clone(), // Suggestion manager for interactive suggestions
+        memory_manager.clone(), // Memory manager for long-term fact storage
     );
     
     let ws_handle = tokio::spawn(async move {

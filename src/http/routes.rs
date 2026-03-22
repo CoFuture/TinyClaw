@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -47,6 +47,7 @@ pub struct HttpState {
     pub preferences: Arc<PreferencesManager>,
     pub session_notes: Arc<SessionNotesManager>,
     pub suggestion_manager: Arc<SuggestionManager>,
+    pub memory_manager: Arc<MemoryManager>,
 }
 
 /// Health check response

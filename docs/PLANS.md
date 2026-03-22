@@ -53,6 +53,24 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v7.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 长期记忆系统 (Agent Long-Term Memory)** - 持久化存储从对话中提取的重要信息
+  - 新增 `agent/memory.rs`：`MemoryFact`、`FactCategory`、`MemoryManager` 结构
+  - FactCategory 支持：UserPreference、Decision、Technical、ProjectContext、ActionItem、General
+  - MemoryManager：JSON 文件持久化、关键词搜索、会话级检索、上下文提示生成
+  - 自动提取关键词用于检索，过期清理（30天 TTL）
+  - 已集成到 HandlerContext 和 HttpState
+  - 11 个新测试
+- 修复 clippy 警告 (suggestion_manager.rs map_clone 和 dead_code)
+- cargo clippy 0 警告（仅未使用代码警告）
+- cargo test 273 tests
+
+**下一步**: HTTP API 端点集成、事实自动提取
+
+---
+
 ### v3.0.0 (已完成 ✅)
 
 **完成事项**:
@@ -361,6 +379,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - [x] **后台任务队列** ✅ v5.9.0
 - [x] **定时任务系统** ✅ v6.0.0
 - [x] **Agent 主动建议** ✅ v6.2.0
+- [x] **Agent 长期记忆系统** ✅ v7.0.0
 - [x] 上下文管理机制 ✅ v3.7.0
 - [x] Skill 机制 ✅ v3.0.0
 - [x] 断路器保护 ✅ v5.6.0
@@ -567,31 +586,27 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v6.7.0)
+## 当前迭代规划 (v7.0.0)
 
 ### 本轮目标
-**交互式建议系统 (Interactive Suggestions System)** - 让建议变得可操作
+**Agent 长期记忆系统 (Agent Long-Term Memory)** - 让 Agent 记住重要信息
 
 **计划完成**:
-- [x] **SuggestionManager 核心** - 管理会话中的主动建议和反馈追踪
-  - 新增 `agent/suggestion_manager.rs`：`TrackedSuggestion`、`SuggestionFeedback`、`FeedbackStats`、`SuggestionManager` 结构
-  - 支持建议持久化到 JSON 文件
-  - 追踪用户接受/忽略的建议，学习模式避免重复显示
-  - 反馈统计：按类型记录接受/忽略次数
-  - 20 个单元测试
-- [x] **Gateway JSON-RPC 集成**
-  - 新增方法：`session.suggestions.list`、`session.suggestions.accept`、`session.suggestions.dismiss`
-  - 新增事件：`suggestion.accepted`、`suggestion.dismissed`
-- [x] **HTTP REST API**
-  - `GET /api/sessions/:session_id/suggestions` - 列出建议
-  - `POST /api/sessions/:session_id/suggestions/:suggestion_id/accept` - 接受建议
-  - `POST /api/sessions/:session_id/suggestions/:suggestion_id/dismiss` - 忽略建议
-- [x] **SuggestionEngine 增强**
-  - 集成反馈过滤：自动过滤已忽略的建议类型
-  - 避免显示类似的被忽略建议
+- [x] **Memory 模块核心** - 持久化存储从对话中提取的重要信息
+  - 新增 `agent/memory.rs`：`MemoryFact`、`FactCategory`、`MemoryManager` 结构
+  - 支持 6 种事实类别：UserPreference、Decision、Technical、ProjectContext、ActionItem、General
+  - 关键词自动提取和检索，过期清理（30天 TTL）
+  - 会话级检索和上下文提示生成
+- [x] **HandlerContext 和 HttpState 集成**
+  - MemoryManager 已添加到 Gateway 和 HTTP 状态
+- [x] **测试覆盖**
+  - 11 个新测试，覆盖核心功能
 - [x] 代码质量
-  - cargo clippy 0 警告（仅警告）
-  - cargo test 262 tests (新增 20 个测试)
+  - 修复 clippy 警告 (suggestion_manager.rs)
+  - cargo clippy 0 警告（仅未使用代码警告）
+  - cargo test 273 tests
+
+**下一步**: HTTP API 端点、事实自动提取集成
 
 ---
 

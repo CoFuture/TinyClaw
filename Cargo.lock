@@ -2062,7 +2062,7 @@ dependencies = [
 
 [[package]]
 name = "tiny_claw"
-version = "6.3.0"
+version = "6.7.0"
 dependencies = [
  "anyhow",
  "async-stream",

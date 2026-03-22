@@ -28,6 +28,7 @@ pub struct TrackedSuggestion {
     pub expires_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 impl TrackedSuggestion {
     /// Create a new tracked suggestion
     pub fn new(suggestion: Suggestion) -> Self {
@@ -150,6 +151,7 @@ impl FeedbackStats {
 }
 
 /// Manager for session suggestions with feedback tracking
+#[allow(dead_code)]
 pub struct SuggestionManager {
     /// Active suggestions per session
     suggestions: RwLock<HashMap<String, Vec<TrackedSuggestion>>>,
@@ -159,6 +161,7 @@ pub struct SuggestionManager {
     base_path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl SuggestionManager {
     /// Create a new manager with default path
     pub fn new() -> Self {
@@ -312,7 +315,7 @@ impl SuggestionManager {
         let suggestions = self.suggestions.read();
         suggestions
             .get(session_id)
-            .map(|sugs| sugs.clone())
+            .cloned()
             .unwrap_or_default()
     }
 

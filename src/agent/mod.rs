@@ -4,6 +4,7 @@ pub mod client;
 pub mod context;
 pub mod context_manager;
 pub mod error_recovery;
+pub mod memory;
 pub mod retry;
 pub mod runtime;
 pub mod scheduled_task;
@@ -20,6 +21,8 @@ pub mod tools;
 pub mod turn_log;
 
 pub use client::Agent;
+#[allow(unused_imports)]
+pub use memory::{FactCategory, MemoryFact, MemoryFactSummary, MemoryManager};
 pub use scheduled_task::ScheduledTaskSummary;
 #[allow(unused_imports)]
 pub use scheduled_task::ScheduleType;
