@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -48,6 +48,7 @@ pub struct HttpState {
     pub session_notes: Arc<SessionNotesManager>,
     pub suggestion_manager: Arc<SuggestionManager>,
     pub memory_manager: Arc<MemoryManager>,
+    pub turn_history: Arc<TurnHistoryManager>,
 }
 
 /// Health check response
@@ -826,6 +827,11 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/memory/category/{category}", get(memory_by_category))
         .route("/api/memory/category/{category}", axum::routing::delete(memory_clear_category))
         .route("/api/memory/session/{session_id}", get(memory_for_session))
+        // Turn history API - agent turn tracking and analysis
+        .route("/api/sessions/{session_id}/turns", get(turns_list))
+        .route("/api/sessions/{session_id}/turns/{turn_id}", get(turns_get))
+        .route("/api/turns/recent", get(turns_recent))
+        .route("/api/turns/stats", get(turns_stats))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1652,6 +1658,61 @@ async fn memory_stats(
             "factsDecayed": decay_stats.facts_decayed,
             "lastDecayAt": decay_stats.last_decay_at,
         },
+    }))
+}
+
+// ============================================================
+// Turn History API Endpoints
+// ============================================================
+
+/// List turns for a session
+async fn turns_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let turns = state.turn_history.get_turns(&session_id);
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "turns": turns,
+        "count": turns.len(),
+    }))
+}
+
+/// Get a specific turn
+async fn turns_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, turn_id)): axum::extract::Path<(String, String)>,
+) -> Json<serde_json::Value> {
+    match state.turn_history.get_turn(&session_id, &turn_id) {
+        Some(turn) => Json(serde_json::json!({
+            "success": true,
+            "turn": turn,
+        })),
+        None => Json(serde_json::json!({
+            "success": false,
+            "error": "Turn not found",
+        })),
+    }
+}
+
+/// Get recent turns across all sessions
+async fn turns_recent(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let turns = state.turn_history.get_recent_turns(20);
+    Json(serde_json::json!({
+        "turns": turns,
+        "count": turns.len(),
+    }))
+}
+
+/// Get turn statistics
+async fn turns_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.turn_history.get_stats();
+    Json(serde_json::json!({
+        "stats": stats,
     }))
 }
 

@@ -1320,6 +1320,20 @@
             </div>
         </div>
         
+        <!-- Turn History Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📊 Agent 执行历史 <span class="tool-count-badge" id="turnCount">-</span></h2>
+            <div style="margin-bottom: 15px;">
+                <select id="turnHistorySession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-right: 10px;" onchange="loadTurnHistory()">
+                    <option value="">全部会话</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadTurnHistory()">🔄 刷新</button>
+            </div>
+            <div class="turn-history-panel" id="turnHistoryPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+        
         <!-- Config Editor -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⚡ 配置编辑器</h2>
@@ -1546,6 +1560,13 @@
                     renderScheduledTasks(scheduledData.schedules || []);
                 } catch (e) {
                     // Scheduled API might not be available
+                }
+                
+                // Fetch turn history
+                try {
+                    loadTurnHistory();
+                } catch (e) {
+                    // Turn history API might not be available
                 }
                 
                 document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
@@ -1931,6 +1952,69 @@
                     </div>
                 `;
             }).join('');
+        }
+        
+        // Turn History Management
+        
+        async function loadTurnHistory() {
+            const panel = document.getElementById('turnHistoryPanel');
+            const countBadge = document.getElementById('turnCount');
+            const sessionSelect = document.getElementById('turnHistorySession');
+            const sessionId = sessionSelect.value;
+            
+            try {
+                let url = sessionId 
+                    ? API_BASE + '/api/sessions/' + encodeURIComponent(sessionId) + '/turns'
+                    : API_BASE + '/api/turns/recent';
+                
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('加载失败');
+                
+                const data = await resp.json();
+                const turns = sessionId ? (data.turns || []) : (data.turns || []);
+                countBadge.textContent = turns.length;
+                
+                if (!turns || turns.length === 0) {
+                    panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无执行记录</div>';
+                    return;
+                }
+                
+                panel.innerHTML = turns.map(turn => {
+                    const time = new Date(turn.created_at).toLocaleString('zh-CN');
+                    const successClass = turn.success ? 'status-ok' : 'status-error';
+                    const toolCount = turn.tool_count || 0;
+                    const duration = turn.duration_ms ? (turn.duration_ms < 1000 
+                        ? turn.duration_ms + 'ms' 
+                        : (turn.duration_ms / 1000).toFixed(1) + 's')
+                        : '-';
+                    const sessionLabel = turn.session_id ? 
+                        (turn.session_id === 'main' ? '主会话' : turn.session_id.substring(0, 8)) 
+                        : '-';
+                    
+                    return `
+                        <div class="turn-history-item" style="border-left: 3px solid ${turn.success ? '#00ff88' : '#ff4757'}; padding: 10px 15px; margin-bottom: 8px; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <span style="color: #888; font-size: 12px;">🕐 ${time}</span>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <span style="color: #666; font-size: 12px;">📱 ${sessionLabel}</span>
+                                    <span class="${successClass}" style="font-size: 12px;">${turn.success ? '✓ 成功' : '✗ 失败'}</span>
+                                </div>
+                            </div>
+                            <div style="color: #ddd; font-size: 13px; margin-bottom: 5px;">
+                                <span style="color: #00d9ff;">用户:</span> ${escapeHtml(turn.message_preview || '-')}
+                            </div>
+                            <div style="display: flex; gap: 15px; font-size: 12px; color: #888;">
+                                <span>🔧 工具: ${toolCount}个</span>
+                                <span>⏱️ 耗时: ${duration}</span>
+                                ${turn.successful_tools !== undefined ? `<span>✓ 成功: ${turn.successful_tools}/${toolCount}</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                panel.innerHTML = '<div style="color: #ff4757; padding: 20px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
+                console.error('Failed to load turn history:', e);
+            }
         }
         
         // Session Notes Management

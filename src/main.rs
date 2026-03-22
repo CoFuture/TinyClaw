@@ -116,7 +116,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event_emitter = Arc::new(EventEmitter::new());
     let agent = Arc::new(agent::Agent::new(Arc::new(RwLock::new(
         config.read().agent.clone(),
-    ))));
+    ))).with_event_emitter(event_emitter.clone()));
+    
+    // Create turn history manager with persistence
+    let turn_history_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("turn_history");
+    let turn_history = match agent::TurnHistoryManager::new_with_persistence(&turn_history_dir) {
+        Ok(mgr) => {
+            info!("Turn history loaded from: {:?}", turn_history_dir);
+            Arc::new(mgr)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load turn history: {}, using in-memory", e);
+            Arc::new(agent::TurnHistoryManager::new())
+        }
+    };
+    info!("Turn history manager initialized");
     
     // Create metrics collector and rate limiter
     let metrics = Arc::new(MetricsCollector::new());
@@ -222,6 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_notes: session_notes_manager.clone(),
         suggestion_manager: suggestion_manager.clone(),
         memory_manager: memory_manager.clone(),
+        turn_history: turn_history.clone(),
     });
 
     // Spawn WebSocket server
@@ -244,6 +262,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_notes_manager.clone(), // Session notes manager
         suggestion_manager.clone(), // Suggestion manager for interactive suggestions
         memory_manager.clone(), // Memory manager for long-term fact storage
+        turn_history.clone(), // Turn history manager
     );
     
     let ws_handle = tokio::spawn(async move {

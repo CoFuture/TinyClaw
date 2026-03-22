@@ -5,6 +5,7 @@ use crate::agent::suggestion::SuggestionEngine;
 use crate::agent::session_notes::SessionNotesManager;
 use crate::agent::SuggestionManager;
 use crate::agent::MemoryManager;
+use crate::agent::TurnHistoryManager;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -73,6 +74,8 @@ pub struct HandlerContext {
     pub suggestion_manager: Arc<SuggestionManager>,
     /// Long-term memory manager for storing extracted facts
     pub memory_manager: Arc<MemoryManager>,
+    /// Turn history manager for tracking agent turns
+    pub turn_history: Arc<TurnHistoryManager>,
 }
 
 impl HandlerContext {
@@ -92,6 +95,7 @@ impl HandlerContext {
         session_notes: Arc<SessionNotesManager>,
         suggestion_manager: Arc<SuggestionManager>,
         memory_manager: Arc<MemoryManager>,
+        turn_history: Arc<TurnHistoryManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -108,6 +112,7 @@ impl HandlerContext {
             session_notes,
             suggestion_manager,
             memory_manager,
+            turn_history,
         }
     }
 
@@ -657,6 +662,10 @@ async fn handle_agent_turn(
     // Try to run memory decay (non-blocking, only runs if enough time has passed)
     let _ = ctx.memory_manager.try_decay();
 
+    // Track turn start time and message for history recording
+    let turn_start_time = std::time::Instant::now();
+    let turn_user_message = message.to_string();
+
     // Emit turn started event
     ctx.event_emitter.emit(Event::TurnStarted {
         session_id: session_key.to_string(),
@@ -694,6 +703,11 @@ async fn handle_agent_turn(
         },
     ).await;
 
+    // Calculate turn duration
+    let turn_duration = turn_start_time.elapsed().as_millis() as u64;
+    let turn_success = response.is_ok();
+    let response_text = response.as_ref().ok().cloned().unwrap_or_default();
+
     // Handle cancellation specially
     if response.is_err() {
         let err = response.as_ref().err().unwrap();
@@ -725,6 +739,17 @@ async fn handle_agent_turn(
         session_id: session_key.to_string(),
         response: response.clone(),
     });
+
+    // Record turn in history
+    let turn_record = crate::agent::TurnHistoryManager::record_turn(
+        &ctx.turn_history,
+        session_key,
+        &turn_user_message,
+        &response_text,
+        turn_duration,
+        turn_success,
+    );
+    ctx.turn_history.record(turn_record);
 
     // Auto-extract facts from conversation into long-term memory
     // Combine user message and assistant response for analysis

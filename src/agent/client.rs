@@ -4,12 +4,13 @@ use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySetting
 use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
+use crate::gateway::events::EventEmitter;
 use futures_util::StreamExt;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tokio::time::timeout;
 use tracing::{debug, error, info};
@@ -135,6 +136,10 @@ pub struct Agent {
     turn_cancellations: RwLock<HashMap<String, broadcast::Sender<()>>>,
     /// Circuit breaker for AI API calls (prevents cascading failures)
     circuit_breaker: Arc<CircuitBreaker>,
+    /// Event emitter for tool and turn events (optional, for gateway integration)
+    event_emitter: Option<Arc<EventEmitter>>,
+    /// Current session key for tool event emission (set during send_message_streaming)
+    current_session_key: RwLock<Option<String>>,
 }
 
 /// History message for passing conversation context to API methods
@@ -201,6 +206,8 @@ impl Agent {
             tool_executor: Arc::new(ToolExecutor::new()),
             turn_cancellations: RwLock::new(HashMap::new()),
             circuit_breaker: Arc::new(CircuitBreaker::new()),
+            event_emitter: None,
+            current_session_key: RwLock::new(None),
         }
     }
 
@@ -214,6 +221,48 @@ impl Agent {
             tool_executor: Arc::new(ToolExecutor::new()),
             turn_cancellations: RwLock::new(HashMap::new()),
             circuit_breaker: Arc::new(CircuitBreaker::new()),
+            event_emitter: None,
+            current_session_key: RwLock::new(None),
+        }
+    }
+
+    /// Set the event emitter for tool and turn events
+    pub fn with_event_emitter(mut self, emitter: Arc<EventEmitter>) -> Self {
+        self.event_emitter = Some(emitter);
+        self
+    }
+
+    /// Set the current session key for tool event tracking
+    fn set_session_key(&self, session_key: Option<&str>) {
+        *self.current_session_key.write() = session_key.map(String::from);
+    }
+
+    /// Get the current session key
+    fn get_session_key(&self) -> Option<String> {
+        self.current_session_key.read().clone()
+    }
+
+    /// Emit a tool use event if event emitter is configured
+    fn emit_tool_use(&self, tool: &str, input: serde_json::Value) {
+        if let Some(emitter) = &self.event_emitter {
+            let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
+            emitter.emit(crate::gateway::events::Event::AssistantToolUse {
+                session_id,
+                tool: tool.to_string(),
+                input,
+            });
+        }
+    }
+
+    /// Emit a tool result event if event emitter is configured
+    fn emit_tool_result(&self, tool_call_id: &str, output: &str, _success: bool) {
+        if let Some(emitter) = &self.event_emitter {
+            let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
+            emitter.emit(crate::gateway::events::Event::ToolResult {
+                session_id,
+                tool_call_id: tool_call_id.to_string(),
+                output: output.to_string(),
+            });
         }
     }
 
@@ -384,9 +433,30 @@ pub async fn send_message_with_history(
                         for tool_block in &tool_use_blocks {
                             let tool_name = tool_block["name"].as_str().unwrap_or("");
                             let tool_input = tool_block["input"].clone();
+                            
+                            // Emit tool use event
+                            self.emit_tool_use(tool_name, tool_input.clone());
+                            
+                            // Execute tool
+                            let tool_start = Instant::now();
                             let result = self.tool_executor.execute(tool_name, tool_input).await;
+                            let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
+                            
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);
+                            
+                            // Emit tool result event
+                            let tool_call_id = tool_block["id"].as_str().unwrap_or("");
+                            self.emit_tool_result(tool_call_id, &content, result.success);
+                            
+                            // Record tool timing
+                            debug!(
+                                tool = %tool_name,
+                                duration_ms = tool_duration_ms,
+                                success = result.success,
+                                "Tool execution completed"
+                            );
+                            
                             messages.push(serde_json::json!({
                                 "role": "tool",
                                 "content": content,
@@ -424,9 +494,30 @@ pub async fn send_message_with_history(
                             let args: serde_json::Value = serde_json::from_str(
                                 tool_call["function"]["arguments"].as_str().unwrap_or("{}")
                             ).unwrap_or(serde_json::json!({}));
+                            
+                            // Emit tool use event
+                            self.emit_tool_use(tool_name, args.clone());
+                            
+                            // Execute tool
+                            let tool_start = Instant::now();
                             let result = self.tool_executor.execute(tool_name, args).await;
+                            let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
+                            
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);
+                            
+                            // Emit tool result event
+                            let tool_call_id = tool_call["id"].as_str().unwrap_or("");
+                            self.emit_tool_result(tool_call_id, &content, result.success);
+                            
+                            // Record tool timing
+                            debug!(
+                                tool = %tool_name,
+                                duration_ms = tool_duration_ms,
+                                success = result.success,
+                                "Tool execution completed"
+                            );
+                            
                             messages.push(serde_json::json!({
                                 "role": "tool",
                                 "content": content,
@@ -966,10 +1057,14 @@ pub async fn send_message_with_history(
         skill_prompt: Option<&str>,
         on_partial: impl FnMut(String) + Send + 'static,
     ) -> Result<String> {
+        // Set session key for tool event tracking
+        self.set_session_key(Some(session_key));
+
         // Start cancellation tracking for this turn
         let cancel_rx = match self.start_turn_cancellation(session_key) {
             Some(rx) => rx,
             None => {
+                self.set_session_key(None);
                 return Err(Error::Agent(format!(
                     "A turn is already in progress for session '{}'",
                     session_key
@@ -1007,6 +1102,9 @@ pub async fn send_message_with_history(
             self.cleanup_turn_cancellation(session_key);
             self.send_message_with_history(session_key, message, history, skill_prompt).await
         };
+
+        // Clear session key after turn completes
+        self.set_session_key(None);
 
         // Clean up cancellation channel after turn ends
         self.cleanup_turn_cancellation(session_key);

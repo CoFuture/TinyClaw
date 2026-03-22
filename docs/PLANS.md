@@ -53,6 +53,36 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v8.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 执行历史系统 (Agent Turn History System)** - 追踪和持久化 Agent 执行历史
+  - 新增 `agent/turn_history.rs`：`TurnRecord`、`TurnSummary`、`TurnStats`、`ToolExecution` 结构
+  - `TurnHistoryManager`：内存存储 + JSON 文件持久化（存储在 `~/.config/tiny_claw/turn_history/`）
+  - 每个会话保留最近 100 条执行记录，支持按会话查询和全局统计
+  - **工具事件追踪**：修改 `client.rs` 在工具执行时发出 `AssistantToolUse` 和 `ToolResult` 事件
+  - `Agent` 结构增加 `event_emitter` 和 `current_session_key` 字段支持工具追踪
+  - **Gateway 集成**：在 `handle_agent_turn` 中记录每轮执行的开始时间、用户消息、响应和耗时
+  - **HTTP API 端点**：
+    - `GET /api/sessions/{session_id}/turns` - 获取会话的执行历史
+    - `GET /api/sessions/{session_id}/turns/{turn_id}` - 获取具体执行详情
+    - `GET /api/turns/recent` - 获取所有会话最近执行
+    - `GET /api/turns/stats` - 获取聚合统计数据
+  - **WebUI 面板**：admin.html 新增"Agent 执行历史"面板
+    - 显示执行时间、会话、成功率、工具数、耗时
+    - 支持按会话过滤
+
+**下一步**: 工具使用详细视图、统计图表、导出功能
+
+---
+
+### v7.3.0 (已完成 ✅)
+
+**完成事项**:
+- **Memory Decay System** - 实现记忆衰减机制
+
+---
+
 ### v7.0.0 (已完成 ✅)
 
 **完成事项**:

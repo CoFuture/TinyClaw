@@ -20,6 +20,7 @@ pub mod task;
 pub mod task_manager;
 pub mod tools;
 pub mod tool_result_formatter;
+pub mod turn_history;
 pub mod turn_log;
 
 pub use client::Agent;
@@ -41,5 +42,7 @@ pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, Suggestion
 pub use suggestion_manager::{SuggestionManager, SuggestionFeedback, TrackedSuggestion, TrackedSuggestionSummary};
 pub use task::{TaskState, TaskSummary};
 pub use task_manager::TaskManager;
+#[allow(unused_imports)]
+pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, ToolExecution};
 #[allow(unused_imports)]
 pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};
