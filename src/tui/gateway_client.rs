@@ -41,6 +41,10 @@ pub enum TuiGatewayEvent {
     /// Tool result received
     #[allow(dead_code)]
     ToolResult { tool: String, output: String },
+    /// Turn started (agent beginning to process)
+    TurnStarted { session_id: String, message: String },
+    /// Agent is thinking (turn in progress)
+    TurnThinking { session_id: String },
     /// Final response received (turn ended)
     TurnEnded(String),
     /// Connection error
@@ -293,6 +297,19 @@ impl TuiGatewayClient {
             Response::Notification(resp) => {
                 // Handle notification events
                 match resp.method.as_str() {
+                    "turn.started" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let message = params.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::TurnStarted { session_id, message });
+                        }
+                    }
+                    "turn.thinking" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::TurnThinking { session_id });
+                        }
+                    }
                     "assistant.text" => {
                         if let Some(params) = resp.params {
                             if let Some(text) = params.get("text") {

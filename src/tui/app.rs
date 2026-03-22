@@ -249,6 +249,39 @@ impl TuiApp {
                     }
                 }
             }
+            TuiGatewayEvent::TurnStarted { session_id, message } => {
+                info!("Turn started: {} - {}", session_id, message);
+                self.state.set_thinking();
+                self.state.set_loading(true);
+                // Add user message to history if not already added locally
+                if let Some(current_sid) = &self.state.current_session_id {
+                    if current_sid == &session_id {
+                        if let Some(history) = self.state.session_histories.get_mut(current_sid) {
+                            // Check if message already exists (may have been added locally on send)
+                            let msg_exists = history.messages.iter().any(|m| {
+                                matches!(m.role, crate::types::Role::User) && m.content == message
+                            });
+                            if !msg_exists {
+                                use crate::types::{Message, Role};
+                                history.add_message(Message {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    role: Role::User,
+                                    content: message.clone(),
+                                    timestamp: chrono::Utc::now(),
+                                    tool_call_id: None,
+                                    tool_name: None,
+                                });
+                                self.save_current_history();
+                            }
+                        }
+                    }
+                }
+            }
+            TuiGatewayEvent::TurnThinking { session_id } => {
+                debug!("Turn thinking: {}", session_id);
+                self.state.set_thinking();
+                self.state.set_loading(true);
+            }
             TuiGatewayEvent::ToolStart { tool, .. } => {
                 info!("Tool started: {}", tool);
                 self.state.set_using_tool(&tool);

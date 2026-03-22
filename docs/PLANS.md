@@ -136,26 +136,29 @@
 
 ---
 
-## 当前迭代规划 (v4.7.0)
+## 当前迭代规划 (v4.9.0)
 
 ### 本轮目标
-**Agent 流式响应 + 交互体验优化**
+**Agent 执行状态可视化 + 交互体验增强**
 
 **计划完成**:
-- [x] Agent 流式响应支持 (Ollama)
-  - 新增 `send_ollama_streaming` 方法：通过 SSE 逐块接收 AI 响应
-  - 新增 `send_message_streaming` 方法：支持流式回调，Ollama 自动使用流式
-  - 新增 `AssistantPartial` 事件：流式文本片段实时推送
-  - Gateway `handle_agent_turn` 集成流式路径，实时发射 partial 事件
-- [x] WebUI 实时流式显示
-  - SSE 事件流新增 `assistant.partial` 事件类型
-  - 实时文本缓冲区 + 流式消息元素动态更新
-  - 流式结束动画：`▊` 闪烁指示器，完成后自动消失
-  - CSS 动画增强：streaming 消息透明度 + blink 动画
-- [x] SSE 事件过滤增强
-  - `AssistantPartial` 加入 session filter 逻辑
-  - `AssistantPartial` 加入 event name match
-- [x] 依赖更新：reqwest 添加 `stream` feature
+- [x] TUI Gateway 事件增强
+  - 新增 `TuiGatewayEvent::TurnStarted` 事件：处理网关发来的 turn.started 通知
+  - 新增 `TuiGatewayEvent::TurnThinking` 事件：处理网关发来的 turn.thinking 通知
+  - Gateway client 支持处理 `turn.started` 和 `turn.thinking` 通知
+- [x] TUI 状态显示增强
+  - `handle_gateway_event` 新增 TurnStarted 和 TurnThinking 处理器
+  - 用户发送消息时自动设置 thinking 状态，网关事件触发时更新状态
+  - 帮助栏更新：显示 "🔧 Tool active" 状态提示
+- [x] WebUI 聊天面板状态指示器
+  - SSE 事件处理新增 `turn.thinking` 事件：显示 "🤔 正在思考..." 动画指示器
+  - SSE 事件处理新增 `assistant.tool_use` 事件：显示 "🔧 正在使用: tool_name" 指示器
+  - 新增 `showThinkingIndicator()`、`showToolUseIndicator()`、`hideActivityIndicator()` 函数
+  - 实时清除指示器：当收到 partial/text/ended 事件时自动隐藏
+- [x] CSS 样式增强
+  - 新增 `.thinking-indicator` 和 `.tool-indicator` 样式
+  - 新增 `.thinking-dots` 和 `.dot-anim` 动画
+  - 新增 `.tool-use-text` 样式（紫色显示工具名）
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
@@ -286,6 +289,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v4.9.0 | Agent 执行状态可视化 - TUI 新增 TurnStarted/TurnThinking 事件处理、WebUI SSE 新增 thinking/tool_use 指示器、CSS 动画增强；cargo clippy 0 警告；cargo test 176 tests |
 | v4.8.0 | Session Rename 支持 - session.rename 网关方法、PATCH /api/sessions/{id} HTTP 端点、SessionManager::rename 方法；TUI :ren/:rename 命令进入重命名模式、rename_mode 状态管理、Enter 确认/Esc 取消；帮助栏更新显示新命令；/api/sessions 返回 messageCount；cargo clippy 0 警告；cargo test 176 tests |
 | v4.7.0 | Agent 流式响应支持 (Ollama) - send_ollama_streaming/send_message_streaming 方法、AssistantPartial 事件；WebUI 实时流式显示 - SSE assistant.partial、流式缓冲区、▊ 闪烁指示器；SSE 事件过滤增强；cargo clippy 0 警告；cargo test 176 tests |
 | v4.6.0 | TUI 命令帮助系统增强 - 结构化命令元数据(TuiCommandMeta)：名称、别名、描述、分类；命令分类：Session/Connection/Navigation；Tab补全支持所有命令别名；帮助面板重构：按分类展示命令、颜色高亮；cargo clippy 0 警告；cargo test 176 tests |
@@ -315,4 +319,4 @@
 
 ---
 
-*更新时间: 2026-03-22 07:32*
+*更新时间: 2026-03-22 09:02*

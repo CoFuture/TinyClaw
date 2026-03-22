@@ -284,7 +284,7 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 /// Draw the help bar at the bottom
 pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect) {
-    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :c Reconnect | 🤔 Thinking | 🔧 Tool ";
+    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :rc Reconnect | 🤔 Thinking | 🔧 Tool active ";
     
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)

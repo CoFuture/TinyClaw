@@ -797,6 +797,31 @@
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0.3; }
         }
+        /* Activity indicators (thinking, tool use) */
+        .message.thinking-indicator {
+            opacity: 0.85;
+            border-left: 3px solid #ffc107;
+        }
+        .message.tool-indicator {
+            opacity: 0.85;
+            border-left: 3px solid #9c27b0;
+        }
+        .thinking-dots {
+            color: #ffc107;
+            font-size: 14px;
+        }
+        .thinking-dots .dot-anim {
+            animation: dotPulse 1.2s infinite;
+        }
+        @keyframes dotPulse {
+            0%, 20% { content: '.'; opacity: 0.3; }
+            40% { content: '..'; opacity: 0.6; }
+            60%, 100% { content: '...'; opacity: 1; }
+        }
+        .tool-use-text {
+            color: #9c27b0;
+            font-size: 14px;
+        }
         .msg-role {
             font-size: 11px;
             opacity: 0.7;
@@ -2543,8 +2568,17 @@
                 return; // Ignore events for other sessions
             }
             
-            if (eventType === 'assistant.partial' && data.text) {
+            if (eventType === 'turn.thinking') {
+                // Show thinking indicator
+                showThinkingIndicator();
+            } else if (eventType === 'assistant.tool_use' && data.tool) {
+                // Show tool use indicator
+                showToolUseIndicator(data.tool);
+            } else if (eventType === 'assistant.partial' && data.text) {
                 // Real-time streaming partial text - update UI incrementally
+                // First, clear any thinking/tool indicators
+                hideActivityIndicator();
+                
                 streamingTextBuffer += data.text;
                 if (streamingMsgElement) {
                     // Update existing streaming message content
@@ -2555,6 +2589,7 @@
                 }
             } else if (eventType === 'assistant.text' && data.text) {
                 // Final complete text - finalize the streaming message or add new one
+                hideActivityIndicator();
                 if (streamingMsgElement) {
                     // Finalize the streaming message with complete content
                     finalizeStreamingMessage(streamingMsgElement, data.text, 'assistant');
@@ -2569,13 +2604,63 @@
                 // User message from SSE - add to history
                 addChatMessageToHistory(chatCurrentSession, { role: 'user', content: data.message });
             } else if (eventType === 'turn.ended') {
-                // Turn ended - finalize any streaming message
+                // Turn ended - finalize any streaming message and hide indicators
+                hideActivityIndicator();
                 if (streamingMsgElement && streamingTextBuffer) {
                     finalizeStreamingMessage(streamingMsgElement, streamingTextBuffer, 'assistant');
                 }
                 streamingMsgElement = null;
                 streamingTextBuffer = '';
             }
+        }
+        
+        /// Activity indicator element (thinking/tool use)
+        let activityIndicatorElement = null;
+        
+        /// Show a thinking indicator in the chat area
+        function showThinkingIndicator() {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            
+            // Remove existing indicator if any
+            hideActivityIndicator();
+            
+            const indicator = document.createElement('div');
+            indicator.className = 'message assistant thinking-indicator';
+            indicator.id = 'activityIndicator';
+            const time = new Date().toLocaleTimeString();
+            indicator.innerHTML = '<div class="msg-role">AI <span class="msg-time">' + time + '</span></div><div class="msg-content"><span class="thinking-dots">🤔 正在思考<span class="dot-anim">...</span></span></div>';
+            
+            container.appendChild(indicator);
+            activityIndicatorElement = indicator;
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        /// Show a tool use indicator in the chat area
+        function showToolUseIndicator(toolName) {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            
+            // Remove existing indicator if any
+            hideActivityIndicator();
+            
+            const indicator = document.createElement('div');
+            indicator.className = 'message assistant tool-indicator';
+            indicator.id = 'activityIndicator';
+            const time = new Date().toLocaleTimeString();
+            indicator.innerHTML = '<div class="msg-role">AI <span class="msg-time">' + time + '</span></div><div class="msg-content"><span class="tool-use-text">🔧 正在使用: ' + escapeHtml(toolName) + '</span></div>';
+            
+            container.appendChild(indicator);
+            activityIndicatorElement = indicator;
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        /// Hide the activity indicator
+        function hideActivityIndicator() {
+            if (activityIndicatorElement && activityIndicatorElement.parentNode) {
+                activityIndicatorElement.parentNode.removeChild(activityIndicatorElement);
+            }
+            activityIndicatorElement = null;
         }
         
         /// Create a streaming message element with a typing indicator
