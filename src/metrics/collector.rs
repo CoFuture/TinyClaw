@@ -33,6 +33,8 @@ pub struct SystemMetrics {
     pub memory_usage_bytes: u64,
     /// Uptime in seconds
     pub uptime_seconds: u64,
+    /// AI provider circuit breaker state: "closed", "open", or "half_open"
+    pub circuit_breaker_state: String,
 }
 
 /// Per-endpoint metrics
@@ -135,6 +137,12 @@ impl MetricsCollector {
     pub fn set_plugins_loaded(&self, count: usize) {
         let mut system = self.system.write();
         system.plugins_loaded = count;
+    }
+
+    /// Update AI provider circuit breaker state
+    pub fn set_circuit_breaker_state(&self, state: &str) {
+        let mut system = self.system.write();
+        system.circuit_breaker_state = state.to_string();
     }
 
     /// Update memory usage

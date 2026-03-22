@@ -251,6 +251,8 @@ pub mod methods {
     pub const STATUS: &str = "status";
     /// Shutdown
     pub const SHUTDOWN: &str = "shutdown";
+    /// Agent circuit breaker state
+    pub const AGENT_CIRCUIT_BREAKER: &str = "agent.circuit_breaker";
 }
 
 /// Event types for notifications

@@ -1,6 +1,6 @@
 //! AI Model client with multi-provider support
 
-use crate::agent::retry::{with_retry, RetrySettings};
+use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySettings};
 use crate::agent::tools::{Tool, ToolExecutor};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
@@ -133,6 +133,8 @@ pub struct Agent {
     tool_executor: Arc<ToolExecutor>,
     /// Active turn cancellation channels (session_id -> sender)
     turn_cancellations: RwLock<HashMap<String, broadcast::Sender<()>>>,
+    /// Circuit breaker for AI API calls (prevents cascading failures)
+    circuit_breaker: Arc<CircuitBreaker>,
 }
 
 /// History message for passing conversation context to API methods
@@ -198,6 +200,7 @@ impl Agent {
             http_client: reqwest::Client::new(),
             tool_executor: Arc::new(ToolExecutor::new()),
             turn_cancellations: RwLock::new(HashMap::new()),
+            circuit_breaker: Arc::new(CircuitBreaker::new()),
         }
     }
 
@@ -210,6 +213,7 @@ impl Agent {
             http_client: reqwest::Client::new(),
             tool_executor: Arc::new(ToolExecutor::new()),
             turn_cancellations: RwLock::new(HashMap::new()),
+            circuit_breaker: Arc::new(CircuitBreaker::new()),
         }
     }
 
@@ -256,6 +260,40 @@ impl Agent {
     #[allow(dead_code)]
     pub fn list_tools(&self) -> Vec<Tool> {
         self.tool_executor.list_tools()
+    }
+
+    /// Get current circuit breaker state
+    pub fn circuit_breaker_state(&self) -> CircuitState {
+        self.circuit_breaker.state()
+    }
+
+    /// Execute an HTTP request with circuit breaker protection + retry logic.
+    /// Returns error if circuit is open (fast-fail).
+    async fn execute_protected<F, Fut>(&self, f: F) -> std::result::Result<reqwest::Response, Error>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<reqwest::Response, Error>>,
+    {
+        // Check circuit breaker first
+        if !self.circuit_breaker.is_allowed() {
+            return Err(Error::Network(
+                "AI provider circuit breaker is open - service unavailable".into(),
+            ));
+        }
+
+        let cb = self.circuit_breaker.clone();
+        let result = with_retry(&self.retry_config, f).await;
+
+        match result {
+            Ok(response) => {
+                cb.record_success();
+                Ok(response)
+            }
+            Err(e) => {
+                cb.record_failure();
+                Err(e)
+            }
+        }
     }
 
     /// Send a message with conversation history and get a response (with tool calling loop)
@@ -461,9 +499,9 @@ pub async fn send_message_with_history(
             "tools": anthropic_tools
         });
 
-        // Use retry wrapper for the HTTP request
+        // Use circuit breaker + retry wrapper for the HTTP request
         let http_client = self.http_client.clone();
-        let result = with_retry(&self.retry_config, || {
+        let result = self.execute_protected(|| {
             let http_client = http_client.clone();
             let api_base = api_base.clone();
             let api_key = api_key.clone();
@@ -562,9 +600,9 @@ pub async fn send_message_with_history(
         let api_version_clone = api_version.to_string();
         let api_key_clone = api_key.clone();
 
-        // Use retry wrapper for the HTTP request
+        // Use circuit breaker + retry wrapper for the HTTP request
         let http_client = self.http_client.clone();
-        let result = with_retry(&self.retry_config, || {
+        let result = self.execute_protected(|| {
             let http_client = http_client.clone();
             let api_base_clone = api_base_clone.clone();
             let api_version_clone = api_version_clone.clone();
@@ -621,11 +659,11 @@ pub async fn send_message_with_history(
             system: Some("You are TinyClaw, an AI assistant powered by GLM-5 (Zhipu AI). You should introduce yourself as TinyClaw powered by GLM-5 when asked.".to_string()),
         };
 
-        // Use retry wrapper for the HTTP request
+        // Use circuit breaker + retry wrapper for the HTTP request
         let http_client = self.http_client.clone();
         let api_base_clone = api_base.clone();
         let api_key_clone = api_key.clone();
-        let response = with_retry(&self.retry_config, || {
+        let response = self.execute_protected(|| {
             let http_client = http_client.clone();
             let api_base_clone = api_base_clone.clone();
             let api_key_clone = api_key_clone.clone();
@@ -699,9 +737,9 @@ pub async fn send_message_with_history(
         let api_version_clone = api_version.to_string();
         let api_key_clone = api_key.clone();
 
-        // Use retry wrapper for the HTTP request
+        // Use circuit breaker + retry wrapper for the HTTP request
         let http_client = self.http_client.clone();
-        let result = with_retry(&self.retry_config, || {
+        let result = self.execute_protected(|| {
             let http_client = http_client.clone();
             let api_base_clone = api_base_clone.clone();
             let api_version_clone = api_version_clone.clone();
@@ -761,9 +799,9 @@ pub async fn send_message_with_history(
 
         let base_url_clone = base_url.clone();
 
-        // Use retry wrapper for the HTTP request
+        // Use circuit breaker + retry wrapper for the HTTP request
         let http_client = self.http_client.clone();
-        let result = with_retry(&self.retry_config, || {
+        let result = self.execute_protected(|| {
             let http_client = http_client.clone();
             let base_url_clone = base_url_clone.clone();
             let request = request.clone();
@@ -816,14 +854,22 @@ pub async fn send_message_with_history(
             "stream": true
         });
 
+        // Use circuit breaker + retry for the initial HTTP request
         let client = reqwest::Client::new();
-        let resp = client
-            .post(format!("{}/api/generate", base_url))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| Error::Network(e.to_string()))?;
+        let resp = self.execute_protected(|| {
+            let client = client.clone();
+            let base_url = base_url.clone();
+            let request = request.clone();
+            async move {
+                client
+                    .post(format!("{}/api/generate", base_url))
+                    .header("Content-Type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
 
         if !resp.status().is_success() {
             let status = resp.status();

@@ -181,6 +181,10 @@ impl TuiApp {
                 if let Err(e) = client.list_sessions().await {
                     error!("Failed to request sessions list: {}", e);
                 }
+                // Request circuit breaker state
+                if let Err(e) = client.get_circuit_breaker().await {
+                    error!("Failed to request circuit breaker state: {}", e);
+                }
             }
             Ok(Err(e)) => {
                 error!("Failed to connect to gateway: {}", e);
@@ -206,10 +210,17 @@ impl TuiApp {
                 self.state.set_connected(true);
                 self.state.gateway_status = TuiGatewayStatus::Connected;
                 self.state.set_error(None);
-                // Request sessions list when connected
+                // Request sessions list and circuit breaker state when connected
                 let client = self.gateway_client.clone();
+                let client2 = client.clone();
                 tokio::spawn(async move {
                     let client = client.read().await;
+                    if let Err(e) = client.get_circuit_breaker().await {
+                        error!("Failed to request circuit breaker state: {}", e);
+                    }
+                });
+                tokio::spawn(async move {
+                    let client = client2.read().await;
                     if let Err(e) = client.list_sessions().await {
                         error!("Failed to request sessions list: {}", e);
                     }
@@ -446,6 +457,9 @@ impl TuiApp {
                         error!("Failed to refresh sessions list after rename: {}", e);
                     }
                 });
+            }
+            TuiGatewayEvent::CircuitBreakerState(state) => {
+                self.state.circuit_breaker_state = state;
             }
         }
     }
@@ -920,6 +934,16 @@ impl TuiApp {
             spans.push(Span::raw(" | "));
             spans.push(Span::styled("⚙ Thinking...", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
         }
+        
+        // Add AI circuit breaker indicator
+        let cb_state = &self.state.circuit_breaker_state;
+        let cb_indicator = match cb_state.as_str() {
+            "open" => ("● AI Unavailable", Color::Red),
+            "half_open" => ("◐ AI Recovering", Color::Yellow),
+            _ => ("● AI OK", Color::Green),
+        };
+        spans.push(Span::raw(" | "));
+        spans.push(Span::styled(cb_indicator.0, Style::default().fg(cb_indicator.1)));
         
         let paragraph = Paragraph::new(Line::from(spans))
             .alignment(Alignment::Center);

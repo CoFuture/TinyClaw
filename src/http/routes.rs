@@ -5,6 +5,7 @@ use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
 use crate::agent::{Agent, SkillRegistry, SessionSkillManager};
+use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::ratelimit::RateLimiter;
 use crate::types::{SessionHistory, Role};
@@ -510,6 +511,15 @@ pub struct EndpointMetricsResponse {
 
 /// Metrics handler
 async fn metrics_handler(State(state): State<Arc<HttpState>>) -> Json<MetricsResponse> {
+    // Update circuit breaker state from agent before returning metrics
+    let cb_state = state.agent.circuit_breaker_state();
+    let cb_state_str = match cb_state {
+        CircuitState::Closed => "closed",
+        CircuitState::Open => "open",
+        CircuitState::HalfOpen => "half_open",
+    };
+    state.metrics.set_circuit_breaker_state(cb_state_str);
+
     let system = state.metrics.get_system_metrics();
     let endpoints = state.metrics.get_endpoint_metrics();
     

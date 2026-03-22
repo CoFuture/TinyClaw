@@ -208,6 +208,8 @@ pub struct AppState {
     pub input_history_index: Option<usize>,
     /// Saved buffer when starting history navigation
     pub input_history_saved: Option<String>,
+    /// AI provider circuit breaker state: "closed", "open", or "half_open"
+    pub circuit_breaker_state: String,
 }
 
 impl Default for AppState {
@@ -231,6 +233,7 @@ impl Default for AppState {
             input_history: Vec::new(),
             input_history_index: None,
             input_history_saved: None,
+            circuit_breaker_state: "closed".to_string(),
         }
     }
 }

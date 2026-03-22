@@ -111,6 +111,7 @@ pub async fn handle_request(
         methods::TOOL_EXECUTE => handle_tool_execute(request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::STATUS => handle_status(ctx, jsonrpc_id.clone()).await,
         methods::SHUTDOWN => handle_shutdown(ctx, jsonrpc_id.clone()).await,
+        methods::AGENT_CIRCUIT_BREAKER => handle_agent_circuit_breaker(ctx, jsonrpc_id.clone()).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -696,6 +697,25 @@ async fn handle_status(
         "version": env!("CARGO_PKG_VERSION"),
         "model": agent_config.model,
         "sessions": ctx.session_manager.list().len(),
+    }))
+}
+
+/// Handle agent.circuit_breaker - get AI provider circuit breaker state
+async fn handle_agent_circuit_breaker(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+) -> Result<serde_json::Value> {
+    use crate::agent::retry::CircuitState;
+    
+    let state = ctx.agent.circuit_breaker_state();
+    let state_str = match state {
+        CircuitState::Closed => "closed",
+        CircuitState::Open => "open",
+        CircuitState::HalfOpen => "half_open",
+    };
+    
+    Ok(serde_json::json!({
+        "state": state_str,
     }))
 }
 

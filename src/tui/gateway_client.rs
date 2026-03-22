@@ -63,6 +63,8 @@ pub enum TuiGatewayEvent {
     SessionRenamed { session_id: String, label: Option<String> },
     /// Turn cancelled (agent turn was cancelled)
     TurnCancelled { session_id: String },
+    /// Circuit breaker state received
+    CircuitBreakerState(String),
 }
 
 /// Session info from gateway
@@ -288,6 +290,12 @@ impl TuiGatewayClient {
                             });
                         }
                     }
+                    // Check if this is an agent.circuit_breaker response
+                    if let Some(state) = result_obj.get("state") {
+                        if let Some(state_str) = state.as_str() {
+                            let _ = event_tx.send(TuiGatewayEvent::CircuitBreakerState(state_str.to_string()));
+                        }
+                    }
                 } else if resp.result.is_string() {
                     // Pong response
                     let _ = event_tx.send(TuiGatewayEvent::Pong);
@@ -463,6 +471,19 @@ impl TuiGatewayClient {
             params: serde_json::json!({
                 "sessionKey": session_id
             }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get circuit breaker state
+    pub async fn get_circuit_breaker(&self) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some("tui-circuit-breaker".to_string()),
+            method: methods::AGENT_CIRCUIT_BREAKER.to_string(),
+            params: serde_json::json!({}),
         });
 
         let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;

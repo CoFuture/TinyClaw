@@ -136,37 +136,46 @@
 
 ---
 
-## 当前迭代规划 (v5.3.0)
+## 当前迭代规划 (v5.6.0)
 
 ### 本轮目标
-**Session Turn Cancellation** - 取消正在进行的 Agent Turn
+**Agent 韧性增强 (Agent Resilience Enhancement)** - 集成断路器保护 AI API 调用
 
 **计划完成**:
-- [x] Agent 取消机制
-  - Agent 结构新增 `turn_cancellations` HashMap
-  - `start_turn_cancellation` - 为会话创建取消通道
-  - `cancel_turn` - 触发取消
-  - `is_turn_active` - 检查是否有活动中的 Turn
-- [x] Gateway `session.cancel` 方法
-  - 新增 `SESSION_CANCEL` 方法常量
-  - 新增 `handle_session_cancel` 处理器
-  - 调用 `agent.cancel_turn` 触发取消
-- [x] 事件系统增强
-  - 新增 `TurnCancelled` 事件变体
-  - SSE 事件过滤支持 `turn.cancelled`
+- [x] 断路器集成到 Agent 客户端
+  - Agent 结构新增 `circuit_breaker: Arc<CircuitBreaker>`
+  - 新增 `execute_protected()` 方法 - 包装 with_retry + 断路器检查
+  - 所有 AI API 调用改用 `execute_protected()` (Anthropic/OpenAI/Ollama)
+- [x] 指标系统增强
+  - SystemMetrics 新增 `circuit_breaker_state` 字段
+  - MetricsCollector 新增 `set_circuit_breaker_state()` 方法
+  - `/api/metrics` 返回断路器状态
+- [x] Gateway JSON-RPC 方法
+  - 新增 `agent.circuit_breaker` 方法常量
+  - 新增 `handle_agent_circuit_breaker` 处理器
 - [x] TUI 支持
-  - 新增 `:cancel` / `:stop` 命令
-  - `cancel_turn` TUI 网关客户端方法
-  - 处理 `TurnCancelled` 事件显示取消状态
+  - AppState 新增 `circuit_breaker_state` 字段
+  - 新增 `get_circuit_breaker()` 网关客户端方法
+  - 新增 `CircuitBreakerState` 事件变体
+  - 标题栏显示 AI 熔断状态指示器 (🟢/🟡/🔴)
 - [x] WebUI 支持
-  - 新增"取消"按钮（思考中显示）
-  - `cancelChatTurn` JavaScript 函数
-  - SSE 事件处理 `turn.cancelled`
-- [x] Ollama 流式取消支持
-  - 修改 `send_ollama_streaming` 支持取消检查
-  - 使用 100ms 超时轮询检查取消信号
+  - admin.html 新增"AI 熔断状态"显示
+  - 根据状态显示不同颜色和图标
 - [x] cargo clippy 0 警告
 - [x] cargo test 176 tests
+
+---
+
+### v5.3.0 (已完成 ✅)
+
+**完成事项**:
+- **Session Turn Cancellation** - 取消正在进行的 Agent Turn
+  - Agent 取消机制 (`turn_cancellations` HashMap)
+  - Gateway `session.cancel` 方法
+  - 事件系统增强 (`TurnCancelled` 事件)
+  - TUI 支持 (`:cancel` / `:stop` 命令)
+  - WebUI 支持 (取消按钮)
+  - Ollama 流式取消支持
 
 ---
 

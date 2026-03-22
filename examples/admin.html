@@ -81,6 +81,9 @@
         .status-error {
             color: #ff4757;
         }
+        .status-warning {
+            color: #ffa502;
+        }
         .btn {
             background: #00d9ff;
             color: #1a1a2e;
@@ -1082,6 +1085,10 @@
                     <span class="stat-label">错误总数</span>
                     <span class="stat-value" id="errorsTotal">-</span>
                 </div>
+                <div class="stat">
+                    <span class="stat-label">AI 熔断状态</span>
+                    <span class="stat-value" id="circuitBreakerState">-</span>
+                </div>
             </div>
             
             <div class="card">
@@ -1320,6 +1327,12 @@
                         ? sys.avg_response_time_ms.toFixed(1) + ' ms' 
                         : '-';
                     document.getElementById('errorsTotal').textContent = sys.errors_total.toLocaleString();
+                    
+                    // Update circuit breaker state
+                    const cbState = sys.circuit_breaker_state || 'closed';
+                    const cbElement = document.getElementById('circuitBreakerState');
+                    cbElement.textContent = cbState === 'open' ? '🔴 熔断中' : cbState === 'half_open' ? '🟡 恢复中' : '🟢 正常';
+                    cbElement.className = 'stat-value ' + (cbState === 'open' ? 'status-error' : cbState === 'half_open' ? 'status-warning' : 'status-ok');
                     
                     // Update metrics history
                     dataHistory.requests.push(sys.requests_per_minute);
