@@ -239,6 +239,11 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
                 })
                 .collect();
             Some(all_candidates.join(" "))
+        } else if state.is_navigating_history() {
+            // Show input history navigation hint
+            state.input_history_position().map(|pos| {
+                format!("↑↓ {} (Enter to select, any key to cancel)", pos)
+            })
         } else {
             None
         };

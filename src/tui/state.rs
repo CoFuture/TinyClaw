@@ -196,6 +196,12 @@ pub struct AppState {
     pub agent_activity: AgentActivity,
     /// Whether we're in rename mode (waiting for new session name)
     pub rename_mode: bool,
+    /// Input history navigation (Up/Down arrows)
+    pub input_history: Vec<String>,
+    /// Current position in input history (None = not navigating)
+    pub input_history_index: Option<usize>,
+    /// Saved buffer when starting history navigation
+    pub input_history_saved: Option<String>,
 }
 
 impl Default for AppState {
@@ -216,6 +222,9 @@ impl Default for AppState {
             retry_count: 0,
             completion: CompletionState::default(),
             agent_activity: AgentActivity::default(),
+            input_history: Vec::new(),
+            input_history_index: None,
+            input_history_saved: None,
         }
     }
 }
@@ -289,6 +298,88 @@ impl AppState {
     #[allow(dead_code)]
     pub fn increment_retry(&mut self) {
         self.retry_count += 1;
+    }
+
+    /// Add current input buffer to input history
+    pub fn add_to_input_history(&mut self) {
+        let text = self.input_buffer.trim();
+        if text.is_empty() {
+            return;
+        }
+        // Don't add duplicates at the end
+        if self.input_history.last().map(|s| s.as_str()) != Some(text) {
+            self.input_history.push(text.to_string());
+        }
+        // Limit history size to 100 entries
+        if self.input_history.len() > 100 {
+            self.input_history.remove(0);
+        }
+    }
+
+    /// Navigate up in input history (Up arrow)
+    /// Returns true if navigation happened
+    pub fn input_history_up(&mut self) -> bool {
+        if self.input_history.is_empty() {
+            return false;
+        }
+        // Save current buffer if not already navigating
+        if self.input_history_index.is_none() {
+            if !self.input_buffer.is_empty() {
+                self.input_history_saved = Some(self.input_buffer.clone());
+            }
+            self.input_history_index = Some(self.input_history.len().saturating_sub(1));
+        } else {
+            // Move to previous entry
+            let idx = self.input_history_index.unwrap();
+            if idx > 0 {
+                self.input_history_index = Some(idx - 1);
+            }
+        }
+        if let Some(idx) = self.input_history_index {
+            if let Some(history_entry) = self.input_history.get(idx) {
+                self.input_buffer = history_entry.clone();
+            }
+        }
+        true
+    }
+
+    /// Navigate down in input history (Down arrow)
+    /// Returns true if navigation happened
+    pub fn input_history_down(&mut self) -> bool {
+        if self.input_history.is_empty() || self.input_history_index.is_none() {
+            return false;
+        }
+        let idx = self.input_history_index.unwrap();
+        if idx >= self.input_history.len().saturating_sub(1) {
+            // At the end - restore saved buffer and exit navigation
+            self.input_history_index = None;
+            self.input_buffer = self.input_history_saved.take().unwrap_or_default();
+        } else {
+            // Move to next entry
+            self.input_history_index = Some(idx + 1);
+            if let Some(history_entry) = self.input_history.get(self.input_history_index.unwrap()) {
+                self.input_buffer = history_entry.clone();
+            }
+        }
+        true
+    }
+
+    /// Check if currently navigating input history
+    pub fn is_navigating_history(&self) -> bool {
+        self.input_history_index.is_some()
+    }
+
+    /// Get input history position display string (e.g., "3/10" or None)
+    pub fn input_history_position(&self) -> Option<String> {
+        self.input_history_index.map(|idx| {
+            format!("{}/{}", idx + 1, self.input_history.len())
+        })
+    }
+
+    /// Reset input history navigation state
+    pub fn reset_input_history_navigation(&mut self) {
+        self.input_history_index = None;
+        self.input_history_saved = None;
     }
 
     /// Get completion candidates for the current input

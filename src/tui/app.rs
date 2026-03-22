@@ -494,16 +494,28 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Up => {
-                    if self.state.scroll_offset > 0 {
-                        self.state.scroll_offset -= 1;
+                    if self.state.active_panel == 2 {
+                        // Input panel: navigate input history
+                        self.state.input_history_up();
+                    } else {
+                        // Message panel: scroll up
+                        if self.state.scroll_offset > 0 {
+                            self.state.scroll_offset -= 1;
+                        }
                     }
                     return Ok(true);
                 }
                 KeyCode::Down => {
-                    let msg_count = self.state.get_current_messages().len();
-                    let max_scroll = msg_count.saturating_sub(1);
-                    if self.state.scroll_offset < max_scroll {
-                        self.state.scroll_offset += 1;
+                    if self.state.active_panel == 2 {
+                        // Input panel: navigate input history
+                        self.state.input_history_down();
+                    } else {
+                        // Message panel: scroll down
+                        let msg_count = self.state.get_current_messages().len();
+                        let max_scroll = msg_count.saturating_sub(1);
+                        if self.state.scroll_offset < max_scroll {
+                            self.state.scroll_offset += 1;
+                        }
                     }
                     return Ok(true);
                 }
@@ -549,6 +561,10 @@ impl TuiApp {
                                 self.save_current_history();
                             }
                         }
+                        
+                        // Add to input history for future navigation
+                        self.state.add_to_input_history();
+                        self.state.reset_input_history_navigation();
                         
                         // Spawn async task to send message
                         tokio::spawn(async move {
@@ -668,6 +684,7 @@ impl TuiApp {
                     // Ctrl+D - clear input
                     self.state.input_buffer.clear();
                     self.state.completion.reset();
+                    self.state.reset_input_history_navigation();
                     return Ok(true);
                 }
                 KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
@@ -675,6 +692,7 @@ impl TuiApp {
                     self.state.input_buffer.clear();
                     self.state.completion.reset();
                     self.state.set_loading(false);
+                    self.state.reset_input_history_navigation();
                     return Ok(true);
                 }
                 KeyCode::Char('c') => {
@@ -695,6 +713,11 @@ impl TuiApp {
                 }
                 KeyCode::Char(c) => {
                     if self.state.active_panel == 2 {
+                        // If navigating history, reset and start fresh
+                        if self.state.is_navigating_history() {
+                            self.state.reset_input_history_navigation();
+                            self.state.input_buffer.clear();
+                        }
                         self.state.input_buffer.push(c);
                         self.state.completion.reset();
                     } else if self.state.active_panel == 0 {
@@ -711,6 +734,11 @@ impl TuiApp {
                 }
                 KeyCode::Backspace => {
                     if self.state.active_panel == 2 {
+                        // If navigating history, reset
+                        if self.state.is_navigating_history() {
+                            self.state.reset_input_history_navigation();
+                            self.state.input_buffer.clear();
+                        }
                         self.state.input_buffer.pop();
                         self.state.completion.reset();
                     }
@@ -722,6 +750,10 @@ impl TuiApp {
                     } else if self.state.rename_mode {
                         self.state.rename_mode = false;
                         self.state.input_buffer.clear();
+                    } else if self.state.is_navigating_history() {
+                        // Cancel history navigation - restore saved buffer
+                        self.state.input_buffer = self.state.input_history_saved.take().unwrap_or_default();
+                        self.state.reset_input_history_navigation();
                     } else {
                         return Ok(false); // Quit
                     }
