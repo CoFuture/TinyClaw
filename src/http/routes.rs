@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -45,6 +45,7 @@ pub struct HttpState {
     pub event_emitter: Arc<EventEmitter>,
     pub scheduler: Arc<Scheduler>,
     pub preferences: Arc<PreferencesManager>,
+    pub session_notes: Arc<SessionNotesManager>,
 }
 
 /// Health check response
@@ -798,6 +799,11 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // User preferences API
         .route("/api/preferences", get(preferences_get))
         .route("/api/preferences", axum::routing::patch(preferences_update))
+        // Session notes API
+        .route("/api/sessions/:session_id/notes", get(session_notes_list))
+        .route("/api/sessions/:session_id/notes", post(session_notes_add))
+        .route("/api/sessions/:session_id/notes/:note_id", axum::routing::put(session_notes_update))
+        .route("/api/sessions/:session_id/notes/:note_id", axum::routing::delete(session_notes_delete))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1337,4 +1343,78 @@ async fn preferences_update(
 ) -> Json<UserPreferences> {
     state.preferences.update(update);
     Json(state.preferences.get())
+}
+
+// ============================================================================
+// Session Notes API Handlers
+// ============================================================================
+
+/// List all notes for a session
+async fn session_notes_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let notes = state.session_notes.list_summaries(&session_id);
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "notes": notes,
+        "count": notes.len(),
+    }))
+}
+
+/// Add a note to a session
+async fn session_notes_add(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (HttpStatusCode, Json<serde_json::Value>)> {
+    let content = payload
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "content required"}))))?;
+
+    let note = state.session_notes.add(&session_id, content);
+
+    Ok(Json(serde_json::json!({
+        "note": note,
+        "success": true,
+    })))
+}
+
+/// Update a note
+async fn session_notes_update(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, note_id)): axum::extract::Path<(String, String)>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (HttpStatusCode, Json<serde_json::Value>)> {
+    let update = SessionNoteUpdate {
+        content: payload.get("content").and_then(|v| v.as_str()).map(String::from),
+        pinned: payload.get("pinned").and_then(|v| v.as_bool()),
+        tags: payload.get("tags").and_then(|v| {
+            v.as_array().map(|arr| {
+                arr.iter().filter_map(|x| x.as_str().map(String::from)).collect()
+            })
+        }),
+    };
+
+    match state.session_notes.update(&session_id, &note_id, update) {
+        Some(note) => Ok(Json(serde_json::json!({
+            "note": note,
+            "success": true,
+        }))),
+        None => Err((HttpStatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Note not found"})))),
+    }
+}
+
+/// Delete a note
+async fn session_notes_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((session_id, note_id)): axum::extract::Path<(String, String)>,
+) -> Json<serde_json::Value> {
+    let deleted = state.session_notes.delete(&session_id, &note_id);
+    Json(serde_json::json!({
+        "success": deleted,
+        "sessionId": session_id,
+        "noteId": note_id,
+    }))
 }

@@ -283,6 +283,14 @@ pub mod methods {
     pub const SCHEDULED_DISABLE: &str = "scheduled.disable";
     /// Scheduled task fire now (manual trigger)
     pub const SCHEDULED_FIRE_NOW: &str = "scheduled.fire_now";
+    /// Session notes list
+    pub const SESSION_NOTES_LIST: &str = "session.notes.list";
+    /// Session notes add
+    pub const SESSION_NOTES_ADD: &str = "session.notes.add";
+    /// Session notes update
+    pub const SESSION_NOTES_UPDATE: &str = "session.notes.update";
+    /// Session notes delete
+    pub const SESSION_NOTES_DELETE: &str = "session.notes.delete";
 }
 
 /// Event types for notifications

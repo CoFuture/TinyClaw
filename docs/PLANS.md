@@ -480,7 +480,37 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - cargo clippy 0 警告
   - cargo test 241 tests (新增 4 个 preferences 测试)
 
-**下一步**: 邮件/日历集成、多模态支持
+**下一步**: Session Notes (会话笔记)、WebUI 会话笔记管理面板
+
+---
+
+## 当前迭代规划 (v6.4.0)
+
+### 本轮目标
+**Session Notes - 会话笔记功能**
+
+**计划完成**:
+- [x] **会话笔记 (Session Notes)** - 让 Agent 记住会话中的重要信息
+  - 新增 `agent/session_notes.rs`：`SessionNote`、`SessionNoteSummary`、`SessionNotesManager` 结构
+  - 支持字段：content、pinned (置顶)、tags (标签)
+  - JSON 文件持久化到 `~/.config/tiny_claw/session_notes/`
+  - 支持置顶和标签分类
+  - `to_system_prompt_addition()` 方法自动生成上下文提示
+  - 10 个单元测试
+- [x] **Gateway JSON-RPC 集成**
+  - 新增方法：`session.notes.list`、`session.notes.add`、`session.notes.update`、`session.notes.delete`
+  - HandlerContext 集成 session_notes 管理器
+  - `generate_context_prompt()` 组合技能提示和会话笔记
+- [x] **HTTP REST API**
+  - `GET /api/sessions/{id}/notes` - 列出笔记
+  - `POST /api/sessions/{id}/notes` - 添加笔记
+  - `PUT /api/sessions/{id}/notes/{note_id}` - 更新笔记
+  - `DELETE /api/sessions/{id}/notes/{note_id}` - 删除笔记
+- [x] **代码质量**
+  - cargo clippy 0 警告
+  - cargo test 251 tests (新增 10 个 session_notes 测试)
+
+**下一步**: WebUI 会话笔记管理面板、TUI 笔记命令
 
 ---
 

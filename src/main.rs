@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -179,6 +179,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let preferences_manager = Arc::new(PreferencesManager::new_with_persistence(&preferences_path));
     info!("User preferences loaded from: {:?}", preferences_path);
 
+    // Create session notes manager
+    let session_notes_manager = Arc::new(SessionNotesManager::new());
+    info!("Session notes manager initialized");
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -207,6 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         event_emitter: event_emitter.clone(),
         scheduler: scheduler.clone(),
         preferences: preferences_manager.clone(),
+        session_notes: session_notes_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -226,6 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         scheduler.clone(), // Scheduler for scheduled task triggering
         suggestion_engines_ws, // Suggestion engines for proactive suggestions
         preferences_manager.clone(), // User preferences manager
+        session_notes_manager.clone(), // Session notes manager
     );
     
     let ws_handle = tokio::spawn(async move {

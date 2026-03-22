@@ -8,6 +8,7 @@ pub mod retry;
 pub mod runtime;
 pub mod scheduled_task;
 pub mod scheduler;
+pub mod session_notes;
 pub mod skill;
 pub mod skill_manager;
 pub mod skill_registry;
@@ -22,6 +23,9 @@ pub use scheduled_task::ScheduledTaskSummary;
 #[allow(unused_imports)]
 pub use scheduled_task::ScheduleType;
 pub use scheduler::Scheduler;
+pub use session_notes::{SessionNoteUpdate, SessionNotesManager};
+#[allow(unused_imports)]
+pub use session_notes::{SessionNote, SessionNoteSummary};
 pub use skill::Skill;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;

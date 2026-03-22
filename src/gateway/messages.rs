@@ -2,6 +2,7 @@
 
 use crate::agent::tools::ToolExecutor;
 use crate::agent::suggestion::SuggestionEngine;
+use crate::agent::session_notes::SessionNotesManager;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -64,6 +65,8 @@ pub struct HandlerContext {
     pub suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
     /// User preferences manager
     pub preferences: Arc<crate::preferences::PreferencesManager>,
+    /// Session notes manager
+    pub session_notes: Arc<SessionNotesManager>,
 }
 
 impl HandlerContext {
@@ -80,6 +83,7 @@ impl HandlerContext {
         scheduler: Arc<Scheduler>,
         suggestion_engines: Arc<RwLock<HashMap<String, SuggestionEngine>>>,
         preferences: Arc<crate::preferences::PreferencesManager>,
+        session_notes: Arc<SessionNotesManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -93,6 +97,7 @@ impl HandlerContext {
             scheduler,
             suggestion_engines,
             preferences,
+            session_notes,
         }
     }
 
@@ -154,6 +159,10 @@ pub async fn handle_request(
         methods::SCHEDULED_ENABLE => handle_scheduled_enable(ctx, jsonrpc_id.clone(), params).await,
         methods::SCHEDULED_DISABLE => handle_scheduled_disable(ctx, jsonrpc_id.clone(), params).await,
         methods::SCHEDULED_FIRE_NOW => handle_scheduled_fire_now(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_NOTES_LIST => handle_session_notes_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_NOTES_ADD => handle_session_notes_add(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_NOTES_UPDATE => handle_session_notes_update(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_NOTES_DELETE => handle_session_notes_delete(ctx, jsonrpc_id.clone(), params).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -314,28 +323,40 @@ fn map_error_to_response(id: Option<String>, error: &Error) -> ResponseError {
     }
 }
 
-/// Generate system prompt supplement from active skills for a session
-fn generate_skill_prompt(ctx: &HandlerContext, session_key: &str) -> Option<String> {
+/// Generate system prompt supplement from active skills and session notes for a session
+fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+
+    // 1. Active skills
     let active_skills = ctx.skill_manager.get_active_skills(session_key);
-    if active_skills.is_empty() {
-        return None;
-    }
-
-    let mut prompt = String::from("\n\n## Active Skills\n\n");
-    prompt.push_str("The following skills are available for this conversation:\n\n");
-
-    for skill_name in &active_skills {
-        if let Some(skill) = ctx.skill_manager.get_skill(skill_name) {
-            prompt.push_str(&format!("### {}\n", skill.name));
-            prompt.push_str(&format!("{}\n\n", skill.description));
-            prompt.push_str(&format!("Instructions: {}\n", skill.instructions));
-            if !skill.tool_names.is_empty() {
-                prompt.push_str(&format!("Tools: {}\n\n", skill.tool_names.join(", ")));
+    if !active_skills.is_empty() {
+        let mut skills_part = String::from("## Active Skills\n\n");
+        skills_part.push_str("The following skills are available for this conversation:\n\n");
+        for skill_name in &active_skills {
+            if let Some(skill) = ctx.skill_manager.get_skill(skill_name) {
+                skills_part.push_str(&format!("### {}\n", skill.name));
+                skills_part.push_str(&format!("{}\n\n", skill.description));
+                skills_part.push_str(&format!("Instructions: {}\n", skill.instructions));
+                if !skill.tool_names.is_empty() {
+                    skills_part.push_str(&format!("Tools: {}\n\n", skill.tool_names.join(", ")));
+                }
             }
         }
+        parts.push(skills_part);
     }
 
-    Some(prompt)
+    // 2. Session notes
+    if let Some(notes_part) = ctx.session_notes.to_system_prompt_addition(session_key) {
+        parts.push(notes_part);
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        let mut prompt = String::from("\n\n");
+        prompt.push_str(&parts.join("\n\n"));
+        Some(prompt)
+    }
 }
 
 /// Handle ping
@@ -566,8 +587,8 @@ async fn handle_agent_turn(
         crate::types::Message::user(message),
     );
 
-    // Generate skill prompt for this session
-    let skill_prompt = generate_skill_prompt(ctx, session_key);
+    // Generate context prompt (skills + session notes) for this session
+    let skill_prompt = generate_context_prompt(ctx, session_key);
     
     // Emit thinking event
     ctx.event_emitter.emit(Event::TurnThinking {
@@ -1208,6 +1229,107 @@ async fn handle_scheduled_fire_now(
     Ok(serde_json::json!({
         "success": true,
         "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle session.notes.list - list all notes for a session
+async fn handle_session_notes_list(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+
+    let notes = ctx.session_notes.list_summaries(session_id);
+
+    Ok(serde_json::json!({
+        "sessionId": session_id,
+        "notes": notes,
+        "count": notes.len(),
+    }))
+}
+
+/// Handle session.notes.add - add a note to a session
+async fn handle_session_notes_add(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+    let content = params
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("content required".to_string()))?;
+
+    let note = ctx.session_notes.add(session_id, content);
+
+    Ok(serde_json::json!({
+        "note": note,
+        "success": true,
+    }))
+}
+
+/// Handle session.notes.update - update a note
+async fn handle_session_notes_update(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+    let note_id = params
+        .get("noteId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("noteId required".to_string()))?;
+
+    let update = crate::agent::session_notes::SessionNoteUpdate {
+        content: params.get("content").and_then(|v| v.as_str()).map(String::from),
+        pinned: params.get("pinned").and_then(|v| v.as_bool()),
+        tags: params.get("tags").and_then(|v| {
+            v.as_array().map(|arr| {
+                arr.iter().filter_map(|x| x.as_str().map(String::from)).collect()
+            })
+        }),
+    };
+
+    match ctx.session_notes.update(session_id, note_id, update) {
+        Some(note) => Ok(serde_json::json!({
+            "note": note,
+            "success": true,
+        })),
+        None => Err(Error::Protocol("Note not found".to_string())),
+    }
+}
+
+/// Handle session.notes.delete - delete a note
+async fn handle_session_notes_delete(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("sessionId required".to_string()))?;
+    let note_id = params
+        .get("noteId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("noteId required".to_string()))?;
+
+    let deleted = ctx.session_notes.delete(session_id, note_id);
+
+    Ok(serde_json::json!({
+        "success": deleted,
+        "sessionId": session_id,
+        "noteId": note_id,
     }))
 }
 
