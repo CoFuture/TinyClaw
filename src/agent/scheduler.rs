@@ -56,6 +56,7 @@ impl Scheduler {
     }
 
     /// Set the shutdown receiver
+    #[allow(dead_code)]
     pub fn with_shutdown_rx(self, rx: broadcast::Receiver<()>) -> Self {
         *self.shutdown_rx.write() = Some(rx);
         self
@@ -305,6 +306,7 @@ impl Scheduler {
     }
 
     /// List only enabled/active scheduled tasks
+    #[allow(dead_code)]
     pub fn list_enabled(&self) -> Vec<ScheduledTaskSummary> {
         let schedules = self.schedules.read();
         schedules
@@ -461,6 +463,7 @@ impl Scheduler {
     }
 
     /// Get count of schedules
+    #[allow(dead_code)]
     pub fn count(&self) -> usize {
         self.schedules.read().len()
     }

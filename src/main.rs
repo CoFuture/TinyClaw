@@ -191,6 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         skill_registry: skill_registry.clone(),
         skill_manager: skill_manager.clone(),
         event_emitter: event_emitter.clone(),
+        scheduler: scheduler.clone(),
     });
 
     // Spawn WebSocket server

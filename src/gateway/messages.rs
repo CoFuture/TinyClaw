@@ -944,7 +944,7 @@ async fn handle_scheduled_create(
                 .ok_or_else(|| Error::Protocol("cronExpression required for cron schedule".to_string()))?;
             
             let handle = ctx.scheduler.add_cron(name, cron_expression, task_description, session_id)
-                .map_err(|e| Error::Protocol(e))?;
+                .map_err(Error::Protocol)?;
             let id = handle.read().id.clone();
             id
         }
@@ -1053,7 +1053,7 @@ async fn handle_scheduled_pause(
         .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
 
     ctx.scheduler.pause(schedule_id)
-        .map_err(|e| Error::Protocol(e))?;
+        .map_err(Error::Protocol)?;
 
     info!(schedule_id = %schedule_id, "Paused scheduled task");
 
@@ -1075,7 +1075,7 @@ async fn handle_scheduled_resume(
         .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
 
     ctx.scheduler.resume(schedule_id)
-        .map_err(|e| Error::Protocol(e))?;
+        .map_err(Error::Protocol)?;
 
     info!(schedule_id = %schedule_id, "Resumed scheduled task");
 
@@ -1120,7 +1120,7 @@ async fn handle_scheduled_enable(
         .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
 
     ctx.scheduler.enable(schedule_id)
-        .map_err(|e| Error::Protocol(e))?;
+        .map_err(Error::Protocol)?;
 
     info!(schedule_id = %schedule_id, "Enabled scheduled task");
 
@@ -1142,7 +1142,7 @@ async fn handle_scheduled_disable(
         .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
 
     ctx.scheduler.disable(schedule_id)
-        .map_err(|e| Error::Protocol(e))?;
+        .map_err(Error::Protocol)?;
 
     info!(schedule_id = %schedule_id, "Disabled scheduled task");
 
@@ -1164,7 +1164,7 @@ async fn handle_scheduled_fire_now(
         .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
 
     ctx.scheduler.fire_now(schedule_id).await
-        .map_err(|e| Error::Protocol(e))?;
+        .map_err(Error::Protocol)?;
 
     info!(schedule_id = %schedule_id, "Manually fired scheduled task");
 

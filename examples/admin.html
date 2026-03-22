@@ -288,6 +288,67 @@
             overflow-y: auto;
         }
         
+        /* Scheduled Tasks Panel */
+        .scheduled-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .scheduled-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .scheduled-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .scheduled-name {
+            font-weight: bold;
+            color: #00d9ff;
+        }
+        .scheduled-status {
+            display: flex;
+            gap: 8px;
+        }
+        .scheduled-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .badge-enabled {
+            background: rgba(76, 175, 80, 0.3);
+            color: #4caf50;
+        }
+        .badge-paused {
+            background: rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+        }
+        .badge-disabled {
+            background: rgba(158, 158, 158, 0.3);
+            color: #9e9e9e;
+        }
+        .badge-cron {
+            background: rgba(156, 39, 176, 0.3);
+            color: #ce93d8;
+        }
+        .badge-interval {
+            background: rgba(33, 150, 243, 0.3);
+            color: #64b5f6;
+        }
+        .scheduled-info {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .scheduled-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
         /* Events Panel */
         .events-panel {
             max-height: 300px;
@@ -1173,6 +1234,18 @@
             </div>
         </div>
         
+        <!-- Scheduled Tasks Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>⏰ 定时任务 <span class="tool-count-badge" id="scheduledCount">-</span></h2>
+            <div style="margin-bottom: 15px;">
+                <button class="btn" onclick="showCreateScheduledModal()">➕ 创建任务</button>
+                <button class="btn btn-secondary" onclick="refreshScheduledTasks()">🔄 刷新</button>
+            </div>
+            <div class="scheduled-panel" id="scheduledPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+        
         <!-- Config Editor -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⚡ 配置编辑器</h2>
@@ -1384,6 +1457,14 @@
                     renderSkills(skillsData.skills || []);
                 } catch (e) {
                     // Skills API might not be available
+                }
+                
+                // Fetch scheduled tasks list
+                try {
+                    const scheduledData = await fetchJSON(API_BASE + '/api/scheduled');
+                    renderScheduledTasks(scheduledData.schedules || []);
+                } catch (e) {
+                    // Scheduled API might not be available
                 }
                 
                 document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
@@ -1708,6 +1789,246 @@
                 }
             } catch (e) {
                 alert('创建失败: ' + e.message);
+            }
+        }
+        
+        // Scheduled Task Management
+        
+        function renderScheduledTasks(schedules) {
+            const panel = document.getElementById('scheduledPanel');
+            const countBadge = document.getElementById('scheduledCount');
+            countBadge.textContent = schedules.length;
+            
+            if (!schedules || !schedules.length) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无定时任务</div>';
+                return;
+            }
+            
+            panel.innerHTML = schedules.map(s => {
+                const statusBadge = s.paused 
+                    ? '<span class="scheduled-badge badge-paused">已暂停</span>'
+                    : (s.enabled 
+                        ? '<span class="scheduled-badge badge-enabled">运行中</span>'
+                        : '<span class="scheduled-badge badge-disabled">已禁用</span>');
+                const typeBadge = s.schedule_type === 'cron'
+                    ? '<span class="scheduled-badge badge-cron">Cron</span>'
+                    : '<span class="scheduled-badge badge-interval">间隔</span>';
+                const nextRun = s.next_run_at 
+                    ? new Date(s.next_run_at).toLocaleString('zh-CN')
+                    : '-';
+                const lastRun = s.last_run_at
+                    ? new Date(s.last_run_at).toLocaleString('zh-CN')
+                    : '从未';
+                
+                return `
+                    <div class="scheduled-item">
+                        <div class="scheduled-header">
+                            <span class="scheduled-name">${escapeHtml(s.name)}</span>
+                            <div class="scheduled-status">
+                                ${statusBadge}
+                                ${typeBadge}
+                            </div>
+                        </div>
+                        <div class="scheduled-info">
+                            <div>📋 任务: ${escapeHtml(s.task_description)}</div>
+                            <div>⏱️ 计划: ${escapeHtml(s.schedule_display)}</div>
+                            <div>📅 下次执行: ${nextRun}</div>
+                            <div>🕐 上次执行: ${lastRun} (执行 ${s.run_count} 次)</div>
+                        </div>
+                        <div class="scheduled-actions">
+                            ${s.paused 
+                                ? `<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="resumeScheduledTask('${s.id}')">▶ 恢复</button>`
+                                : `<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="pauseScheduledTask('${s.id}')">⏸ 暂停</button>`
+                            }
+                            ${s.enabled 
+                                ? `<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="disableScheduledTask('${s.id}')">⛔ 禁用</button>`
+                                : `<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="enableScheduledTask('${s.id}')">✅ 启用</button>`
+                            }
+                            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="fireScheduledTaskNow('${s.id}')">🔥 立即执行</button>
+                            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; color: #ff5252;" onclick="deleteScheduledTask('${s.id}')">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function showCreateScheduledModal() {
+            const modalHtml = `
+                <div class="modal-overlay active" id="scheduledModal">
+                    <div class="modal" style="max-width: 500px;">
+                        <h3>⏰ 创建定时任务</h3>
+                        <div class="form-group">
+                            <label>任务名称</label>
+                            <input type="text" id="schedName" placeholder="例如: 每日健康检查">
+                        </div>
+                        <div class="form-group">
+                            <label>任务描述 (Agent 将执行的指令)</label>
+                            <textarea id="schedTaskDesc" rows="3" placeholder="例如: 检查系统状态并报告"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>会话 ID</label>
+                            <input type="text" id="schedSessionId" placeholder="main" value="main">
+                        </div>
+                        <div class="form-group">
+                            <label>调度类型</label>
+                            <select id="schedType" onchange="toggleScheduleFields()" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; border-radius: 4px;">
+                                <option value="interval">固定间隔</option>
+                                <option value="cron">Cron 表达式</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="intervalField">
+                            <label>间隔 (秒)</label>
+                            <input type="number" id="schedInterval" placeholder="3600" value="3600" min="1">
+                            <small style="color: #888;">例如: 3600 = 每小时, 86400 = 每天</small>
+                        </div>
+                        <div class="form-group" id="cronField" style="display: none;">
+                            <label>Cron 表达式 (6字段: 秒 分 时 日 月 周)</label>
+                            <input type="text" id="schedCron" placeholder="0 0 * * * *" value="0 0 * * * *">
+                            <small style="color: #888;">格式: 秒 分 时 日 月 周，例如 "0 0 * * * *" = 每天午夜</small>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" onclick="closeScheduledModal()">取消</button>
+                            <button class="btn" onclick="createScheduledTask()">创建</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const existing = document.getElementById('scheduledModal');
+            if (existing) existing.remove();
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        function toggleScheduleFields() {
+            const type = document.getElementById('schedType').value;
+            document.getElementById('intervalField').style.display = type === 'interval' ? 'block' : 'none';
+            document.getElementById('cronField').style.display = type === 'cron' ? 'block' : 'none';
+        }
+        
+        function closeScheduledModal() {
+            const modal = document.getElementById('scheduledModal');
+            if (modal) modal.remove();
+        }
+        
+        async function createScheduledTask() {
+            const name = document.getElementById('schedName').value.trim();
+            const taskDescription = document.getElementById('schedTaskDesc').value.trim();
+            const sessionId = document.getElementById('schedSessionId').value.trim() || 'main';
+            const scheduleType = document.getElementById('schedType').value;
+            
+            if (!name || !taskDescription) {
+                alert('请填写名称和任务描述');
+                return;
+            }
+            
+            const payload = {
+                name,
+                task_description: taskDescription,
+                session_id: sessionId,
+                schedule_type: scheduleType
+            };
+            
+            if (scheduleType === 'interval') {
+                payload.interval_seconds = parseInt(document.getElementById('schedInterval').value) || 3600;
+            } else {
+                payload.cron_expression = document.getElementById('schedCron').value.trim();
+                if (!payload.cron_expression) {
+                    alert('请填写 Cron 表达式');
+                    return;
+                }
+            }
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (resp.ok) {
+                    closeScheduledModal();
+                    refreshScheduledTasks();
+                } else {
+                    const err = await resp.json();
+                    alert('创建失败: ' + (err.error || err.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('创建失败: ' + e.message);
+            }
+        }
+        
+        async function refreshScheduledTasks() {
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    renderScheduledTasks(data.schedules || []);
+                }
+            } catch (e) {
+                console.error('Failed to load scheduled tasks:', e);
+            }
+        }
+        
+        async function pauseScheduledTask(id) {
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id + '/pause', { method: 'POST' });
+                if (resp.ok) refreshScheduledTasks();
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function resumeScheduledTask(id) {
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id + '/resume', { method: 'POST' });
+                if (resp.ok) refreshScheduledTasks();
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function enableScheduledTask(id) {
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id + '/enable', { method: 'POST' });
+                if (resp.ok) refreshScheduledTasks();
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function disableScheduledTask(id) {
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id + '/disable', { method: 'POST' });
+                if (resp.ok) refreshScheduledTasks();
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function fireScheduledTaskNow(id) {
+            if (!confirm('确定要立即执行这个定时任务吗？')) return;
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id + '/fire', { method: 'POST' });
+                if (resp.ok) {
+                    alert('任务已触发！');
+                    refreshScheduledTasks();
+                } else {
+                    const err = await resp.json();
+                    alert('操作失败: ' + (err.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function deleteScheduledTask(id) {
+            if (!confirm('确定要删除这个定时任务吗？此操作不可撤销。')) return;
+            try {
+                const resp = await fetch(API_BASE + '/api/scheduled/' + id, { method: 'DELETE' });
+                if (resp.ok) refreshScheduledTasks();
+            } catch (e) {
+                alert('删除失败: ' + e.message);
             }
         }
         

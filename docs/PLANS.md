@@ -454,23 +454,48 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v6.1.0)
+## 当前迭代规划 (v6.2.0)
 
 ### 本轮目标
-**定时任务触发系统** - 让 Agent 能够定时自动执行任务
-
-> 真正实现 24/7 运行的智能助手
+**Agent 能力增强 + 交互体验优化**
 
 **计划完成**:
-- [ ] **主动提醒系统** - 定时提醒用户
-- [ ] **任务执行结果通知** - 任务完成后推送通知
-- [ ] **WebUI 定时任务面板** - 在 admin.html 中管理定时任务
+- [ ] **Agent 主动建议** - 基于上下文主动给用户建议
+- [ ] **会话上下文持久化** - 跨会话记住用户偏好
+- [ ] **TUI 增强** - 交互式 TUI 完善
 
-**下一步**: 任务组合执行、持久化定时任务配置
+**下一步**: 邮件/日历集成、多模态支持
 
 ---
 
 ## 迭代历史
+
+### v6.1.0 (已完成 ✅)
+
+**完成事项**:
+- **HTTP REST API 定时任务管理** - 完整的 CRUD API
+  - `GET /api/scheduled` - 列出所有定时任务
+  - `POST /api/scheduled` - 创建定时任务（支持 cron 和 interval）
+  - `GET /api/scheduled/{id}` - 获取单个任务
+  - `POST /api/scheduled/{id}/pause` - 暂停任务
+  - `POST /api/scheduled/{id}/resume` - 恢复任务
+  - `POST /api/scheduled/{id}/enable` - 启用任务
+  - `POST /api/scheduled/{id}/disable` - 禁用任务
+  - `POST /api/scheduled/{id}/fire` - 立即触发任务
+  - `DELETE /api/scheduled/{id}` - 删除任务
+- **WebUI 定时任务面板** - admin.html 中完整的任务管理界面
+  - 任务列表展示：名称、状态、类型、下次执行时间、运行次数
+  - 状态徽章：运行中/已暂停/已禁用、Cron/间隔
+  - 操作按钮：暂停/恢复、启用/禁用、立即执行、删除
+  - 创建任务弹窗：支持 cron 和间隔两种类型
+  - 实时刷新：与数据面板同步刷新
+- **HttpState 增强** - 集成 Scheduler 到 HTTP 状态
+- **代码质量修复** - 修复 clippy redundant closure 警告
+- 226 tests passing
+
+**未完成/待续**:
+- 主动提醒系统（需要推送渠道集成）
+- 任务执行结果通知（需要更完善的通知机制）
 
 ### v6.0.0 (已完成 ✅)
 

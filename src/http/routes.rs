@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::ratelimit::RateLimiter;
@@ -42,6 +42,7 @@ pub struct HttpState {
     pub skill_registry: Arc<SkillRegistry>,
     pub skill_manager: Arc<SessionSkillManager>,
     pub event_emitter: Arc<EventEmitter>,
+    pub scheduler: Arc<Scheduler>,
 }
 
 /// Health check response
@@ -780,6 +781,16 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/skills", axum::routing::post(session_skills_set))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::put(session_skills_enable))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::delete(session_skills_disable))
+        // Scheduled task management API
+        .route("/api/scheduled", get(scheduled_list))
+        .route("/api/scheduled", post(scheduled_create))
+        .route("/api/scheduled/{schedule_id}", get(scheduled_get))
+        .route("/api/scheduled/{schedule_id}/pause", axum::routing::post(scheduled_pause))
+        .route("/api/scheduled/{schedule_id}/resume", axum::routing::post(scheduled_resume))
+        .route("/api/scheduled/{schedule_id}", axum::routing::delete(scheduled_delete))
+        .route("/api/scheduled/{schedule_id}/enable", axum::routing::post(scheduled_enable))
+        .route("/api/scheduled/{schedule_id}/disable", axum::routing::post(scheduled_disable))
+        .route("/api/scheduled/{schedule_id}/fire", axum::routing::post(scheduled_fire_now))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1122,4 +1133,181 @@ async fn session_skills_set(
         "session": session_id,
         "active_skills": skills
     }))
+}
+
+// Scheduled task management handlers
+
+use crate::agent::scheduled_task::{ScheduledTaskSummary, ScheduleType};
+
+/// List all scheduled tasks
+async fn scheduled_list(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let schedules = state.scheduler.list();
+    Json(serde_json::json!({
+        "schedules": schedules
+    }))
+}
+
+/// Create a new scheduled task
+async fn scheduled_create(
+    State(state): State<Arc<HttpState>>,
+    Json(params): Json<serde_json::Value>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    let name = match params.get("name").and_then(|v| v.as_str()) {
+        Some(n) => n.to_string(),
+        None => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "name is required"}))),
+    };
+    let schedule_type = match params.get("schedule_type").and_then(|v| v.as_str()) {
+        Some("cron") => ScheduleType::Cron,
+        Some("interval") => ScheduleType::Interval,
+        _ => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "schedule_type must be 'cron' or 'interval'"}))),
+    };
+    let task_description = match params.get("task_description").and_then(|v| v.as_str()) {
+        Some(d) => d.to_string(),
+        None => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "task_description is required"}))),
+    };
+    let session_id = match params.get("session_id").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "session_id is required"}))),
+    };
+
+    let result = match schedule_type {
+        ScheduleType::Cron => {
+            let cron_expr = match params.get("cron_expression").and_then(|v| v.as_str()) {
+                Some(e) => e.to_string(),
+                None => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "cron_expression is required for cron schedule"}))),
+            };
+            state.scheduler.add_cron(name, cron_expr, task_description, session_id)
+        }
+        ScheduleType::Interval => {
+            let interval = match params.get("interval_seconds").and_then(|v| v.as_u64()) {
+                Some(i) => i,
+                None => return (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "interval_seconds is required for interval schedule"}))),
+            };
+            Ok(state.scheduler.add_interval(name, interval, task_description, session_id))
+        }
+    };
+
+    match result {
+        Ok(handle) => {
+            let st = handle.read();
+            let summary = ScheduledTaskSummary::from(&*st);
+            (HttpStatusCode::CREATED, Json(serde_json::json!({
+                "schedule": summary
+            })))
+        }
+        Err(e) => (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))),
+    }
+}
+
+/// Get a scheduled task by ID
+async fn scheduled_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.get(&schedule_id) {
+        Some(handle) => {
+            let st = handle.read();
+            let summary = ScheduledTaskSummary::from(&*st);
+            (HttpStatusCode::OK, Json(serde_json::json!({
+                "schedule": summary
+            })))
+        }
+        None => (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Schedule not found"
+        }))),
+    }
+}
+
+/// Pause a scheduled task
+async fn scheduled_pause(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.pause(&schedule_id) {
+        Ok(()) => (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "schedule_id": schedule_id
+        }))),
+        Err(e) => (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": e
+        }))),
+    }
+}
+
+/// Resume a paused scheduled task
+async fn scheduled_resume(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.resume(&schedule_id) {
+        Ok(()) => (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "schedule_id": schedule_id
+        }))),
+        Err(e) => (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": e
+        }))),
+    }
+}
+
+/// Delete a scheduled task
+async fn scheduled_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    let removed = state.scheduler.delete(&schedule_id);
+    (HttpStatusCode::OK, Json(serde_json::json!({
+        "success": removed.is_some(),
+        "schedule_id": schedule_id
+    })))
+}
+
+/// Enable a scheduled task
+async fn scheduled_enable(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.enable(&schedule_id) {
+        Ok(()) => (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "schedule_id": schedule_id
+        }))),
+        Err(e) => (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": e
+        }))),
+    }
+}
+
+/// Disable a scheduled task
+async fn scheduled_disable(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.disable(&schedule_id) {
+        Ok(()) => (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "schedule_id": schedule_id
+        }))),
+        Err(e) => (HttpStatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": e
+        }))),
+    }
+}
+
+/// Fire a scheduled task immediately
+async fn scheduled_fire_now(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(schedule_id): axum::extract::Path<String>,
+) -> (HttpStatusCode, Json<serde_json::Value>) {
+    match state.scheduler.fire_now(&schedule_id).await {
+        Ok(()) => (HttpStatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "schedule_id": schedule_id
+        }))),
+        Err(e) => (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": e
+        }))),
+    }
 }
