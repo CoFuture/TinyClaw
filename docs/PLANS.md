@@ -405,6 +405,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - [x] Session Turn Cancellation ✅ v5.3.0
 - [x] Session Rename ✅ v4.8.0
 - [x] Agent 主动建议 ✅ v6.2.0
+- [x] WebUI 会话笔记管理面板 ✅ v6.5.0
+- [x] TUI 笔记命令 ✅ v6.5.0
 
 ### 稳定性
 - [x] 日志优化 (结构化日志) ✅ v4.1.0
@@ -417,6 +419,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v6.5.0 | WebUI 会话笔记面板 + TUI 笔记命令 - admin.html 新增会话笔记管理面板：会话选择下拉框、笔记列表展示、CRUD 操作、置顶/标签支持；TUI 新增 `:note` / `:notes` / `:pin` 命令查看笔记；AppState 新增 notes_mode 等字段；Gateway 客户端新增 list_session_notes 方法；SessionNotesLoaded 事件处理；draw_notes_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
+| v6.4.0 | Session Notes 后端 - 新增 `agent/session_notes.rs`：SessionNote/SessionNoteSummary/SessionNotesManager 结构，支持 content/pinned/tags 字段，JSON 持久化到 ~/.config/tiny_claw/session_notes/；Gateway JSON-RPC 集成 session.notes.list/add/update/delete 方法；HTTP REST API 完整支持；cargo clippy 0 警告；cargo test 251 tests |
 | v6.3.0 | 会话上下文持久化 + TUI 增强 - 新增 `preferences.rs` 模块：`UserPreferences`/`PreferencesManager` 结构，支持 user_name、language、timezone、default_skills、agent_persona 等字段；JSON 持久化到 `~/.config/tiny_claw/preferences.json`；HTTP API `/api/preferences` GET/PATCH；TUI 增强：gg 滚动到底部，`:f`/Ctrl+F 搜索模式，n/N 导航，实时匹配计数；cargo clippy 0 警告；cargo test 241 tests |
 | v5.8.0 | Agent Turn Execution Log - 新增 `agent/turn_log.rs`：`TurnAction`/`TurnLogEntry`/`TurnLog`/`TurnLogSummary` 结构；新增 `Event::TurnLogUpdated` 和 `Event::TurnLogCompleted` SSE 事件；Runtime 集成：每个 Turn 创建 TurnLog，工具执行时记录（名称/输入/输出/成功/耗时），Turn 结束时发送 TurnLogCompleted；3个新测试；cargo clippy 0 警告；cargo test 191 tests |
 | v5.7.0 | Structured Tool Error Reporting + Agent Self-Correction - 新增 `agent/error_recovery.rs`：ToolErrorKind 枚举(9种错误类型)、ErrorRecovery 结构(包含 retryable 和 suggestion)；集成到 runtime.rs 和 client.rs，工具失败时返回结构化错误报告帮助 Agent 自我修正；12个新测试；cargo clippy 0 警告；cargo test 188 tests |
@@ -510,7 +514,29 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - cargo clippy 0 警告
   - cargo test 251 tests (新增 10 个 session_notes 测试)
 
-**下一步**: WebUI 会话笔记管理面板、TUI 笔记命令
+---
+
+### v6.5.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI 会话笔记面板** - 在 admin.html 中管理会话笔记
+  - 新增 CSS 样式：`.notes-panel`、`.note-item`、`.note-header`、`.note-pinned-badge`、`.note-content`、`.note-tags`、`.note-actions`
+  - 新增"📝 会话笔记"面板：会话选择下拉框、笔记列表展示
+  - 支持 CRUD 操作：添加笔记、编辑笔记、删除笔记、置顶/取消置顶
+  - 标签支持：逗号分隔输入
+  - `renderSessionNotes()`、`loadSessionNotes()`、`showAddNoteModal()` 等 JS 函数
+- **TUI 笔记命令** - 终端界面查看和管理笔记
+  - 新增 `:note` / `:notes` 命令：查看当前会话笔记
+  - 新增 `:pin` 命令：同 `:note` 效果
+  - AppState 新增 `notes_mode`、`notes_session_id`、`notes_content` 字段
+  - Gateway 客户端新增 `list_session_notes()` 方法
+  - `SessionNotesLoaded` 事件处理和 `format_notes_display()` 格式化函数
+  - Notes 面板渲染：`draw_notes_panel()` 组件
+  - Escape 键退出笔记模式
+- cargo clippy 0 警告
+- cargo test 251 tests
+
+**下一步**: 继续完善 Agent 能力、更多交互体验优化
 
 ---
 

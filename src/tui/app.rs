@@ -461,6 +461,12 @@ impl TuiApp {
             TuiGatewayEvent::CircuitBreakerState(state) => {
                 self.state.circuit_breaker_state = state;
             }
+            TuiGatewayEvent::SessionNotesLoaded { session_id, notes } => {
+                if self.state.notes_mode && self.state.notes_session_id.as_ref() == Some(&session_id) {
+                    let content = format_notes_display(&notes);
+                    self.state.notes_content = Some(content);
+                }
+            }
         }
     }
 
@@ -747,7 +753,61 @@ impl TuiApp {
                                 }
                             }
                             KeyCode::Char('n') => {
-                                // Create new session
+                                // Check for :note (n-o-t-e) first
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(o_key)) = event::read() {
+                                        if let KeyCode::Char('o') = o_key.code {
+                                            // Got :no, check for :not
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(t_key)) = event::read() {
+                                                    if let KeyCode::Char('t') = t_key.code {
+                                                        // Got :not, check for :note
+                                                        if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                            if let Ok(crossterm::event::Event::Key(e_key)) = event::read() {
+                                                                if let KeyCode::Char('e') = e_key.code {
+                                                                    // Got :note - toggle notes view
+                                                                    if let Some(ref sid) = self.state.current_session_id {
+                                                                        self.state.notes_mode = !self.state.notes_mode;
+                                                                        if self.state.notes_mode {
+                                                                            self.state.notes_session_id = Some(sid.clone());
+                                                                            // Request notes list
+                                                                            let client = self.gateway_client.clone();
+                                                                            let sid_clone = sid.clone();
+                                                                            tokio::spawn(async move {
+                                                                                let client = client.read().await;
+                                                                                if let Err(e) = client.list_session_notes(&sid_clone).await {
+                                                                                    error!("Failed to load session notes: {}", e);
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                    self.state.input_buffer = String::new();
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                        }
+                                                        // Not :note, add 'not' to buffer
+                                                        if self.state.active_panel == 2 {
+                                                            self.state.input_buffer.push('n');
+                                                            self.state.input_buffer.push('o');
+                                                            self.state.input_buffer.push('t');
+                                                            self.state.completion.reset();
+                                                        }
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :not, add 'no' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('n');
+                                                self.state.input_buffer.push('o');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // Not :note, treat as :n (new session)
                                 let client = self.gateway_client.clone();
                                 tokio::spawn(async move {
                                     let client = client.read().await;
@@ -755,6 +815,51 @@ impl TuiApp {
                                         error!("Failed to create session: {}", e);
                                     }
                                 });
+                            }
+                            KeyCode::Char('p') => {
+                                // Check for :pin (p-i-n)
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(i_key)) = event::read() {
+                                        if let KeyCode::Char('i') = i_key.code {
+                                            // Got :pi, check for :pin
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(n_key)) = event::read() {
+                                                    if let KeyCode::Char('n') = n_key.code {
+                                                        // Got :pin - toggle notes view
+                                                        if let Some(ref sid) = self.state.current_session_id {
+                                                            self.state.notes_mode = !self.state.notes_mode;
+                                                            if self.state.notes_mode {
+                                                                self.state.notes_session_id = Some(sid.clone());
+                                                                let client = self.gateway_client.clone();
+                                                                let sid_clone = sid.clone();
+                                                                tokio::spawn(async move {
+                                                                    let client = client.read().await;
+                                                                    if let Err(e) = client.list_session_notes(&sid_clone).await {
+                                                                        error!("Failed to load session notes: {}", e);
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                        self.state.input_buffer = String::new();
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :pin, add 'pi' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('p');
+                                                self.state.input_buffer.push('i');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // Single 'p' - just add to buffer
+                                if self.state.active_panel == 2 {
+                                    self.state.input_buffer.push('p');
+                                    self.state.completion.reset();
+                                }
                             }
                             KeyCode::Char('d') => {
                                 // Delete current session (if not main)
@@ -934,6 +1039,9 @@ impl TuiApp {
                         self.state.reset_input_history_navigation();
                     } else if self.state.search_mode {
                         self.state.exit_search_mode();
+                    } else if self.state.notes_mode {
+                        self.state.notes_mode = false;
+                        self.state.notes_content = None;
                     } else {
                         return Ok(false); // Quit
                     }
@@ -982,7 +1090,11 @@ impl TuiApp {
 
         // Draw panels
         crate::tui::components::draw_sessions_panel(f, main_chunks[0], &self.state);
-        crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
+        if self.state.notes_mode {
+            crate::tui::components::draw_notes_panel(f, msg_chunks[0], &self.state);
+        } else {
+            crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
+        }
         crate::tui::components::draw_input_panel(f, msg_chunks[1], &self.state);
         crate::tui::components::draw_help_bar(f, chunks[2]);
 
@@ -1262,6 +1374,38 @@ impl TuiApp {
         f.render_widget(Clear, box_rect);
         f.render_widget(paragraph, box_rect);
     }
+}
+
+/// Format session notes for display in TUI
+fn format_notes_display(notes: &[crate::tui::gateway_client::SessionNoteInfo]) -> String {
+    if notes.is_empty() {
+        return "No notes for this session.\n\nUse :note to reload or :note again to exit.".to_string();
+    }
+    
+    let mut result = String::new();
+    result.push_str(&format!("{} Session Notes ({} notes)\n", "═".repeat(30), notes.len()));
+    result.push_str(&"─".repeat(50));
+    result.push('\n');
+    
+    for note in notes {
+        result.push_str(&format!("{} {}\n", if note.pinned { "📌" } else { "  " }, note.id));
+        if !note.content.is_empty() {
+            let preview = if note.content.len() > 200 {
+                format!("{}...", &note.content[..200])
+            } else {
+                note.content.clone()
+            };
+            result.push_str(&format!("  {}\n", preview.replace('\n', "\n  ")));
+        }
+        if !note.tags.is_empty() {
+            result.push_str(&format!("  Tags: {}\n", note.tags.join(", ")));
+        }
+        result.push_str(&"─".repeat(50));
+        result.push('\n');
+    }
+    
+    result.push_str("\nPress :note or :pin to exit notes view.");
+    result
 }
 
 /// Run the TUI application (blocking)

@@ -193,6 +193,38 @@ pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw the notes panel overlay
+pub fn draw_notes_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = if let Some(ref sid) = state.notes_session_id {
+        if sid == "main" {
+            " Notes - Main Session ".to_string()
+        } else {
+            format!(" Notes - {} ", sid)
+        }
+    } else {
+        " Notes ".to_string()
+    };
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .style(Style::default().bg(Color::Rgb(20, 20, 35)));
+
+    let content = state.notes_content.as_deref()
+        .unwrap_or("Loading notes...\n\nPress :note or :pin again to exit.");
+
+    let lines: Vec<Line> = content.lines()
+        .map(Line::from)
+        .collect();
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the input panel with enhanced features
 pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title = if state.input_buffer.starts_with(':') {

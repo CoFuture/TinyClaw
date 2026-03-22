@@ -65,6 +65,17 @@ pub enum TuiGatewayEvent {
     TurnCancelled { session_id: String },
     /// Circuit breaker state received
     CircuitBreakerState(String),
+    /// Session notes loaded
+    SessionNotesLoaded { session_id: String, notes: Vec<SessionNoteInfo> },
+}
+
+/// Session note info
+#[derive(Debug, Clone)]
+pub struct SessionNoteInfo {
+    pub id: String,
+    pub content: String,
+    pub pinned: bool,
+    pub tags: Vec<String>,
 }
 
 /// Session info from gateway
@@ -296,6 +307,36 @@ impl TuiGatewayClient {
                             let _ = event_tx.send(TuiGatewayEvent::CircuitBreakerState(state_str.to_string()));
                         }
                     }
+                    // Check if this is a session.notes.list response
+                    if let Some(notes) = result_obj.get("notes") {
+                        if let Some(notes_arr) = notes.as_array() {
+                            let session_id = result_obj.get("session_id")
+                                .and_then(|v| v.as_str())
+                                .map(String::from)
+                                .unwrap_or_default();
+                            let note_infos: Vec<SessionNoteInfo> = notes_arr
+                                .iter()
+                                .filter_map(|n| {
+                                    let obj = n.as_object()?;
+                                    let id = obj.get("id")?.as_str()?.to_string();
+                                    let content = obj.get("content_preview")
+                                        .and_then(|v| v.as_str())
+                                        .map(String::from)
+                                        .unwrap_or_default();
+                                    let pinned = obj.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    let tags = obj.get("tags")
+                                        .and_then(|v| v.as_array())
+                                        .map(|arr| arr.iter().filter_map(|t| t.as_str().map(String::from)).collect())
+                                        .unwrap_or_default();
+                                    Some(SessionNoteInfo { id, content, pinned, tags })
+                                })
+                                .collect();
+                            let _ = event_tx.send(TuiGatewayEvent::SessionNotesLoaded {
+                                session_id,
+                                notes: note_infos,
+                            });
+                        }
+                    }
                 } else if resp.result.is_string() {
                     // Pong response
                     let _ = event_tx.send(TuiGatewayEvent::Pong);
@@ -470,6 +511,56 @@ impl TuiGatewayClient {
             method: methods::SESSION_CANCEL.to_string(),
             params: serde_json::json!({
                 "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// List session notes
+    pub async fn list_session_notes(&self, session_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-notes-list-{}", session_id)),
+            method: methods::SESSION_NOTES_LIST.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Add a session note (for future use)
+    #[allow(dead_code)]
+    pub async fn add_session_note(&self, session_id: &str, content: &str, tags: Vec<String>) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-note-add-{}", session_id)),
+            method: methods::SESSION_NOTES_ADD.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "content": content,
+                "tags": tags
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Delete a session note
+    #[allow(dead_code)]
+    pub async fn delete_session_note(&self, session_id: &str, note_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-note-del-{}-{}", session_id, note_id)),
+            method: methods::SESSION_NOTES_DELETE.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "noteId": note_id
             }),
         });
 

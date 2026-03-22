@@ -500,6 +500,63 @@
             margin-top: 8px;
         }
         
+        /* Session Notes Panel */
+        .notes-panel {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .note-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #00d9ff;
+        }
+        .note-item.pinned {
+            border-left-color: #ffa502;
+            background: rgba(255,165,2,0.08);
+        }
+        .note-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .note-pinned-badge {
+            color: #ffa502;
+            font-size: 12px;
+        }
+        .note-time {
+            color: #666;
+            font-size: 11px;
+        }
+        .note-content {
+            color: #ccc;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 8px;
+        }
+        .note-tags {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .note-tag {
+            background: rgba(255,165,2,0.15);
+            color: #ffa502;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .note-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
         /* Modal */
         .modal-overlay {
             display: none;
@@ -1215,6 +1272,23 @@
             </div>
         </div>
         
+        <!-- Session Notes Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📝 会话笔记 <span class="tool-count-badge" id="notesCount">-</span></h2>
+            <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                <label style="color: #888; font-size: 13px;">会话:
+                    <select id="notesSessionSelect" onchange="loadSessionNotes(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-left: 5px;">
+                        <option value="">-- 选择会话 --</option>
+                    </select>
+                </label>
+                <button class="btn" onclick="showAddNoteModal()">➕ 添加笔记</button>
+                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="refreshNotesSessionList()">🔄 刷新会话列表</button>
+            </div>
+            <div class="notes-panel" id="notesPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">选择会话查看笔记</div>
+            </div>
+        </div>
+        
         <!-- Agent Tools Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>🛠️ 可用工具 <span class="tool-count-badge" id="toolCount">-</span></h2>
@@ -1442,6 +1516,13 @@
                 const sessions = await fetchJSON(API_BASE + '/api/sessions');
                 renderSessions(sessions.sessions || []);
                 updateChatSessionSelector(sessions.sessions || []);
+                
+                // Populate notes session selector
+                try {
+                    refreshNotesSessionList();
+                } catch (e) {
+                    // Notes API might not be available
+                }
                 
                 // Fetch tools list
                 try {
@@ -1850,6 +1931,256 @@
                     </div>
                 `;
             }).join('');
+        }
+        
+        // Session Notes Management
+        
+        function renderSessionNotes(notes) {
+            const panel = document.getElementById('notesPanel');
+            const countBadge = document.getElementById('notesCount');
+            countBadge.textContent = notes.length;
+            
+            if (!notes || notes.length === 0) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无笔记，点击"添加笔记"创建</div>';
+                return;
+            }
+            
+            panel.innerHTML = notes.map(n => {
+                const createdDate = new Date(n.created_at).toLocaleString('zh-CN');
+                const updatedDate = new Date(n.updated_at).toLocaleString('zh-CN');
+                const tagsHtml = n.tags && n.tags.length 
+                    ? `<div class="note-tags">${n.tags.map(t => `<span class="note-tag">${escapeHtml(t)}</span>`).join('')}</div>` 
+                    : '';
+                
+                return `
+                    <div class="note-item ${n.pinned ? 'pinned' : ''}">
+                        <div class="note-header">
+                            <span class="note-pinned-badge">${n.pinned ? '📌 置顶' : ''}</span>
+                            <span class="note-time">${updatedDate}</span>
+                        </div>
+                        <div class="note-content">${escapeHtml(n.content)}</div>
+                        ${tagsHtml}
+                        <div class="note-actions">
+                            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="pinSessionNote('${n.id}', ${n.pinned})">${n.pinned ? '📌 取消置顶' : '📌 置顶'}</button>
+                            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="showEditNoteModal('${n.id}', ${JSON.stringify(n.content).replace(/"/g, '&quot;')}, ${JSON.stringify(n.tags || []).replace(/"/g, '&quot;')})">✏️ 编辑</button>
+                            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; color: #ff5252;" onclick="deleteSessionNote('${n.id}')">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function loadSessionNotes(sessionId) {
+            const panel = document.getElementById('notesPanel');
+            if (!sessionId) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">选择会话查看笔记</div>';
+                document.getElementById('notesCount').textContent = '-';
+                return;
+            }
+            
+            panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">加载中...</div>';
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/notes');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    renderSessionNotes(data.notes || []);
+                } else {
+                    panel.innerHTML = '<div style="color: #ff5252; padding: 20px; text-align: center;">加载笔记失败</div>';
+                }
+            } catch (e) {
+                panel.innerHTML = '<div style="color: #ff5252; padding: 20px; text-align: center;">加载笔记出错: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        
+        function showAddNoteModal() {
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            if (!sessionId) {
+                alert('请先选择一个会话');
+                return;
+            }
+            
+            const modalHtml = `
+                <div class="modal-overlay active" id="noteModal">
+                    <div class="modal" style="max-width: 500px;">
+                        <h3>📝 添加笔记</h3>
+                        <div class="form-group">
+                            <label>笔记内容</label>
+                            <textarea id="noteContent" rows="5" placeholder="输入笔记内容..." style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>标签 (逗号分隔)</label>
+                            <input type="text" id="noteTags" placeholder="例如: 重要, 项目A" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; border-radius: 4px;">
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" onclick="closeNoteModal()">取消</button>
+                            <button class="btn" onclick="createSessionNote()">添加</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const existing = document.getElementById('noteModal');
+            if (existing) existing.remove();
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        function showEditNoteModal(noteId, content, tags) {
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            const tagsStr = tags ? tags.join(', ') : '';
+            
+            const modalHtml = `
+                <div class="modal-overlay active" id="noteModal">
+                    <div class="modal" style="max-width: 500px;">
+                        <h3>📝 编辑笔记</h3>
+                        <div class="form-group">
+                            <label>笔记内容</label>
+                            <textarea id="noteContent" rows="5" placeholder="输入笔记内容..." style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; border-radius: 4px; resize: vertical; font-family: inherit;">${escapeHtml(content)}</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>标签 (逗号分隔)</label>
+                            <input type="text" id="noteTags" value="${escapeHtml(tagsStr)}" placeholder="例如: 重要, 项目A" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; border-radius: 4px;">
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" onclick="closeNoteModal()">取消</button>
+                            <button class="btn" onclick="updateSessionNote('${noteId}')">保存</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const existing = document.getElementById('noteModal');
+            if (existing) existing.remove();
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        function closeNoteModal() {
+            const modal = document.getElementById('noteModal');
+            if (modal) modal.remove();
+        }
+        
+        async function createSessionNote() {
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            const content = document.getElementById('noteContent').value.trim();
+            const tagsStr = document.getElementById('noteTags').value.trim();
+            
+            if (!content) {
+                alert('请输入笔记内容');
+                return;
+            }
+            
+            const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, tags })
+                });
+                
+                if (resp.ok) {
+                    closeNoteModal();
+                    loadSessionNotes(sessionId);
+                } else {
+                    const err = await resp.json();
+                    alert('添加笔记失败: ' + (err.error || err.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('添加笔记失败: ' + e.message);
+            }
+        }
+        
+        async function updateSessionNote(noteId) {
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            const content = document.getElementById('noteContent').value.trim();
+            const tagsStr = document.getElementById('noteTags').value.trim();
+            
+            if (!content) {
+                alert('请输入笔记内容');
+                return;
+            }
+            
+            const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/notes/' + noteId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, tags })
+                });
+                
+                if (resp.ok) {
+                    closeNoteModal();
+                    loadSessionNotes(sessionId);
+                } else {
+                    const err = await resp.json();
+                    alert('更新笔记失败: ' + (err.error || err.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('更新笔记失败: ' + e.message);
+            }
+        }
+        
+        async function pinSessionNote(noteId, currentlyPinned) {
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            const newPinned = !currentlyPinned;
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/notes/' + noteId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pinned: newPinned })
+                });
+                if (resp.ok) {
+                    loadSessionNotes(sessionId);
+                } else {
+                    alert('置顶操作失败');
+                }
+            } catch (e) {
+                alert('置顶失败: ' + e.message);
+            }
+        }
+        
+        async function deleteSessionNote(noteId) {
+            if (!confirm('确定要删除这条笔记吗？')) return;
+            
+            const sessionId = document.getElementById('notesSessionSelect').value;
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/notes/' + noteId, {
+                    method: 'DELETE'
+                });
+                
+                if (resp.ok) {
+                    loadSessionNotes(sessionId);
+                } else {
+                    const err = await resp.json();
+                    alert('删除笔记失败: ' + (err.error || err.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('删除笔记失败: ' + e.message);
+            }
+        }
+        
+        async function refreshNotesSessionList() {
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const select = document.getElementById('notesSessionSelect');
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">-- 选择会话 --</option>';
+                    if (data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            const option = document.createElement('option');
+                            option.value = s.id;
+                            option.textContent = (s.label || s.id) + ' (' + (s.messageCount || 0) + ' 条消息)';
+                            select.appendChild(option);
+                        });
+                    }
+                    if (currentValue) select.value = currentValue;
+                }
+            } catch (e) {
+                console.error('Failed to refresh session list:', e);
+            }
         }
         
         function showCreateScheduledModal() {

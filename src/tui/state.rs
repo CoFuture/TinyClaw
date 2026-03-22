@@ -147,6 +147,18 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Cancel ongoing turn",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":note",
+        aliases: &["notes"],
+        description: "View session notes",
+        category: CommandCategory::Session,
+    },
+    TuiCommandMeta {
+        full_name: ":pin",
+        aliases: &[],
+        description: "Pin current session notes",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -218,6 +230,12 @@ pub struct AppState {
     pub search_results: Vec<usize>,
     /// Current highlighted search result index (in search_results)
     pub search_index: Option<usize>,
+    /// Whether we're in notes viewing mode
+    pub notes_mode: bool,
+    /// Session ID for current notes view
+    pub notes_session_id: Option<String>,
+    /// Cached notes content for display
+    pub notes_content: Option<String>,
 }
 
 impl Default for AppState {
@@ -246,6 +264,9 @@ impl Default for AppState {
             search_query: String::new(),
             search_results: Vec::new(),
             search_index: None,
+            notes_mode: false,
+            notes_session_id: None,
+            notes_content: None,
         }
     }
 }
