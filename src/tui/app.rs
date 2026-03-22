@@ -467,6 +467,12 @@ impl TuiApp {
                     self.state.notes_content = Some(content);
                 }
             }
+            TuiGatewayEvent::SessionInstructionsLoaded { session_id, instructions } => {
+                if self.state.instructions_mode && self.state.instructions_session_id.as_ref() == Some(&session_id) {
+                    self.state.current_instructions = instructions.clone();
+                    self.state.input_buffer = instructions.unwrap_or_default();
+                }
+            }
         }
     }
 
@@ -573,6 +579,27 @@ impl TuiApp {
                         }
                         self.state.rename_mode = false;
                         self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle instructions mode
+                    if self.state.instructions_mode {
+                        if let Some(ref session_id) = self.state.instructions_session_id {
+                            let instructions = self.state.input_buffer.trim().to_string();
+                            let instructions_opt = if instructions.is_empty() { None } else { Some(instructions) };
+                            let client = self.gateway_client.clone();
+                            let sid = session_id.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.set_session_instructions(&sid, instructions_opt.as_deref()).await {
+                                    error!("Failed to set session instructions: {}", e);
+                                }
+                            });
+                        }
+                        self.state.instructions_mode = false;
+                        self.state.instructions_session_id = None;
+                        self.state.input_buffer.clear();
+                        self.state.current_instructions = None;
                         return Ok(true);
                     }
                     
@@ -861,6 +888,85 @@ impl TuiApp {
                                     self.state.completion.reset();
                                 }
                             }
+                            KeyCode::Char('i') => {
+                                // Check for :instr (i-n-s-t-r)
+                                // First check for 'n' after 'i'
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(n_key)) = event::read() {
+                                        if let KeyCode::Char('n') = n_key.code {
+                                            // Got :in, check for :ins
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(s_key)) = event::read() {
+                                                    if let KeyCode::Char('s') = s_key.code {
+                                                        // Got :ins, check for :inst
+                                                        if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                            if let Ok(crossterm::event::Event::Key(t_key)) = event::read() {
+                                                                if let KeyCode::Char('t') = t_key.code {
+                                                                    // Got :inst, check for :instr
+                                                                    if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                        if let Ok(crossterm::event::Event::Key(r_key)) = event::read() {
+                                                                            if let KeyCode::Char('r') = r_key.code {
+                                                                                // Got :instr - toggle instructions mode
+                                                                                if let Some(ref sid) = self.state.current_session_id {
+                                                                                    self.state.instructions_mode = !self.state.instructions_mode;
+                                                                                    if self.state.instructions_mode {
+                                                                                        self.state.instructions_session_id = Some(sid.clone());
+                                                                                        self.state.input_buffer.clear();
+                                                                                        // Request current instructions
+                                                                                        let client = self.gateway_client.clone();
+                                                                                        let sid_clone = sid.clone();
+                                                                                        tokio::spawn(async move {
+                                                                                            let client = client.read().await;
+                                                                                            if let Err(e) = client.get_session_instructions(&sid_clone).await {
+                                                                                                error!("Failed to load session instructions: {}", e);
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                                self.state.input_buffer = String::new();
+                                                                                return Ok(true);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    // Not :instr, add 'inst' to buffer
+                                                                    if self.state.active_panel == 2 {
+                                                                        self.state.input_buffer.push('i');
+                                                                        self.state.input_buffer.push('n');
+                                                                        self.state.input_buffer.push('s');
+                                                                        self.state.input_buffer.push('t');
+                                                                        self.state.completion.reset();
+                                                                    }
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                        }
+                                                        // Not :inst, add 'ins' to buffer
+                                                        if self.state.active_panel == 2 {
+                                                            self.state.input_buffer.push('i');
+                                                            self.state.input_buffer.push('n');
+                                                            self.state.input_buffer.push('s');
+                                                            self.state.completion.reset();
+                                                        }
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :ins, add 'in' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('i');
+                                                self.state.input_buffer.push('n');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // Single 'i' - just add to buffer
+                                if self.state.active_panel == 2 {
+                                    self.state.input_buffer.push('i');
+                                    self.state.completion.reset();
+                                }
+                            }
                             KeyCode::Char('d') => {
                                 // Delete current session (if not main)
                                 if let Some(ref session_id) = self.state.current_session_id {
@@ -1042,6 +1148,11 @@ impl TuiApp {
                     } else if self.state.notes_mode {
                         self.state.notes_mode = false;
                         self.state.notes_content = None;
+                    } else if self.state.instructions_mode {
+                        self.state.instructions_mode = false;
+                        self.state.instructions_session_id = None;
+                        self.state.input_buffer.clear();
+                        self.state.current_instructions = None;
                     } else {
                         return Ok(false); // Quit
                     }
@@ -1090,7 +1201,9 @@ impl TuiApp {
 
         // Draw panels
         crate::tui::components::draw_sessions_panel(f, main_chunks[0], &self.state);
-        if self.state.notes_mode {
+        if self.state.instructions_mode {
+            crate::tui::components::draw_instructions_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.notes_mode {
             crate::tui::components::draw_notes_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);

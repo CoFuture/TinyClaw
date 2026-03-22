@@ -136,6 +136,8 @@ pub async fn handle_request(
         methods::SESSIONS_DELETE => handle_sessions_delete(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_RENAME => handle_session_rename(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_CANCEL => handle_session_cancel(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_INSTRUCTIONS_GET => handle_session_instructions_get(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_INSTRUCTIONS_SET => handle_session_instructions_set(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
         methods::AGENT_SPAWN => handle_agent_spawn(ctx, jsonrpc_id.clone(), params).await,
         methods::EXEC => handle_exec(request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -350,6 +352,13 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<St
         parts.push(notes_part);
     }
 
+    // 3. Session instructions (highest priority - user-defined persona/instructions)
+    if let Some(instr) = ctx.session_manager.get_instructions(session_key) {
+        if !instr.trim().is_empty() {
+            parts.push(format!("## Session Instructions\n\n{}\n", instr.trim()));
+        }
+    }
+
     if parts.is_empty() {
         None
     } else {
@@ -378,6 +387,7 @@ async fn handle_sessions_list(
             serde_json::json!({
                 "id": session.id,
                 "label": session.label,
+                "instructions": session.instructions,
                 "kind": match &session.kind {
                     crate::gateway::session::SessionKind::Main => "main",
                     crate::gateway::session::SessionKind::Isolated => "isolated",
@@ -522,6 +532,56 @@ async fn handle_session_cancel(
         "success": true,
         "sessionId": session_key,
         "cancelled": was_active,
+    }))
+}
+
+/// Handle session.instructions.get - get session instructions
+async fn handle_session_instructions_get(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+
+    let instructions = ctx.session_manager.get_instructions(session_key);
+    
+    Ok(serde_json::json!({
+        "sessionId": session_key,
+        "instructions": instructions,
+    }))
+}
+
+/// Handle session.instructions.set - set session instructions
+async fn handle_session_instructions_set(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+    
+    let instructions = params
+        .get("instructions")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let success = ctx.session_manager.set_instructions(session_key, instructions.clone());
+    
+    if success {
+        info!(session_id = %session_key, "Session instructions updated");
+    } else {
+        debug!(session_id = %session_key, "Session not found for instructions update");
+    }
+
+    Ok(serde_json::json!({
+        "success": success,
+        "sessionId": session_key,
+        "instructions": instructions,
     }))
 }
 

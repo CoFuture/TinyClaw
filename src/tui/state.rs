@@ -159,6 +159,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Pin current session notes",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":instr",
+        aliases: &["instructions"],
+        description: "Edit session instructions",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -236,6 +242,12 @@ pub struct AppState {
     pub notes_session_id: Option<String>,
     /// Cached notes content for display
     pub notes_content: Option<String>,
+    /// Whether we're in instructions editing mode
+    pub instructions_mode: bool,
+    /// Session ID for current instructions editing
+    pub instructions_session_id: Option<String>,
+    /// Current instructions being edited (None = loading/fetching)
+    pub current_instructions: Option<String>,
 }
 
 impl Default for AppState {
@@ -267,6 +279,9 @@ impl Default for AppState {
             notes_mode: false,
             notes_session_id: None,
             notes_content: None,
+            instructions_mode: false,
+            instructions_session_id: None,
+            current_instructions: None,
         }
     }
 }

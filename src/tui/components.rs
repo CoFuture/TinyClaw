@@ -225,9 +225,81 @@ pub fn draw_notes_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw the instructions panel (session agent instructions editor)
+pub fn draw_instructions_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = if let Some(ref sid) = state.instructions_session_id {
+        if sid == "main" {
+            " Instructions - Main Session ".to_string()
+        } else {
+            format!(" Instructions - {} ", sid)
+        }
+    } else {
+        " Instructions ".to_string()
+    };
+    
+    let block = Block::default()
+        .title(title_text)
+        .title_style(Style::default().fg(Color::Cyan))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let instructions = state.current_instructions.as_deref().unwrap_or("");
+    
+    let intro = vec![
+        Line::from(vec![
+            Span::styled("Session Instructions", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("Set instructions that modify how the AI behaves in this session."),
+        ]),
+        Line::from(vec![
+            Span::raw("Example: "),
+            Span::styled("\"You are a code reviewer. Focus on security.\"", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Current instructions:", Style::default().fg(Color::Yellow)),
+        ]),
+    ];
+    
+    let current: Vec<Line> = if instructions.is_empty() {
+        vec![Line::from(vec![
+            Span::styled("(none - AI uses default behavior)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ])]
+    } else {
+        instructions.lines()
+            .map(|l| Line::from(vec![Span::raw(l.to_string())]))
+            .collect()
+    };
+    
+    let footer = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Type new instructions below and press Enter to save.", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("Clear all text and Enter to remove instructions.", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("Press Esc to cancel.", Style::default().fg(Color::DarkGray)),
+        ]),
+    ];
+    
+    let all_lines: Vec<Line> = intro.into_iter().chain(current).chain(footer).collect();
+
+    let paragraph = Paragraph::new(Text::from(all_lines))
+        .block(block)
+        .alignment(Alignment::Left);
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the input panel with enhanced features
 pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let title = if state.input_buffer.starts_with(':') {
+    let title = if state.instructions_mode {
+        " Instructions "
+    } else if state.input_buffer.starts_with(':') {
         " Command "
     } else {
         " Input "

@@ -237,6 +237,10 @@ pub mod methods {
     pub const SESSION_RENAME: &str = "session.rename";
     /// Session cancel (cancel ongoing turn)
     pub const SESSION_CANCEL: &str = "session.cancel";
+    /// Session instructions get
+    pub const SESSION_INSTRUCTIONS_GET: &str = "session.instructions.get";
+    /// Session instructions set
+    pub const SESSION_INSTRUCTIONS_SET: &str = "session.instructions.set";
     /// Exec command
     pub const EXEC: &str = "exec";
     /// Tool execute

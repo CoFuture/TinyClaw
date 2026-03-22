@@ -25,6 +25,10 @@ pub struct Session {
     /// Session metadata
     #[allow(dead_code)]
     pub metadata: HashMap<String, serde_json::Value>,
+    /// Per-session agent instructions (injected into system prompt)
+    /// Example: "You are a code reviewer. Focus on performance and security."
+    #[serde(default)]
+    pub instructions: Option<String>,
 }
 
 /// Session kind
@@ -49,6 +53,7 @@ impl Session {
             created_at: now,
             last_active: now,
             metadata: HashMap::new(),
+            instructions: None,
         }
     }
 
@@ -123,6 +128,28 @@ impl SessionManager {
         let sessions = self.sessions.write();
         if let Some(session) = sessions.get(id) {
             session.write().label = new_label;
+            session.write().last_active = chrono::Utc::now();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get session instructions
+    /// Returns the instructions if set, None otherwise
+    pub fn get_instructions(&self, id: &str) -> Option<String> {
+        self.sessions
+            .read()
+            .get(id)
+            .and_then(|s| s.read().instructions.clone())
+    }
+
+    /// Set session instructions
+    /// Returns true if successful, false if session not found
+    pub fn set_instructions(&self, id: &str, instructions: Option<String>) -> bool {
+        let sessions = self.sessions.write();
+        if let Some(session) = sessions.get(id) {
+            session.write().instructions = instructions;
             session.write().last_active = chrono::Utc::now();
             true
         } else {

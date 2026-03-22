@@ -804,6 +804,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/:session_id/notes", post(session_notes_add))
         .route("/api/sessions/:session_id/notes/:note_id", axum::routing::put(session_notes_update))
         .route("/api/sessions/:session_id/notes/:note_id", axum::routing::delete(session_notes_delete))
+        // Session instructions API
+        .route("/api/sessions/:session_id/instructions", get(session_instructions_get))
+        .route("/api/sessions/:session_id/instructions", axum::routing::put(session_instructions_set))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1416,5 +1419,35 @@ async fn session_notes_delete(
         "success": deleted,
         "sessionId": session_id,
         "noteId": note_id,
+    }))
+}
+
+/// Get session instructions
+async fn session_instructions_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let instructions = state.session_manager.get_instructions(&session_id);
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "instructions": instructions,
+    }))
+}
+
+/// Set session instructions
+async fn session_instructions_set(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let instructions = payload
+        .get("instructions")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let success = state.session_manager.set_instructions(&session_id, instructions.clone());
+    Json(serde_json::json!({
+        "success": success,
+        "sessionId": session_id,
+        "instructions": instructions,
     }))
 }

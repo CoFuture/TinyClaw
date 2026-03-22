@@ -67,6 +67,8 @@ pub enum TuiGatewayEvent {
     CircuitBreakerState(String),
     /// Session notes loaded
     SessionNotesLoaded { session_id: String, notes: Vec<SessionNoteInfo> },
+    /// Session instructions loaded
+    SessionInstructionsLoaded { session_id: String, instructions: Option<String> },
 }
 
 /// Session note info
@@ -337,6 +339,18 @@ impl TuiGatewayClient {
                             });
                         }
                     }
+                    // Check if this is a session.instructions.get response
+                    if let Some(instr) = result_obj.get("instructions") {
+                        let session_id = result_obj.get("sessionId")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                            .unwrap_or_default();
+                        let instructions = instr.as_str().map(String::from);
+                        let _ = event_tx.send(TuiGatewayEvent::SessionInstructionsLoaded {
+                            session_id,
+                            instructions,
+                        });
+                    }
                 } else if resp.result.is_string() {
                     // Pong response
                     let _ = event_tx.send(TuiGatewayEvent::Pong);
@@ -511,6 +525,37 @@ impl TuiGatewayClient {
             method: methods::SESSION_CANCEL.to_string(),
             params: serde_json::json!({
                 "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get session instructions
+    pub async fn get_session_instructions(&self, session_id: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-instr-get-{}", session_id)),
+            method: methods::SESSION_INSTRUCTIONS_GET.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Set session instructions
+    pub async fn set_session_instructions(&self, session_id: &str, instructions: Option<&str>) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-instr-set-{}", session_id)),
+            method: methods::SESSION_INSTRUCTIONS_SET.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "instructions": instructions
             }),
         });
 

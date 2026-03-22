@@ -419,6 +419,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v6.6.0 | Session Instructions 会话指令 - 每个会话可设置独立的 AI 行为指令，注入到 system prompt 中；新增 `Session.instructions` 字段、SessionManager 方法、Gateway JSON-RPC (`session.instructions.get/set`)、HTTP REST API (`/api/sessions/:id/instructions`)、TUI `:instr` 命令、draw_instructions_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
 | v6.5.0 | WebUI 会话笔记面板 + TUI 笔记命令 - admin.html 新增会话笔记管理面板：会话选择下拉框、笔记列表展示、CRUD 操作、置顶/标签支持；TUI 新增 `:note` / `:notes` / `:pin` 命令查看笔记；AppState 新增 notes_mode 等字段；Gateway 客户端新增 list_session_notes 方法；SessionNotesLoaded 事件处理；draw_notes_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
 | v6.4.0 | Session Notes 后端 - 新增 `agent/session_notes.rs`：SessionNote/SessionNoteSummary/SessionNotesManager 结构，支持 content/pinned/tags 字段，JSON 持久化到 ~/.config/tiny_claw/session_notes/；Gateway JSON-RPC 集成 session.notes.list/add/update/delete 方法；HTTP REST API 完整支持；cargo clippy 0 警告；cargo test 251 tests |
 | v6.3.0 | 会话上下文持久化 + TUI 增强 - 新增 `preferences.rs` 模块：`UserPreferences`/`PreferencesManager` 结构，支持 user_name、language、timezone、default_skills、agent_persona 等字段；JSON 持久化到 `~/.config/tiny_claw/preferences.json`；HTTP API `/api/preferences` GET/PATCH；TUI 增强：gg 滚动到底部，`:f`/Ctrl+F 搜索模式，n/N 导航，实时匹配计数；cargo clippy 0 警告；cargo test 241 tests |
@@ -533,6 +534,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - `SessionNotesLoaded` 事件处理和 `format_notes_display()` 格式化函数
   - Notes 面板渲染：`draw_notes_panel()` 组件
   - Escape 键退出笔记模式
+- cargo clippy 0 警告
+- cargo test 251 tests
+
+**下一步**: 继续完善 Agent 能力、更多交互体验优化
+
+---
+
+### v6.6.0 (已完成 ✅)
+
+**完成事项**:
+- **Session Instructions (会话指令)** - 每个会话可设置独立的 AI 行为指令
+  - 新增 `Session.instructions: Option<String>` 字段
+  - SessionManager 新增 `get_instructions()` / `set_instructions()` 方法
+  - Gateway JSON-RPC: `session.instructions.get` / `session.instructions.set` 方法
+  - HTTP REST API: `GET/PUT /api/sessions/:session_id/instructions`
+  - TUI 命令: `:instr` / `:instructions` 进入/退出指令编辑模式
+  - 输入 Enter 保存指令，Esc 取消
+  - 指令内容注入到 system prompt 中（优先级高于 skills 和 notes）
+  - Session 列表 API 响应中增加 `instructions` 字段
+- **TUI 交互优化**
+  - AppState 新增 `instructions_mode`、`instructions_session_id`、`current_instructions` 字段
+  - 新增 `draw_instructions_panel()` 组件（青绿色主题）
+  - Gateway 客户端新增 `get_session_instructions()` / `set_session_instructions()` 方法
+  - `SessionInstructionsLoaded` 事件处理
+  - TUI_COMMANDS 新增 `:instr` / `:instructions` 命令元数据
 - cargo clippy 0 警告
 - cargo test 251 tests
 
