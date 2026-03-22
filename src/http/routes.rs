@@ -671,6 +671,11 @@ async fn sse_events(
                                     Event::TaskCreated { .. } | Event::TaskStarted { .. } => true,
                                     Event::TaskProgress { .. } | Event::TaskCompleted { .. } => true,
                                     Event::TaskFailed { .. } | Event::TaskCancelled { .. } => true,
+                                    Event::ScheduledTaskCreated { .. } => true,
+                                    Event::ScheduledTaskFired { .. } => true,
+                                    Event::ScheduledTaskFailed { .. } => true,
+                                    Event::ScheduledTaskUpdated { .. } => true,
+                                    Event::ScheduledTaskDeleted { .. } => true,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -697,6 +702,11 @@ async fn sse_events(
                                     Event::TaskCompleted { .. } => "task.completed",
                                     Event::TaskFailed { .. } => "task.failed",
                                     Event::TaskCancelled { .. } => "task.cancelled",
+                                    Event::ScheduledTaskCreated { .. } => "scheduled.created",
+                                    Event::ScheduledTaskFired { .. } => "scheduled.fired",
+                                    Event::ScheduledTaskFailed { .. } => "scheduled.failed",
+                                    Event::ScheduledTaskUpdated { .. } => "scheduled.updated",
+                                    Event::ScheduledTaskDeleted { .. } => "scheduled.deleted",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",

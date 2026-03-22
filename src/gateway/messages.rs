@@ -7,7 +7,7 @@ use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
 use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
-use crate::agent::{Agent, SessionSkillManager, TaskManager};
+use crate::agent::{Agent, SessionSkillManager, TaskManager, Scheduler};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -57,6 +57,7 @@ pub struct HandlerContext {
     pub shutdown_tx: broadcast::Sender<()>,
     pub skill_manager: Arc<SessionSkillManager>,
     pub task_manager: Arc<TaskManager>,
+    pub scheduler: Arc<Scheduler>,
 }
 
 impl HandlerContext {
@@ -70,6 +71,7 @@ impl HandlerContext {
         shutdown_tx: broadcast::Sender<()>,
         skill_manager: Arc<SessionSkillManager>,
         task_manager: Arc<TaskManager>,
+        scheduler: Arc<Scheduler>,
     ) -> Self {
         Self {
             session_manager,
@@ -80,6 +82,7 @@ impl HandlerContext {
             shutdown_tx,
             skill_manager,
             task_manager,
+            scheduler,
         }
     }
 }
@@ -123,6 +126,15 @@ pub async fn handle_request(
         methods::TASK_START => handle_task_start(ctx, jsonrpc_id.clone(), params).await,
         methods::TASK_CANCEL => handle_task_cancel(ctx, jsonrpc_id.clone(), params).await,
         methods::TASK_REMOVE => handle_task_remove(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_CREATE => handle_scheduled_create(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_LIST => handle_scheduled_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_GET => handle_scheduled_get(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_PAUSE => handle_scheduled_pause(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_RESUME => handle_scheduled_resume(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_DELETE => handle_scheduled_delete(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_ENABLE => handle_scheduled_enable(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_DISABLE => handle_scheduled_disable(ctx, jsonrpc_id.clone(), params).await,
+        methods::SCHEDULED_FIRE_NOW => handle_scheduled_fire_now(ctx, jsonrpc_id.clone(), params).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -895,6 +907,270 @@ async fn handle_task_remove(
     Ok(serde_json::json!({
         "success": removed.is_some(),
         "taskId": task_id,
+    }))
+}
+
+/// Handle scheduled.create - create a new scheduled task
+async fn handle_scheduled_create(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("name required".to_string()))?;
+
+    let schedule_type = params
+        .get("scheduleType")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleType required (cron or interval)".to_string()))?;
+
+    let task_description = params
+        .get("taskDescription")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("taskDescription required".to_string()))?;
+
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+
+    let schedule_id = match schedule_type {
+        "cron" => {
+            let cron_expression = params
+                .get("cronExpression")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::Protocol("cronExpression required for cron schedule".to_string()))?;
+            
+            let handle = ctx.scheduler.add_cron(name, cron_expression, task_description, session_id)
+                .map_err(|e| Error::Protocol(e))?;
+            let id = handle.read().id.clone();
+            id
+        }
+        "interval" => {
+            let interval_seconds = params
+                .get("intervalSeconds")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| Error::Protocol("intervalSeconds required for interval schedule".to_string()))?;
+            
+            let handle = ctx.scheduler.add_interval(name, interval_seconds, task_description, session_id);
+            let id = handle.read().id.clone();
+            id
+        }
+        _ => return Err(Error::Protocol(
+            format!("Invalid scheduleType: {}. Must be 'cron' or 'interval'", schedule_type)
+        )),
+    };
+
+    let schedule = ctx.scheduler.get(&schedule_id)
+        .ok_or_else(|| Error::Protocol(format!("Failed to get created schedule: {}", schedule_id)))?;
+    let st = schedule.read();
+    let summary = crate::agent::ScheduledTaskSummary::from(&*st);
+
+    info!(schedule_id = %schedule_id, name = %name, schedule_type = %schedule_type, "Created scheduled task");
+
+    Ok(serde_json::json!({
+        "schedule": {
+            "id": schedule_id,
+            "name": st.name,
+            "scheduleType": st.schedule_type.as_str(),
+            "cronExpression": st.cron_expression,
+            "intervalSeconds": st.interval_seconds,
+            "taskDescription": st.task_description,
+            "sessionId": st.session_id,
+            "enabled": st.enabled,
+            "paused": st.paused,
+            "nextRunAt": st.next_run_at.map(|t| t.to_rfc3339()),
+            "lastRunAt": st.last_run_at.map(|t| t.to_rfc3339()),
+            "runCount": st.run_count,
+            "createdAt": st.created_at.to_rfc3339(),
+        },
+        "summary": summary,
+    }))
+}
+
+/// Handle scheduled.list - list all scheduled tasks
+async fn handle_scheduled_list(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    _params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedules = ctx.scheduler.list();
+
+    Ok(serde_json::json!({
+        "schedules": schedules,
+        "count": schedules.len(),
+    }))
+}
+
+/// Handle scheduled.get - get a scheduled task by ID
+async fn handle_scheduled_get(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    let schedule = ctx.scheduler.get(schedule_id)
+        .ok_or_else(|| Error::Protocol(format!("Schedule not found: {}", schedule_id)))?;
+
+    let st = schedule.read();
+
+    Ok(serde_json::json!({
+        "schedule": {
+            "id": st.id,
+            "name": st.name,
+            "scheduleType": st.schedule_type.as_str(),
+            "cronExpression": st.cron_expression,
+            "intervalSeconds": st.interval_seconds,
+            "taskDescription": st.task_description,
+            "sessionId": st.session_id,
+            "enabled": st.enabled,
+            "paused": st.paused,
+            "nextRunAt": st.next_run_at.map(|t| t.to_rfc3339()),
+            "lastRunAt": st.last_run_at.map(|t| t.to_rfc3339()),
+            "runCount": st.run_count,
+            "lastTaskId": st.last_task_id,
+            "createdAt": st.created_at.to_rfc3339(),
+            "updatedAt": st.updated_at.to_rfc3339(),
+        }
+    }))
+}
+
+/// Handle scheduled.pause - pause a scheduled task
+async fn handle_scheduled_pause(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    ctx.scheduler.pause(schedule_id)
+        .map_err(|e| Error::Protocol(e))?;
+
+    info!(schedule_id = %schedule_id, "Paused scheduled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle scheduled.resume - resume a paused scheduled task
+async fn handle_scheduled_resume(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    ctx.scheduler.resume(schedule_id)
+        .map_err(|e| Error::Protocol(e))?;
+
+    info!(schedule_id = %schedule_id, "Resumed scheduled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle scheduled.delete - delete a scheduled task
+async fn handle_scheduled_delete(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    let removed = ctx.scheduler.delete(schedule_id);
+
+    if removed.is_some() {
+        info!(schedule_id = %schedule_id, "Deleted scheduled task");
+    }
+
+    Ok(serde_json::json!({
+        "success": removed.is_some(),
+        "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle scheduled.enable - enable a disabled scheduled task
+async fn handle_scheduled_enable(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    ctx.scheduler.enable(schedule_id)
+        .map_err(|e| Error::Protocol(e))?;
+
+    info!(schedule_id = %schedule_id, "Enabled scheduled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle scheduled.disable - disable a scheduled task
+async fn handle_scheduled_disable(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    ctx.scheduler.disable(schedule_id)
+        .map_err(|e| Error::Protocol(e))?;
+
+    info!(schedule_id = %schedule_id, "Disabled scheduled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "scheduleId": schedule_id,
+    }))
+}
+
+/// Handle scheduled.fire_now - manually trigger a scheduled task
+async fn handle_scheduled_fire_now(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let schedule_id = params
+        .get("scheduleId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("scheduleId required".to_string()))?;
+
+    ctx.scheduler.fire_now(schedule_id).await
+        .map_err(|e| Error::Protocol(e))?;
+
+    info!(schedule_id = %schedule_id, "Manually fired scheduled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "scheduleId": schedule_id,
     }))
 }
 

@@ -265,6 +265,24 @@ pub mod methods {
     pub const TASK_CANCEL: &str = "task.cancel";
     /// Task remove
     pub const TASK_REMOVE: &str = "task.remove";
+    /// Scheduled task create
+    pub const SCHEDULED_CREATE: &str = "scheduled.create";
+    /// Scheduled task list
+    pub const SCHEDULED_LIST: &str = "scheduled.list";
+    /// Scheduled task get
+    pub const SCHEDULED_GET: &str = "scheduled.get";
+    /// Scheduled task pause
+    pub const SCHEDULED_PAUSE: &str = "scheduled.pause";
+    /// Scheduled task resume
+    pub const SCHEDULED_RESUME: &str = "scheduled.resume";
+    /// Scheduled task delete
+    pub const SCHEDULED_DELETE: &str = "scheduled.delete";
+    /// Scheduled task enable
+    pub const SCHEDULED_ENABLE: &str = "scheduled.enable";
+    /// Scheduled task disable
+    pub const SCHEDULED_DISABLE: &str = "scheduled.disable";
+    /// Scheduled task fire now (manual trigger)
+    pub const SCHEDULED_FIRE_NOW: &str = "scheduled.fire_now";
 }
 
 /// Event types for notifications

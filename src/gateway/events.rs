@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+use crate::agent::scheduled_task::ScheduledTaskSummary;
 use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 use crate::agent::task::TaskSummary;
 
@@ -132,6 +133,42 @@ pub enum Event {
     #[serde(rename = "task.cancelled")]
     TaskCancelled {
         task_id: String,
+    },
+
+    /// Scheduled task created
+    #[serde(rename = "scheduled.created")]
+    ScheduledTaskCreated {
+        schedule_id: String,
+        summary: ScheduledTaskSummary,
+    },
+
+    /// Scheduled task fired (triggered)
+    #[serde(rename = "scheduled.fired")]
+    ScheduledTaskFired {
+        schedule_id: String,
+        schedule_name: String,
+        task_description: String,
+        session_id: String,
+        run_count: u64,
+    },
+
+    /// Scheduled task failed to start
+    #[serde(rename = "scheduled.failed")]
+    ScheduledTaskFailed {
+        schedule_id: String,
+        error: String,
+    },
+
+    /// Scheduled task updated (pause/resume/enable/disable)
+    #[serde(rename = "scheduled.updated")]
+    ScheduledTaskUpdated {
+        schedule_id: String,
+    },
+
+    /// Scheduled task deleted
+    #[serde(rename = "scheduled.deleted")]
+    ScheduledTaskDeleted {
+        schedule_id: String,
     },
     
     /// Error occurred

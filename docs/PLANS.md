@@ -380,7 +380,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - [ ] **提醒** - 通过 Skill + 定时任务实现
 
 ### 定时任务/自动化
-- [ ] **定时任务系统** - 支持 cron 风格定时执行
+- [x] **定时任务系统** - 支持 cron 风格定时执行 ✅ v6.0.0
 - [ ] **主动提醒** - 基于条件的主动通知
 - [ ] **周期性检查** - 定期检查并报告
 
@@ -454,7 +454,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v6.0.0)
+## 当前迭代规划 (v6.1.0)
 
 ### 本轮目标
 **定时任务触发系统** - 让 Agent 能够定时自动执行任务
@@ -462,20 +462,43 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 > 真正实现 24/7 运行的智能助手
 
 **计划完成**:
-- [ ] **定时任务调度器** - 支持 cron 风格表达式
-- [ ] **周期性任务** - 按固定间隔重复执行
-- [ ] **提醒系统** - 定时提醒用户
-- [ ] **Gateway API** - 创建/列表/删除定时任务
-- [ ] 集成现有 Task 机制
-- 完整测试覆盖
-- cargo clippy 0 警告
-- cargo test 通过
+- [ ] **主动提醒系统** - 定时提醒用户
+- [ ] **任务执行结果通知** - 任务完成后推送通知
+- [ ] **WebUI 定时任务面板** - 在 admin.html 中管理定时任务
 
-**下一步**: 主动提醒 + 任务组合执行
+**下一步**: 任务组合执行、持久化定时任务配置
 
 ---
 
 ## 迭代历史
+
+### v6.0.0 (已完成 ✅)
+
+**完成事项**:
+- **定时任务触发系统** - 让 Agent 能够定时自动执行任务
+  - 新增 `agent/scheduled_task.rs`：`ScheduledTask`、`ScheduleType`、`ScheduledTaskSummary` 结构
+  - 支持两种调度类型：Cron 表达式（6字段格式）和固定间隔（秒）
+  - `ScheduledTask` 方法：创建、暂停、恢复、启用、禁用、删除
+- **Scheduler 调度器**
+  - 新增 `agent/scheduler.rs`：`Scheduler` 结构管理所有定时任务
+  - 后台轮询循环，每秒检查是否有任务到期
+  - 到期时自动创建并执行后台任务（使用 TaskManager）
+- **Gateway JSON-RPC 方法**
+  - 新增：`scheduled.create`、`scheduled.list`、`scheduled.get`
+  - 新增：`scheduled.pause`、`scheduled.resume`、`scheduled.delete`
+  - 新增：`scheduled.enable`、`scheduled.disable`、`scheduled.fire_now`
+- **事件系统增强**
+  - 新增事件：`scheduled.created`、`scheduled.fired`、`scheduled.failed`、`scheduled.updated`、`scheduled.deleted`
+  - SSE 事件过滤和映射更新
+- **HandlerContext 集成**
+  - Scheduler 集成到 HandlerContext
+  - WebSocket 和 HTTP 服务器初始化更新
+- 完整测试覆盖：226 tests
+- cargo clippy 0 警告（仅 dead_code 警告）
+
+**下一步**: 主动提醒 + 任务组合执行
+
+---
 
 ### v5.9.0 (已完成 ✅)
 

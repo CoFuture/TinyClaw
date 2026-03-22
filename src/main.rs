@@ -31,7 +31,7 @@ use http::routes::{create_router, HttpState};
 use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -156,6 +156,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_agent(agent.clone())
     );
 
+    // Create scheduler with event emitter and task manager
+    let scheduler = Arc::new(
+        Scheduler::new()
+            .with_event_emitter(event_emitter.clone())
+            .with_task_manager(task_manager.clone())
+    );
+    scheduler.start();
+    info!("Scheduled task scheduler started");
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -195,6 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         shutdown_tx.clone(),
         skill_manager.clone(), // skill_manager was already cloned into http_state, clone again for WS
         task_manager.clone(), // TaskManager for background task execution
+        scheduler.clone(), // Scheduler for scheduled task triggering
     );
     
     let ws_handle = tokio::spawn(async move {

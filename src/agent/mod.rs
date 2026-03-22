@@ -6,6 +6,8 @@ pub mod context_manager;
 pub mod error_recovery;
 pub mod retry;
 pub mod runtime;
+pub mod scheduled_task;
+pub mod scheduler;
 pub mod skill;
 pub mod skill_manager;
 pub mod skill_registry;
@@ -15,6 +17,10 @@ pub mod tools;
 pub mod turn_log;
 
 pub use client::Agent;
+pub use scheduled_task::ScheduledTaskSummary;
+#[allow(unused_imports)]
+pub use scheduled_task::ScheduleType;
+pub use scheduler::Scheduler;
 pub use skill::Skill;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
