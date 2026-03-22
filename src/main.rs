@@ -31,7 +31,7 @@ use http::routes::{create_router, HttpState};
 use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -149,6 +149,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let skill_manager = Arc::new(SessionSkillManager::new(skill_registry.clone()));
 
+    // Create task manager with event emitter and agent
+    let task_manager = Arc::new(
+        TaskManager::new()
+            .with_event_emitter(event_emitter.clone())
+            .with_agent(agent.clone())
+    );
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -187,6 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent.clone(),
         shutdown_tx.clone(),
         skill_manager.clone(), // skill_manager was already cloned into http_state, clone again for WS
+        task_manager.clone(), // TaskManager for background task execution
     );
     
     let ws_handle = tokio::spawn(async move {

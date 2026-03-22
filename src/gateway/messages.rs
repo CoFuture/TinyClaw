@@ -7,7 +7,7 @@ use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
 use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
-use crate::agent::{Agent, SessionSkillManager};
+use crate::agent::{Agent, SessionSkillManager, TaskManager};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -47,6 +47,7 @@ impl std::fmt::Display for RequestId {
 
 /// Message handler context
 #[derive(Clone)]
+#[allow(clippy::too_many_arguments)]
 pub struct HandlerContext {
     pub session_manager: Arc<SessionManager>,
     pub history_manager: Arc<HistoryManager>,
@@ -55,9 +56,11 @@ pub struct HandlerContext {
     pub agent: Arc<Agent>,
     pub shutdown_tx: broadcast::Sender<()>,
     pub skill_manager: Arc<SessionSkillManager>,
+    pub task_manager: Arc<TaskManager>,
 }
 
 impl HandlerContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_manager: Arc<SessionManager>,
         history_manager: Arc<HistoryManager>,
@@ -66,6 +69,7 @@ impl HandlerContext {
         agent: Arc<Agent>,
         shutdown_tx: broadcast::Sender<()>,
         skill_manager: Arc<SessionSkillManager>,
+        task_manager: Arc<TaskManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -75,6 +79,7 @@ impl HandlerContext {
             agent,
             shutdown_tx,
             skill_manager,
+            task_manager,
         }
     }
 }
@@ -112,6 +117,12 @@ pub async fn handle_request(
         methods::STATUS => handle_status(ctx, jsonrpc_id.clone()).await,
         methods::SHUTDOWN => handle_shutdown(ctx, jsonrpc_id.clone()).await,
         methods::AGENT_CIRCUIT_BREAKER => handle_agent_circuit_breaker(ctx, jsonrpc_id.clone()).await,
+        methods::TASK_CREATE => handle_task_create(ctx, jsonrpc_id.clone(), params).await,
+        methods::TASK_LIST => handle_task_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::TASK_GET => handle_task_get(ctx, jsonrpc_id.clone(), params).await,
+        methods::TASK_START => handle_task_start(ctx, jsonrpc_id.clone(), params).await,
+        methods::TASK_CANCEL => handle_task_cancel(ctx, jsonrpc_id.clone(), params).await,
+        methods::TASK_REMOVE => handle_task_remove(ctx, jsonrpc_id.clone(), params).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -716,6 +727,174 @@ async fn handle_agent_circuit_breaker(
     
     Ok(serde_json::json!({
         "state": state_str,
+    }))
+}
+
+/// Handle task.create - create a new background task
+async fn handle_task_create(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let description = params
+        .get("description")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("description required".to_string()))?;
+
+    let session_id = params
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+
+    let task_handle = ctx.task_manager.create_task(description, session_id).await;
+    let task = task_handle.read();
+    
+    let summary = crate::agent::TaskSummary::from(&*task);
+
+    info!(task_id = %task.id, description = %description, "Created task");
+
+    Ok(serde_json::json!({
+        "task": {
+            "id": task.id,
+            "description": task.description,
+            "sessionId": task.session_id,
+            "state": task.state.as_str(),
+            "createdAt": task.created_at.to_rfc3339(),
+        },
+        "summary": summary,
+    }))
+}
+
+/// Handle task.list - list all tasks
+async fn handle_task_list(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let state_filter = params
+        .get("state")
+        .and_then(|v| v.as_str())
+        .and_then(|s| match s {
+            "pending" => Some(crate::agent::TaskState::Pending),
+            "running" => Some(crate::agent::TaskState::Running),
+            "completed" => Some(crate::agent::TaskState::Completed),
+            "failed" => Some(crate::agent::TaskState::Failed),
+            "cancelled" => Some(crate::agent::TaskState::Cancelled),
+            _ => None,
+        });
+
+    let tasks = ctx.task_manager.list_tasks(state_filter).await;
+    let counts = ctx.task_manager.task_counts().await;
+
+    Ok(serde_json::json!({
+        "tasks": tasks,
+        "counts": {
+            "pending": counts.get(&crate::agent::TaskState::Pending).unwrap_or(&0),
+            "running": counts.get(&crate::agent::TaskState::Running).unwrap_or(&0),
+            "completed": counts.get(&crate::agent::TaskState::Completed).unwrap_or(&0),
+            "failed": counts.get(&crate::agent::TaskState::Failed).unwrap_or(&0),
+            "cancelled": counts.get(&crate::agent::TaskState::Cancelled).unwrap_or(&0),
+        },
+    }))
+}
+
+/// Handle task.get - get task details
+async fn handle_task_get(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let task_id = params
+        .get("taskId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("taskId required".to_string()))?;
+
+    let task_handle = ctx.task_manager.get_task(task_id).await
+        .ok_or_else(|| Error::Protocol(format!("Task not found: {}", task_id)))?;
+
+    let task = task_handle.read();
+
+    Ok(serde_json::json!({
+        "task": {
+            "id": task.id,
+            "description": task.description,
+            "sessionId": task.session_id,
+            "state": task.state.as_str(),
+            "steps": task.steps,
+            "result": task.result,
+            "error": task.error,
+            "createdAt": task.created_at.to_rfc3339(),
+            "startedAt": task.started_at.map(|t| t.to_rfc3339()),
+            "completedAt": task.completed_at.map(|t| t.to_rfc3339()),
+            "progressPercent": task.progress_percent(),
+            "metadata": task.metadata,
+        }
+    }))
+}
+
+/// Handle task.start - start a pending task
+async fn handle_task_start(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let task_id = params
+        .get("taskId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("taskId required".to_string()))?;
+
+    ctx.task_manager.start_task(task_id).await?;
+
+    info!(task_id = %task_id, "Started task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "taskId": task_id,
+    }))
+}
+
+/// Handle task.cancel - cancel a running task
+async fn handle_task_cancel(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let task_id = params
+        .get("taskId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("taskId required".to_string()))?;
+
+    let cancelled = ctx.task_manager.cancel_task(task_id).await?;
+
+    info!(task_id = %task_id, cancelled = %cancelled, "Cancelled task");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "taskId": task_id,
+        "cancelled": cancelled,
+    }))
+}
+
+/// Handle task.remove - remove a completed task
+async fn handle_task_remove(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let task_id = params
+        .get("taskId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("taskId required".to_string()))?;
+
+    let removed = ctx.task_manager.remove_task(task_id).await;
+
+    if removed.is_some() {
+        info!(task_id = %task_id, "Removed task");
+    }
+
+    Ok(serde_json::json!({
+        "success": removed.is_some(),
+        "taskId": task_id,
     }))
 }
 

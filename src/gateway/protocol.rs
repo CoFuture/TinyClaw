@@ -253,6 +253,18 @@ pub mod methods {
     pub const SHUTDOWN: &str = "shutdown";
     /// Agent circuit breaker state
     pub const AGENT_CIRCUIT_BREAKER: &str = "agent.circuit_breaker";
+    /// Task create
+    pub const TASK_CREATE: &str = "task.create";
+    /// Task list
+    pub const TASK_LIST: &str = "task.list";
+    /// Task get
+    pub const TASK_GET: &str = "task.get";
+    /// Task start
+    pub const TASK_START: &str = "task.start";
+    /// Task cancel
+    pub const TASK_CANCEL: &str = "task.cancel";
+    /// Task remove
+    pub const TASK_REMOVE: &str = "task.remove";
 }
 
 /// Event types for notifications

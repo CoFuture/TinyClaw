@@ -666,8 +666,11 @@ async fn sse_events(
                                     Event::SessionCreated { session_id, .. } => session_id == filter,
                                     Event::SessionEnded { session_id, .. } => session_id == filter,
                                     Event::Error { session_id, .. } => session_id == filter,
-                                    // Status and Heartbeat are always broadcast
+                                    // Status, Heartbeat, and Task events are always broadcast
                                     Event::Status { .. } | Event::Heartbeat { .. } => true,
+                                    Event::TaskCreated { .. } | Event::TaskStarted { .. } => true,
+                                    Event::TaskProgress { .. } | Event::TaskCompleted { .. } => true,
+                                    Event::TaskFailed { .. } | Event::TaskCancelled { .. } => true,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -688,6 +691,12 @@ async fn sse_events(
                                     Event::TurnLogCompleted { .. } => "turn.log_completed",
                                     Event::SessionCreated { .. } => "session.created",
                                     Event::SessionEnded { .. } => "session.ended",
+                                    Event::TaskCreated { .. } => "task.created",
+                                    Event::TaskStarted { .. } => "task.started",
+                                    Event::TaskProgress { .. } => "task.progress",
+                                    Event::TaskCompleted { .. } => "task.completed",
+                                    Event::TaskFailed { .. } => "task.failed",
+                                    Event::TaskCancelled { .. } => "task.cancelled",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",

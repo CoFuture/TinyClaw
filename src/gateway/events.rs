@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
+use crate::agent::task::TaskSummary;
 
 /// Event types for real-time streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +90,48 @@ pub enum Event {
     #[serde(rename = "session.ended")]
     SessionEnded {
         session_id: String,
+    },
+
+    /// Task created
+    #[serde(rename = "task.created")]
+    TaskCreated {
+        task_id: String,
+        summary: TaskSummary,
+    },
+
+    /// Task started
+    #[serde(rename = "task.started")]
+    TaskStarted {
+        task_id: String,
+    },
+
+    /// Task progress update
+    #[serde(rename = "task.progress")]
+    TaskProgress {
+        task_id: String,
+        step: usize,
+        total_steps: usize,
+        message: String,
+    },
+
+    /// Task completed successfully
+    #[serde(rename = "task.completed")]
+    TaskCompleted {
+        task_id: String,
+        result: String,
+    },
+
+    /// Task failed
+    #[serde(rename = "task.failed")]
+    TaskFailed {
+        task_id: String,
+        error: String,
+    },
+
+    /// Task cancelled
+    #[serde(rename = "task.cancelled")]
+    TaskCancelled {
+        task_id: String,
     },
     
     /// Error occurred
