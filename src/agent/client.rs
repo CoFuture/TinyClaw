@@ -1,7 +1,7 @@
 //! AI Model client with multi-provider support
 
 use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySettings};
-use crate::agent::tools::{Tool, ToolExecutor};
+use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
 use futures_util::StreamExt;
@@ -385,10 +385,11 @@ pub async fn send_message_with_history(
                             let tool_name = tool_block["name"].as_str().unwrap_or("");
                             let tool_input = tool_block["input"].clone();
                             let result = self.tool_executor.execute(tool_name, tool_input).await;
-                            let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+                            // Format tool result - use structured error report on failure
+                            let content = format_tool_result_content(tool_name, &result);
                             messages.push(serde_json::json!({
                                 "role": "tool",
-                                "content": result_json,
+                                "content": content,
                                 "tool_use_id": tool_block["id"]
                             }));
                         }
@@ -424,10 +425,11 @@ pub async fn send_message_with_history(
                                 tool_call["function"]["arguments"].as_str().unwrap_or("{}")
                             ).unwrap_or(serde_json::json!({}));
                             let result = self.tool_executor.execute(tool_name, args).await;
-                            let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+                            // Format tool result - use structured error report on failure
+                            let content = format_tool_result_content(tool_name, &result);
                             messages.push(serde_json::json!({
                                 "role": "tool",
-                                "content": result_json,
+                                "content": content,
                                 "tool_call_id": tool_call["id"]
                             }));
                         }
@@ -1020,6 +1022,22 @@ pub async fn send_message_with_history(
     /// * `skill_prompt` - Optional skill instructions to inject into system prompt
     pub async fn send_message(&self, session_key: &str, message: &str, skill_prompt: Option<&str>) -> Result<String> {
         self.send_message_with_history(session_key, message, &[], skill_prompt).await
+    }
+}
+
+/// Format a ToolResult for inclusion in a tool result message.
+/// On success: returns the output string.
+/// On failure: returns a structured error report with error kind, retryability, and suggestion.
+fn format_tool_result_content(tool_name: &str, result: &ToolResult) -> String {
+    use crate::agent::error_recovery::ErrorRecovery;
+
+    if result.success {
+        result.output.clone()
+    } else {
+        // Use structured error reporting for failures
+        let error_msg = result.error.as_deref().unwrap_or(&result.output);
+        let recovery = ErrorRecovery::from_error(tool_name, error_msg);
+        recovery.format_report(tool_name)
     }
 }
 

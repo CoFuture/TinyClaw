@@ -359,7 +359,7 @@
 - [x] Session Turn Cancellation (TUI :cancel, WebUI 取消按钮) ✅ v5.3.0
 
 ### 稳定性
-- [ ] 错误处理增强
+- [x] 错误处理增强 ✅ v5.7.0
 - [x] 日志优化 (结构化日志) ✅ v4.1.0
 - [x] 监控指标 ✅ v3.9.0
 
@@ -369,6 +369,8 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.7.0 | Structured Tool Error Reporting + Agent Self-Correction - 新增 `agent/error_recovery.rs`：ToolErrorKind 枚举(9种错误类型)、ErrorRecovery 结构(包含 retryable 和 suggestion)；集成到 runtime.rs 和 client.rs，工具失败时返回结构化错误报告帮助 Agent 自我修正；12个新测试；cargo clippy 0 警告；cargo test 188 tests |
+| v5.6.0 | Agent 韧性增强 - 集成断路器保护 AI API：execute_protected() 包装 retry + 断路器；指标系统增强 (circuit_breaker_state)；Gateway JSON-RPC 方法；TUI 标题栏熔断指示器 (🟢/🟡/🔴)；WebUI 熔断状态显示；cargo clippy 0 警告；cargo test 176 tests |
 | v5.5.0 | TUI 视觉增强 - 错误显示红色样式（标题、边框、消息）；标题栏思考状态指示器 "⚙ Thinking..." (黄色+粗体)；cargo clippy 0 警告；cargo test 176 tests |
 | v5.4.0 | TUI Bug Fix - 修复 unreachable pattern bug：`:rc` 命令因重复 `KeyCode::Char('c')` 无法到达；合并 `:rc` 检查到单个 'c' 处理；移除 dead `is_turn_active` 方法；cargo clippy 0 警告；cargo test 176 tests |
 | v5.3.0 | Session Turn Cancellation - Agent 取消机制：turn_cancellations HashMap、start_turn_cancellation/cancel_turn/is_turn_active 方法；Gateway session.cancel 方法 + 处理器；TurnCancelled 事件；TUI :cancel/:stop 命令；WebUI 取消按钮(思考中显示)；Ollama 流式取消(send_ollama_streaming 支持取消检查)；cargo clippy 0 警告；cargo test 176 tests |
@@ -405,14 +407,55 @@
 
 ---
 
-## 当前迭代规划 (v5.6.0)
+## 当前迭代规划 (v5.7.0)
 
 ### 本轮目标
-待定（根据 P0 优先级选择）
+**Structured Tool Error Reporting + Agent Self-Correction** - 帮助 Agent 理解工具失败原因并自我修正
+
+**计划完成**:
+- [x] 错误分类系统 (`ToolErrorKind` enum) - 9种错误类型：NotFound, PermissionDenied, InvalidArgument, SyntaxError, NetworkError, Timeout, ToolNotFound, ResourceBusy, OutOfSpace, Unknown
+- [x] 错误恢复指导 (`ErrorRecovery` struct) - 每种错误包含 retryable 标志和建议
+- [x] 结构化错误报告格式化 - 包含错误类型、是否可重试、恢复建议
+- [x] 集成到 `AgentRuntime` (`runtime.rs`) - 工具失败时使用结构化报告
+- [x] 集成到 `Agent::send_message_with_history` (`client.rs`) - Anthropic/OpenAI API 调用时使用结构化报告
+- [x] 完整测试覆盖 (12 个新测试)
+- cargo clippy 0 警告
+- cargo test 188 tests
+
+**下一步**: 多 Session 并发支持、WebUI 进一步增强
 
 ---
 
 ## 迭代历史
+
+### v5.6.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 韧性增强** - 集成断路器保护 AI API 调用
+  - Agent 结构新增 `circuit_breaker: Arc<CircuitBreaker>`
+  - 新增 `execute_protected()` 方法 - 包装 with_retry + 断路器检查
+  - 所有 AI API 调用改用 `execute_protected()` (Anthropic/OpenAI/Ollama)
+- **指标系统增强**
+  - SystemMetrics 新增 `circuit_breaker_state` 字段
+  - MetricsCollector 新增 `set_circuit_breaker_state()` 方法
+  - `/api/metrics` 返回断路器状态
+- **Gateway JSON-RPC 方法**
+  - 新增 `agent.circuit_breaker` 方法常量
+  - 新增 `handle_agent_circuit_breaker` 处理器
+- **TUI 支持**
+  - AppState 新增 `circuit_breaker_state` 字段
+  - 新增 `get_circuit_breaker()` 网关客户端方法
+  - 新增 `CircuitBreakerState` 事件变体
+  - 标题栏显示 AI 熔断状态指示器 (🟢/🟡/🔴)
+- **WebUI 支持**
+  - admin.html 新增"AI 熔断状态"显示
+  - 根据状态显示不同颜色和图标
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: Structured Tool Error Reporting、Agent Self-Correction
+
+---
 
 ### v5.5.0 (已完成 ✅)
 

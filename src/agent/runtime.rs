@@ -189,10 +189,10 @@ impl AgentRuntime {
                     // Execute tool
                     let result = self.execute_tool(&tool_call.name, &tool_call.arguments).await;
                     
-                    // Add tool result to history
+                    // Format tool result - use structured error report on failure
                     let tool_result_str = match &result {
-                        Ok(r) => r.output.clone(),
-                        Err(e) => e.to_string(),
+                        Ok(r) => format_tool_result_for_history(&tool_call.name, r),
+                        Err(e) => format!("Tool execution error: {}", e),
                     };
                     
                     context.history_manager.add_message(
@@ -325,6 +325,22 @@ impl AgentRuntime {
 impl Default for AgentRuntime {
     fn default() -> Self {
         Self::new(Arc::new(ToolExecutor::new()))
+    }
+}
+
+/// Format a ToolResult for inclusion in conversation history.
+/// On success: returns the output string.
+/// On failure: returns a structured error report with error kind, retryability, and suggestion.
+fn format_tool_result_for_history(tool_name: &str, result: &ToolResult) -> String {
+    use crate::agent::error_recovery::ErrorRecovery;
+
+    if result.success {
+        result.output.clone()
+    } else {
+        // Use structured error reporting for failures
+        let error_msg = result.error.as_deref().unwrap_or(&result.output);
+        let recovery = ErrorRecovery::from_error(tool_name, error_msg);
+        recovery.format_report(tool_name)
     }
 }
 
