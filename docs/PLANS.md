@@ -438,6 +438,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v7.1.0 | 记忆 HTTP API 端点 + Agent 上下文集成 - 完整的记忆管理 REST API (GET/POST/DELETE /api/memory)；Agent turn 自动注入相关记忆到 system prompt；修复 memory 模块测试隔离问题；cargo clippy 0 警告；cargo test 273 tests |
+| v7.0.0 | Agent 长期记忆系统 - 新增 `agent/memory.rs`：`MemoryFact`、`FactCategory`、`MemoryManager` 结构；支持 6 种事实类别；关键词自动提取和检索；会话级检索和上下文提示生成；MemoryManager 集成到 Gateway 和 HTTP 状态；11 个新测试；cargo clippy 0 警告；cargo test 273 tests |
 | v6.7.0 | 交互式建议系统 - 新增 SuggestionManager 管理主动建议和用户反馈；追踪接受/忽略的建议，学习避免重复；Gateway JSON-RPC (`session.suggestions.list/accept/dismiss`)；HTTP REST API (`/api/sessions/:id/suggestions`)；增强 SuggestionEngine 反馈过滤；cargo clippy 0 警告；cargo test 262 tests |
 | v6.6.0 | Session Instructions 会话指令 - 每个会话可设置独立的 AI 行为指令，注入到 system prompt 中；新增 `Session.instructions` 字段、SessionManager 方法、Gateway JSON-RPC (`session.instructions.get/set`)、HTTP REST API (`/api/sessions/:id/instructions`)、TUI `:instr` 命令、draw_instructions_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
 | v6.5.0 | WebUI 会话笔记面板 + TUI 笔记命令 - admin.html 新增会话笔记管理面板：会话选择下拉框、笔记列表展示、CRUD 操作、置顶/标签支持；TUI 新增 `:note` / `:notes` / `:pin` 命令查看笔记；AppState 新增 notes_mode 等字段；Gateway 客户端新增 list_session_notes 方法；SessionNotesLoaded 事件处理；draw_notes_panel 组件；cargo clippy 0 警告；cargo test 251 tests |
@@ -606,7 +608,33 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - cargo clippy 0 警告（仅未使用代码警告）
   - cargo test 273 tests
 
-**下一步**: HTTP API 端点、事实自动提取集成
+**下一步**: HTTP API 端点集成、Agent 上下文集成
+
+---
+
+## v7.1.0 (已完成 ✅)
+
+**完成事项**:
+- **HTTP REST API 内存端点** - 完整的记忆管理 REST API
+  - `GET /api/memory` - 列出所有记忆事实
+  - `GET /api/memory/search?q=...` - 搜索记忆事实
+  - `POST /api/memory` - 添加新记忆事实
+  - `DELETE /api/memory/{fact_id}` - 删除记忆事实
+  - `GET /api/memory/stats` - 获取记忆统计信息
+  - `GET /api/memory/category/{category}` - 按类别获取事实
+  - `DELETE /api/memory/category/{category}` - 清除类别
+  - `GET /api/memory/session/{session_id}` - 获取会话相关事实
+- **Agent 上下文集成** - 记忆自动注入 Agent system prompt
+  - `generate_context_prompt()` 新增记忆上下文
+  - 每次 Agent turn 自动包含相关记忆事实
+  - 使用 `generate_session_prompt()` 获取会话相关记忆
+- **测试修复** - 修复 memory 模块测试污染问题
+  - 所有添加事实的测试前调用 `setup_test_memory()`
+  - 确保测试间隔离
+- cargo clippy 0 警告
+- cargo test 273 tests
+
+**下一步**: 记忆自动提取、记忆重要性评分
 
 ---
 

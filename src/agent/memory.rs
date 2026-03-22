@@ -196,6 +196,7 @@ pub struct MemoryManager {
     base_path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl MemoryManager {
     /// Create a new memory manager with default path
     pub fn new() -> Self {
@@ -547,6 +548,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_add_and_search() {
+        setup_test_memory();
         let manager = MemoryManager::new();
         let fact = create_test_fact();
         manager.add_fact(fact);
@@ -558,6 +560,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_search_no_match() {
+        setup_test_memory();
         let manager = MemoryManager::new();
         let fact = create_test_fact();
         manager.add_fact(fact);
@@ -568,6 +571,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_get_for_session() {
+        setup_test_memory();
         let manager = MemoryManager::new();
         let fact = create_test_fact();
         manager.add_fact(fact);
@@ -597,6 +601,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_generate_context_prompt() {
+        setup_test_memory();
         let manager = MemoryManager::new();
         let fact = create_test_fact();
         manager.add_fact(fact);
@@ -609,6 +614,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_generate_session_prompt() {
+        setup_test_memory();
         let manager = MemoryManager::new();
         let fact = create_test_fact();
         manager.add_fact(fact);

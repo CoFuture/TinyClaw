@@ -817,6 +817,15 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/:session_id/suggestions", get(suggestions_list))
         .route("/api/sessions/:session_id/suggestions/:suggestion_id/accept", axum::routing::post(suggestions_accept))
         .route("/api/sessions/:session_id/suggestions/:suggestion_id/dismiss", axum::routing::post(suggestions_dismiss))
+        // Memory API - long-term fact storage and retrieval
+        .route("/api/memory", get(memory_list))
+        .route("/api/memory/search", get(memory_search))
+        .route("/api/memory", post(memory_add))
+        .route("/api/memory/stats", get(memory_stats))
+        .route("/api/memory/{fact_id}", axum::routing::delete(memory_delete))
+        .route("/api/memory/category/{category}", get(memory_by_category))
+        .route("/api/memory/category/{category}", axum::routing::delete(memory_clear_category))
+        .route("/api/memory/session/{session_id}", get(memory_for_session))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1461,6 +1470,155 @@ async fn session_instructions_set(
         "instructions": instructions,
     }))
 }
+
+// ============================================================
+// Memory API Endpoints
+// ============================================================
+
+/// List all memory facts
+async fn memory_list(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let facts = state.memory_manager.list_all();
+    Json(serde_json::json!({
+        "facts": facts,
+        "count": facts.len(),
+    }))
+}
+
+/// Search memory facts
+async fn memory_search(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let query = params.get("q").map(|v| v.as_str()).unwrap_or("");
+    let facts = state.memory_manager.search(query);
+    let summaries: Vec<_> = facts.iter().map(crate::agent::memory::MemoryFactSummary::from).collect();
+    Json(serde_json::json!({
+        "query": query,
+        "facts": summaries,
+        "count": summaries.len(),
+    }))
+}
+
+/// Add a new memory fact
+async fn memory_add(
+    State(state): State<Arc<HttpState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (HttpStatusCode, Json<serde_json::Value>)> {
+    let content = payload
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| (HttpStatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "content required"}))))?;
+    
+    let category_str = payload
+        .get("category")
+        .and_then(|v| v.as_str())
+        .unwrap_or("general");
+    let category = crate::agent::memory::FactCategory::from_str(category_str);
+    
+    let importance = payload
+        .get("importance")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.5) as f32;
+    
+    let source_session = payload
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("http_api")
+        .to_string();
+    
+    let fact = crate::agent::memory::MemoryFact::new(
+        content.to_string(),
+        category,
+        source_session,
+        importance,
+    );
+    
+    state.memory_manager.add_fact(fact.clone());
+    
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "fact": crate::agent::memory::MemoryFactSummary::from(&fact),
+    })))
+}
+
+/// Delete a memory fact by ID
+async fn memory_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(fact_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let deleted = state.memory_manager.delete_fact(&fact_id);
+    Json(serde_json::json!({
+        "success": deleted,
+        "factId": fact_id,
+    }))
+}
+
+/// Get facts by category
+async fn memory_by_category(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(category): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let cat = crate::agent::memory::FactCategory::from_str(&category);
+    let facts = state.memory_manager.get_by_category(&cat);
+    let summaries: Vec<_> = facts.iter().map(crate::agent::memory::MemoryFactSummary::from).collect();
+    Json(serde_json::json!({
+        "category": category,
+        "facts": summaries,
+        "count": summaries.len(),
+    }))
+}
+
+/// Clear all facts in a category
+async fn memory_clear_category(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(category): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let cat = crate::agent::memory::FactCategory::from_str(&category);
+    state.memory_manager.clear_category(&cat);
+    Json(serde_json::json!({
+        "success": true,
+        "category": category,
+        "message": "Category cleared",
+    }))
+}
+
+/// Get facts relevant to a session
+async fn memory_for_session(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let facts = state.memory_manager.get_for_session(&session_id, 20);
+    let summaries: Vec<_> = facts.iter().map(crate::agent::memory::MemoryFactSummary::from).collect();
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "facts": summaries,
+        "count": summaries.len(),
+    }))
+}
+
+/// Get memory stats
+async fn memory_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let total = state.memory_manager.count();
+    let all = state.memory_manager.list_all();
+    
+    let mut by_category: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for fact in &all {
+        *by_category.entry(fact.category.clone()).or_insert(0) += 1;
+    }
+    
+    Json(serde_json::json!({
+        "totalFacts": total,
+        "byCategory": by_category,
+    }))
+}
+
+// ============================================================
+// Suggestions API Endpoints
+// ============================================================
 
 /// List suggestions for a session
 async fn suggestions_list(

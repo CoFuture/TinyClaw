@@ -365,7 +365,13 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<St
         parts.push(notes_part);
     }
 
-    // 3. Session instructions (highest priority - user-defined persona/instructions)
+    // 3. Memory - relevant facts from long-term memory
+    let memory_prompt = ctx.memory_manager.generate_session_prompt(session_key, 5);
+    if !memory_prompt.is_empty() {
+        parts.push(memory_prompt);
+    }
+
+    // 4. Session instructions (highest priority - user-defined persona/instructions)
     if let Some(instr) = ctx.session_manager.get_instructions(session_key) {
         if !instr.trim().is_empty() {
             parts.push(format!("## Session Instructions\n\n{}\n", instr.trim()));
