@@ -126,6 +126,9 @@ struct OllamaStreamResponse {
     done: bool,
 }
 
+/// Tool execution record for tracking during a turn (alias for turn_history::ToolExecution)
+pub use crate::agent::turn_history::ToolExecution;
+
 /// Agent client for AI model interaction
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
@@ -140,6 +143,8 @@ pub struct Agent {
     event_emitter: Option<Arc<EventEmitter>>,
     /// Current session key for tool event emission (set during send_message_streaming)
     current_session_key: RwLock<Option<String>>,
+    /// Tool executions recorded during the last send_message_with_history call
+    tool_executions: Arc<RwLock<Vec<ToolExecution>>>,
 }
 
 /// History message for passing conversation context to API methods
@@ -208,6 +213,7 @@ impl Agent {
             circuit_breaker: Arc::new(CircuitBreaker::new()),
             event_emitter: None,
             current_session_key: RwLock::new(None),
+            tool_executions: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -223,7 +229,34 @@ impl Agent {
             circuit_breaker: Arc::new(CircuitBreaker::new()),
             event_emitter: None,
             current_session_key: RwLock::new(None),
+            tool_executions: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    /// Take and clear the tool executions recorded during the last turn.
+    /// Returns the collected tool executions and clears the buffer.
+    #[allow(dead_code)]
+    pub fn take_tool_executions(&self) -> Vec<ToolExecution> {
+        let mut executions = self.tool_executions.write();
+        let result = executions.clone();
+        executions.clear();
+        result
+    }
+
+    /// Record a tool execution during message processing.
+    fn record_tool_execution(&self, name: String, input: serde_json::Value, output: String, success: bool, duration_ms: u64) {
+        let preview = if output.len() > 200 {
+            format!("{}...", &output[..200])
+        } else {
+            output
+        };
+        self.tool_executions.write().push(ToolExecution {
+            name,
+            input,
+            output_preview: preview,
+            success,
+            duration_ms,
+        });
     }
 
     /// Set the event emitter for tool and turn events
@@ -439,11 +472,20 @@ pub async fn send_message_with_history(
                             
                             // Execute tool
                             let tool_start = Instant::now();
-                            let result = self.tool_executor.execute(tool_name, tool_input).await;
+                            let result = self.tool_executor.execute(tool_name, tool_input.clone()).await;
                             let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
                             
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);
+                            
+                            // Record tool execution for turn history
+                            self.record_tool_execution(
+                                tool_name.to_string(),
+                                tool_input,
+                                content.clone(),
+                                result.success,
+                                tool_duration_ms,
+                            );
                             
                             // Emit tool result event
                             let tool_call_id = tool_block["id"].as_str().unwrap_or("");
@@ -500,11 +542,20 @@ pub async fn send_message_with_history(
                             
                             // Execute tool
                             let tool_start = Instant::now();
-                            let result = self.tool_executor.execute(tool_name, args).await;
+                            let result = self.tool_executor.execute(tool_name, args.clone()).await;
                             let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
                             
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);
+                            
+                            // Record tool execution for turn history
+                            self.record_tool_execution(
+                                tool_name.to_string(),
+                                args,
+                                content.clone(),
+                                result.success,
+                                tool_duration_ms,
+                            );
                             
                             // Emit tool result event
                             let tool_call_id = tool_call["id"].as_str().unwrap_or("");

@@ -76,6 +76,30 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.1.0 (已完成 ✅)
+
+**完成事项**:
+- **Turn History Tool Detail Enhancement** - 工具执行详情捕获与展示
+  - **Agent 工具追踪增强**：`client.rs` 新增 `tool_executions` 字段和 `take_tool_executions()` 方法
+  - 工具执行时自动记录 name、input、output_preview、success、duration_ms
+  - 支持 Anthropic 和 OpenAI 两种 provider 的工具执行追踪
+  - **TurnHistoryManager 增强**：新增 `record_turn_with_tools()` 方法接收工具执行列表
+  - 新增 `get_all_sessions_turns()` 方法支持导出所有会话历史
+  - **Gateway 集成**：`handle_agent_turn` 完成后自动捕获工具执行并记录
+- **HTTP Export Endpoint** - 执行历史导出功能
+  - `GET /api/turns/export` - 导出所有执行历史为 JSON 文件
+  - 包含 exported_at、version、turn_count、sessions 等字段
+- **WebUI 工具详情视图** - 点击展开查看每轮执行的工具详情
+  - 显示工具名称、输入参数、输出预览、执行状态、耗时
+  - 新增"导出"按钮一键下载执行历史 JSON
+  - 工具按执行顺序排列，成功/失败状态一目了然
+- cargo clippy 0 警告（仅 dead_code 警告）
+- cargo test 308 tests
+
+**下一步**: 统计图表可视化、更多 Agent 能力增强
+
+---
+
 ### v7.3.0 (已完成 ✅)
 
 **完成事项**:

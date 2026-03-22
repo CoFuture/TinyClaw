@@ -740,14 +740,16 @@ async fn handle_agent_turn(
         response: response.clone(),
     });
 
-    // Record turn in history
-    let turn_record = crate::agent::TurnHistoryManager::record_turn(
+    // Record turn in history (with tool executions if any)
+    let tool_executions = ctx.agent.take_tool_executions();
+    let turn_record = crate::agent::TurnHistoryManager::record_turn_with_tools(
         &ctx.turn_history,
         session_key,
         &turn_user_message,
         &response_text,
         turn_duration,
         turn_success,
+        tool_executions,
     );
     ctx.turn_history.record(turn_record);
 

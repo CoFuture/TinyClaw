@@ -176,6 +176,29 @@ impl TurnHistoryManager {
         turn
     }
 
+    /// Create a new turn record with tool executions (for use from gateway)
+    #[allow(dead_code)]
+    pub fn record_turn_with_tools(
+        _manager: &Arc<TurnHistoryManager>,
+        session_id: &str,
+        user_message: &str,
+        response: &str,
+        duration_ms: u64,
+        success: bool,
+        tools: Vec<ToolExecution>,
+    ) -> TurnRecord {
+        let mut turn = TurnRecord::new(session_id, user_message);
+        turn.response_preview = if response.len() > 500 {
+            format!("{}...", &response[..500])
+        } else {
+            response.to_string()
+        };
+        turn.duration_ms = duration_ms;
+        turn.success = success;
+        turn.tools = tools;
+        turn
+    }
+
     /// Create a turn history manager with persistence
     pub fn new_with_persistence<P: AsRef<std::path::Path>>(dir: P) -> crate::common::Result<Self> {
         let persist_dir = dir.as_ref().to_path_buf();
@@ -305,6 +328,17 @@ impl TurnHistoryManager {
         
         // Limit results
         all_turns.into_iter().take(limit).collect()
+    }
+
+    /// Get all turns for all sessions (for export)
+    /// Returns a map of session_id -> Vec<TurnRecord>
+    #[allow(dead_code)]
+    pub fn get_all_sessions_turns(&self) -> std::collections::HashMap<String, Vec<TurnRecord>> {
+        let records = self.records.read();
+        records
+            .iter()
+            .map(|(session_id, turns)| (session_id.clone(), turns.clone()))
+            .collect()
     }
 
     /// Get aggregated statistics

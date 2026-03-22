@@ -832,6 +832,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/turns/{turn_id}", get(turns_get))
         .route("/api/turns/recent", get(turns_recent))
         .route("/api/turns/stats", get(turns_stats))
+        .route("/api/turns/export", get(turns_export))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1714,6 +1715,30 @@ async fn turns_stats(
     Json(serde_json::json!({
         "stats": stats,
     }))
+}
+
+/// Export all turn history as JSON for download/backup
+async fn turns_export(
+    State(state): State<Arc<HttpState>>,
+) -> impl axum::response::IntoResponse {
+    use axum::http::header;
+
+    let all_turns = state.turn_history.get_all_sessions_turns();
+    let turn_count: usize = all_turns.values().map(|t| t.len()).sum();
+    
+    let body = serde_json::json!({
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "version": "1.0",
+        "turn_count": turn_count,
+        "sessions": all_turns,
+    });
+
+    let json = serde_json::to_string_pretty(&body).unwrap_or_default();
+    
+    axum::response::Response::builder()
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(json))
+        .unwrap()
 }
 
 // ============================================================

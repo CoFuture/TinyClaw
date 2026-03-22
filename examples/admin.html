@@ -1328,6 +1328,7 @@
                     <option value="">全部会话</option>
                 </select>
                 <button class="btn btn-secondary" onclick="loadTurnHistory()">🔄 刷新</button>
+                <button class="btn btn-secondary" onclick="exportTurnHistory()">📥 导出</button>
             </div>
             <div class="turn-history-panel" id="turnHistoryPanel">
                 <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
@@ -1990,9 +1991,10 @@
                     const sessionLabel = turn.session_id ? 
                         (turn.session_id === 'main' ? '主会话' : turn.session_id.substring(0, 8)) 
                         : '-';
+                    const expandIcon = toolCount > 0 ? '▶' : '';
                     
                     return `
-                        <div class="turn-history-item" style="border-left: 3px solid ${turn.success ? '#00ff88' : '#ff4757'}; padding: 10px 15px; margin-bottom: 8px; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                        <div class="turn-history-item" id="turn-${turn.id}" style="border-left: 3px solid ${turn.success ? '#00ff88' : '#ff4757'}; padding: 10px 15px; margin-bottom: 8px; background: rgba(255,255,255,0.02); border-radius: 6px; cursor: ${toolCount > 0 ? 'pointer' : 'default'};" onclick="${toolCount > 0 ? `toggleTurnDetails('${turn.session_id}', '${turn.id}')` : ''}">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                                 <span style="color: #888; font-size: 12px;">🕐 ${time}</span>
                                 <div style="display: flex; gap: 8px; align-items: center;">
@@ -2004,9 +2006,12 @@
                                 <span style="color: #00d9ff;">用户:</span> ${escapeHtml(turn.message_preview || '-')}
                             </div>
                             <div style="display: flex; gap: 15px; font-size: 12px; color: #888;">
-                                <span>🔧 工具: ${toolCount}个</span>
+                                <span>${expandIcon} 🔧 工具: ${toolCount}个</span>
                                 <span>⏱️ 耗时: ${duration}</span>
                                 ${turn.successful_tools !== undefined ? `<span>✓ 成功: ${turn.successful_tools}/${toolCount}</span>` : ''}
+                            </div>
+                            <div class="turn-tools-detail" id="turn-tools-${turn.id}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <div style="color: #888; font-size: 12px; text-align: center;">加载中...</div>
                             </div>
                         </div>
                     `;
@@ -2014,6 +2019,82 @@
             } catch (e) {
                 panel.innerHTML = '<div style="color: #ff4757; padding: 20px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
                 console.error('Failed to load turn history:', e);
+            }
+        }
+        
+        // Toggle turn details expansion and load tool info
+        async function toggleTurnDetails(sessionId, turnId) {
+            const detailDiv = document.getElementById('turn-tools-' + turnId);
+            if (!detailDiv) return;
+            
+            const isHidden = detailDiv.style.display === 'none';
+            detailDiv.style.display = isHidden ? 'block' : 'none';
+            
+            if (isHidden && detailDiv.dataset.loaded !== 'true') {
+                try {
+                    const resp = await fetch(API_BASE + '/api/sessions/' + encodeURIComponent(sessionId) + '/turns/' + encodeURIComponent(turnId));
+                    const data = await resp.json();
+                    
+                    if (data.success && data.turn && data.turn.tools) {
+                        const tools = data.turn.tools;
+                        if (tools.length === 0) {
+                            detailDiv.innerHTML = '<div style="color: #888; font-size: 12px; text-align: center;">无工具执行记录</div>';
+                        } else {
+                            detailDiv.innerHTML = tools.map((tool, idx) => {
+                                const toolDuration = tool.duration_ms ? tool.duration_ms + 'ms' : '-';
+                                const inputStr = typeof tool.input === 'object' ? JSON.stringify(tool.input, null, 2) : String(tool.input);
+                                const inputPreview = inputStr.length > 100 ? inputStr.substring(0, 100) + '...' : inputStr;
+                                const outputPreview = tool.output_preview || '-';
+                                const successColor = tool.success ? '#00ff88' : '#ff4757';
+                                const successIcon = tool.success ? '✓' : '✗';
+                                
+                                return `
+                                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px 12px; margin-bottom: 6px; border-left: 2px solid ${successColor};">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <span style="color: #00d9ff; font-weight: 500; font-size: 13px;">${escapeHtml(tool.name)}</span>
+                                            <div style="display: flex; gap: 10px; font-size: 11px; color: #888;">
+                                                <span style="color: ${successColor};">${successIcon} ${tool.success ? '成功' : '失败'}</span>
+                                                <span>⏱️ ${toolDuration}</span>
+                                            </div>
+                                        </div>
+                                        <div style="font-size: 11px; color: #aaa; margin-bottom: 3px;">
+                                            <span style="color: #666;">输入:</span> <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 2px;">${escapeHtml(inputPreview)}</code>
+                                        </div>
+                                        <div style="font-size: 11px; color: #aaa;">
+                                            <span style="color: #666;">输出:</span> <span style="color: #ccc;">${escapeHtml(outputPreview)}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                        }
+                        detailDiv.dataset.loaded = 'true';
+                    } else {
+                        detailDiv.innerHTML = '<div style="color: #888; font-size: 12px; text-align: center;">加载失败</div>';
+                    }
+                } catch (e) {
+                    detailDiv.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
+                }
+            }
+        }
+        
+        // Export turn history as JSON
+        async function exportTurnHistory() {
+            try {
+                const resp = await fetch(API_BASE + '/api/turns/export');
+                if (!resp.ok) throw new Error('导出失败');
+                
+                const data = await resp.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'tiny_claw_turns_' + new Date().toISOString().slice(0, 10) + '.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('导出失败: ' + e.message);
             }
         }
         
