@@ -136,33 +136,53 @@
 
 ---
 
-## 当前迭代规划 (v4.9.0)
+## 当前迭代规划 (v5.0.0)
 
 ### 本轮目标
-**Agent 执行状态可视化 + 交互体验增强**
+**WebUI 聊天体验增强** - 消息复制、清空聊天、搜索功能
 
 **计划完成**:
-- [x] TUI Gateway 事件增强
-  - 新增 `TuiGatewayEvent::TurnStarted` 事件：处理网关发来的 turn.started 通知
-  - 新增 `TuiGatewayEvent::TurnThinking` 事件：处理网关发来的 turn.thinking 通知
-  - Gateway client 支持处理 `turn.started` 和 `turn.thinking` 通知
-- [x] TUI 状态显示增强
-  - `handle_gateway_event` 新增 TurnStarted 和 TurnThinking 处理器
-  - 用户发送消息时自动设置 thinking 状态，网关事件触发时更新状态
-  - 帮助栏更新：显示 "🔧 Tool active" 状态提示
-- [x] WebUI 聊天面板状态指示器
-  - SSE 事件处理新增 `turn.thinking` 事件：显示 "🤔 正在思考..." 动画指示器
-  - SSE 事件处理新增 `assistant.tool_use` 事件：显示 "🔧 正在使用: tool_name" 指示器
-  - 新增 `showThinkingIndicator()`、`showToolUseIndicator()`、`hideActivityIndicator()` 函数
-  - 实时清除指示器：当收到 partial/text/ended 事件时自动隐藏
+- [x] WebUI 聊天工具栏
+  - 新增 `.chat-toolbar` 布局：包含搜索框和清空按钮
+  - 搜索框 `.chat-search-input`：placeholder "搜索消息..."
+  - 清空按钮 `.chat-btn-icon.clear`：hover 时变红提示
+- [x] 消息复制功能
+  - 用户/AI 消息 hover 时显示右上角"复制"按钮
+  - 点击后显示"已复制"反馈（1.5秒后恢复）
+  - 使用 `navigator.clipboard.writeText` 复制原文
+- [x] 清空聊天功能
+  - 点击"清空"按钮清除当前会话的本地消息显示
+  - 同时清除 `chatMessageHistories` 中对应会话的缓存
+  - 搜索框也会被清空
+- [x] 聊天搜索功能
+  - `onChatSearchInput()` 实时过滤消息内容
+  - 不匹配的消息添加 `.hidden-by-search` 类隐藏
+  - 搜索结果计数显示：当前可见数/总数
+  - 搜索框为空时显示全部消息
 - [x] CSS 样式增强
-  - 新增 `.thinking-indicator` 和 `.tool-indicator` 样式
-  - 新增 `.thinking-dots` 和 `.dot-anim` 动画
-  - 新增 `.tool-use-text` 样式（紫色显示工具名）
+  - `.msg-copy-btn`：默认 opacity:0，hover 时 opacity:1
+  - `.copied` 状态：文字变绿色
+  - `.hidden-by-search`：display:none
+  - `.chat-search-count`：淡灰色显示搜索结果计数
 
 #### 基础修复 (持续)
 - `cargo clippy` 无警告
 - `cargo test` 全部通过 (176 tests)
+
+---
+
+### v4.9.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent 执行状态可视化** - TUI 和 WebUI 的 thinking/tool_use 指示器
+  - `TuiGatewayEvent::TurnStarted` 和 `TurnThinking` 事件
+  - TUI 状态显示增强：thinking 状态跟踪
+  - WebUI SSE 实时反馈：`turn.thinking` 和 `assistant.tool_use` 事件
+  - CSS 动画：`.thinking-indicator`、`.tool-indicator`、`.thinking-dots`、`.dot-anim`
+- cargo clippy 0 警告
+- cargo test 176 tests
+
+**下一步**: WebUI 聊天体验增强
 
 ---
 
@@ -277,6 +297,7 @@
 - [x] TUI Tab 命令补全 ✅ v4.3.0
 - [x] TUI 视觉优化 (彩色角色标签+时间戳) ✅ v4.4.0
 - [x] TUI 命令帮助系统增强 ✅ v4.6.0
+- [x] WebUI 聊天消息复制/清空/搜索 ✅ v5.0.0
 
 ### 稳定性
 - [ ] 错误处理增强
@@ -289,6 +310,7 @@
 
 | 版本 | 完成事项 |
 |------|----------|
+| v5.0.0 | WebUI 聊天体验增强 - 消息复制按钮(hover显示)、清空聊天按钮、实时搜索过滤(显示匹配计数)；CSS 增强：copy按钮动画、hidden-by-search隐藏、search-count显示；cargo clippy 0 警告；cargo test 176 tests |
 | v4.9.0 | Agent 执行状态可视化 - TUI 新增 TurnStarted/TurnThinking 事件处理、WebUI SSE 新增 thinking/tool_use 指示器、CSS 动画增强；cargo clippy 0 警告；cargo test 176 tests |
 | v4.8.0 | Session Rename 支持 - session.rename 网关方法、PATCH /api/sessions/{id} HTTP 端点、SessionManager::rename 方法；TUI :ren/:rename 命令进入重命名模式、rename_mode 状态管理、Enter 确认/Esc 取消；帮助栏更新显示新命令；/api/sessions 返回 messageCount；cargo clippy 0 警告；cargo test 176 tests |
 | v4.7.0 | Agent 流式响应支持 (Ollama) - send_ollama_streaming/send_message_streaming 方法、AssistantPartial 事件；WebUI 实时流式显示 - SSE assistant.partial、流式缓冲区、▊ 闪烁指示器；SSE 事件过滤增强；cargo clippy 0 警告；cargo test 176 tests |

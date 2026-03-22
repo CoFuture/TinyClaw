@@ -747,6 +747,59 @@
             margin-bottom: 12px;
             max-height: 360px;
         }
+        .chat-toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .chat-search-box {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .chat-search-input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.3);
+            color: #eee;
+            font-size: 12px;
+        }
+        .chat-search-input::placeholder {
+            color: #666;
+        }
+        .chat-search-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .chat-search-count {
+            font-size: 11px;
+            color: #888;
+            padding: 0 8px;
+            min-width: 60px;
+        }
+        .chat-btn-icon {
+            padding: 6px 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: #888;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .chat-btn-icon:hover {
+            background: rgba(255,255,255,0.1);
+            color: #eee;
+        }
+        .chat-btn-icon.clear:hover {
+            background: rgba(255,71,87,0.2);
+            border-color: rgba(255,71,87,0.4);
+            color: #ff6b7a;
+        }
         .message {
             margin-bottom: 12px;
             padding: 12px 16px;
@@ -754,6 +807,34 @@
             line-height: 1.5;
             word-break: break-word;
             animation: fadeIn 0.2s ease;
+            position: relative;
+        }
+        .message:hover .msg-copy-btn {
+            opacity: 1;
+        }
+        .msg-copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.3);
+            color: #888;
+            cursor: pointer;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .msg-copy-btn:hover {
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+        }
+        .msg-copy-btn.copied {
+            color: #00ff88;
+        }
+        .message.hidden-by-search {
+            display: none;
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -2236,6 +2317,13 @@
                     <span id="chatLoadingIndicator" class="chat-loading-indicator" style="display:none;">加载中...</span>
                     <button class="btn btn-small" onclick="initChatWebSocket()" style="margin-left: auto; padding: 4px 8px; font-size: 11px;">重连</button>
                 </div>
+                <div class="chat-toolbar">
+                    <div class="chat-search-box">
+                        <input type="text" class="chat-search-input" id="chatSearchInput" placeholder="搜索消息..." oninput="onChatSearchInput()">
+                        <span class="chat-search-count" id="chatSearchCount"></span>
+                    </div>
+                    <button class="chat-btn-icon clear" onclick="clearChatMessages()" title="清空聊天">清空</button>
+                </div>
                 <div class="chat-messages" id="chatMessages">
                     <div class="message notice">欢迎使用 TinyClaw AI 对话！请在下方输入消息开始聊天。</div>
                 </div>
@@ -2407,7 +2495,9 @@
             
             // Format content for display
             let displayContent;
+            let rawContent = ''; // Store raw text for copying
             if (typeof content === 'string') {
+                rawContent = content;
                 if (type === 'error' || type === 'system' || type === 'notice') {
                     // Plain text for system/error messages
                     displayContent = escapeHtml(content).replace(/\n/g, '<br>');
@@ -2426,12 +2516,102 @@
                     }
                 }
             } else {
-                displayContent = JSON.stringify(content, null, 2).replace(/\n/g, '<br>');
+                rawContent = JSON.stringify(content, null, 2);
+                displayContent = rawContent.replace(/\n/g, '<br>');
             }
             
-            msg.innerHTML = '<div class="msg-role">' + role + ' <span class="msg-time">' + time + '</span></div><div class="msg-content">' + displayContent + '</div>';
+            // Add copy button for user/assistant messages
+            const copyBtn = (type === 'user' || type === 'assistant') 
+                ? '<button class="msg-copy-btn" onclick="copyMessageContent(this, \'' + escapeHtml(rawContent.replace(/'/g, "\\'").replace(/\n/g, '\\n')) + '\')" title="复制">复制</button>' 
+                : '';
+            
+            msg.innerHTML = copyBtn + '<div class="msg-role">' + role + ' <span class="msg-time">' + time + '</span></div><div class="msg-content">' + displayContent + '</div>';
             container.appendChild(msg);
             container.scrollTop = container.scrollHeight;
+        }
+
+        /// Copy message content to clipboard
+        function copyMessageContent(btn, content) {
+            // Unescape the newlines we escaped earlier
+            const text = content.replace(/\\n/g, '\n').replace(/\\'/g, "'");
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = '复制';
+                    btn.classList.remove('copied');
+                }, 1500);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                btn.textContent = '失败';
+                setTimeout(() => {
+                    btn.textContent = '复制';
+                }, 1500);
+            });
+        }
+
+        /// Clear all chat messages from display (keeps session history on server)
+        function clearChatMessages() {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            container.innerHTML = '<div class="message notice">聊天已清空。开始新对话吧！</div>';
+            // Clear local cached history for current session too
+            delete chatMessageHistories[chatCurrentSession];
+            // Clear search
+            const searchInput = document.getElementById('chatSearchInput');
+            if (searchInput) searchInput.value = '';
+            updateSearchCount();
+        }
+
+        /// Handle chat search input
+        function onChatSearchInput() {
+            const searchInput = document.getElementById('chatSearchInput');
+            const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            
+            const messages = container.querySelectorAll('.message');
+            let visibleCount = 0;
+            
+            messages.forEach(msg => {
+                // Skip notice messages
+                if (msg.classList.contains('notice')) {
+                    if (query === '') {
+                        msg.classList.remove('hidden-by-search');
+                    } else {
+                        msg.classList.add('hidden-by-search');
+                    }
+                    return;
+                }
+                
+                const content = msg.querySelector('.msg-content');
+                if (!content) return;
+                
+                const text = content.textContent.toLowerCase();
+                if (query === '' || text.includes(query)) {
+                    msg.classList.remove('hidden-by-search');
+                    visibleCount++;
+                } else {
+                    msg.classList.add('hidden-by-search');
+                }
+            });
+            
+            updateSearchCount(visibleCount, query);
+        }
+
+        /// Update search result count display
+        function updateSearchCount(visible, query) {
+            const countEl = document.getElementById('chatSearchCount');
+            if (!countEl) return;
+            
+            if (!query) {
+                countEl.textContent = '';
+                return;
+            }
+            
+            const container = document.getElementById('chatMessages');
+            const totalMessages = container ? container.querySelectorAll('.message:not(.notice)').length : 0;
+            countEl.textContent = visible + '/' + totalMessages;
         }
 
         function escapeHtml(text) {
