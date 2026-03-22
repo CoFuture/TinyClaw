@@ -5,6 +5,7 @@ pub mod context;
 pub mod context_manager;
 pub mod error_recovery;
 pub mod memory;
+pub mod memory_extractor;
 pub mod retry;
 pub mod runtime;
 pub mod scheduled_task;

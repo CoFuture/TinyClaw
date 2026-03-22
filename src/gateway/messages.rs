@@ -723,6 +723,18 @@ async fn handle_agent_turn(
         response: response.clone(),
     });
 
+    // Auto-extract facts from conversation into long-term memory
+    // Combine user message and assistant response for analysis
+    let conversation_text = format!("{}\n\n{}", message, response);
+    let extracted_count = ctx.memory_manager.auto_extract(&conversation_text, session_key);
+    if extracted_count > 0 {
+        tracing::debug!(
+            session_id = %session_key,
+            count = extracted_count,
+            "Auto-extracted facts from agent turn"
+        );
+    }
+
     // Generate proactive suggestions based on conversation context
     let suggestions = {
         let engine = ctx.get_suggestion_engine(session_key);

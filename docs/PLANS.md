@@ -375,6 +375,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ## 待办事项池
 
 ### Agent 自主执行能力（真正能做事的关键！）
+- [x] **自动记忆提取** - 基于内容分析的自动提取和重要性评分 ✅ v7.2.0
 - [x] **任务抽象与执行** ✅ v5.9.0
 - [x] **后台任务队列** ✅ v5.9.0
 - [x] **定时任务系统** ✅ v6.0.0
@@ -438,6 +439,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v7.2.0 | Automatic Memory Extraction - 新增 `agent/memory_extractor.rs`：`ImportanceCalculator`（内容分析自动计算重要性评分）和 `FactExtractor`（6种类别自动分类）；`MemoryManager::auto_extract()` 整合提取和存储；Gateway `handle_agent_turn` 后自动提取记忆；14个新测试；cargo clippy 0 警告；cargo test 287 tests |
 | v7.1.0 | 记忆 HTTP API 端点 + Agent 上下文集成 - 完整的记忆管理 REST API (GET/POST/DELETE /api/memory)；Agent turn 自动注入相关记忆到 system prompt；修复 memory 模块测试隔离问题；cargo clippy 0 警告；cargo test 273 tests |
 | v7.0.0 | Agent 长期记忆系统 - 新增 `agent/memory.rs`：`MemoryFact`、`FactCategory`、`MemoryManager` 结构；支持 6 种事实类别；关键词自动提取和检索；会话级检索和上下文提示生成；MemoryManager 集成到 Gateway 和 HTTP 状态；11 个新测试；cargo clippy 0 警告；cargo test 273 tests |
 | v6.7.0 | 交互式建议系统 - 新增 SuggestionManager 管理主动建议和用户反馈；追踪接受/忽略的建议，学习避免重复；Gateway JSON-RPC (`session.suggestions.list/accept/dismiss`)；HTTP REST API (`/api/sessions/:id/suggestions`)；增强 SuggestionEngine 反馈过滤；cargo clippy 0 警告；cargo test 262 tests |
@@ -634,7 +636,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告
 - cargo test 273 tests
 
-**下一步**: 记忆自动提取、记忆重要性评分
+**下一步**: 继续完善 Agent 能力、更多交互体验优化
+
+---
+
+## v7.2.0 (已完成 ✅)
+
+**完成事项**:
+- **Automatic Memory Extraction with Content-Based Importance Scoring** - 记忆自动提取
+  - 新增 `agent/memory_extractor.rs`：`ImportanceCalculator` 和 `FactExtractor` 结构
+  - `ImportanceCalculator` - 基于内容分析自动计算重要性评分 (0.0-1.0)
+    - 考虑偏好指示词、决策指示词、技术细节、动作指示词、具体性
+    - 每种 FactCategory 有基础分，根据内容特征动态调整
+  - `FactExtractor` - 从对话文本中识别潜在事实
+    - 支持 6 种类别自动分类：UserPreference、Decision、Technical、ProjectContext、ActionItem、General
+    - 句子级别和段落级别双重提取，去重处理
+    - 每轮对话最多提取 5 个事实
+  - `MemoryManager::auto_extract()` 方法 - 整合提取和存储
+  - Gateway 集成 - 每个 Agent turn 后自动提取记忆
+- **Gateway 集成** - `handle_agent_turn` 后自动调用 `memory_manager.auto_extract()`
+  - 合并用户消息和助手回复进行联合分析
+- 14 个新测试 (memory_extractor 模块)
+- cargo clippy 0 警告
+- cargo test 287 tests
+
+**下一步**: 记忆衰减机制、记忆使用可视化面板
 
 ---
 

@@ -5,6 +5,13 @@
 //!
 //! Unlike Session Notes (user manually created), Memory is automatically extracted
 //! by the Agent from conversations.
+//!
+//! ## Fact Extraction
+//!
+//! Facts can be added manually via `add_fact()` or automatically extracted from
+//! conversation text via `auto_extract()`. The latter uses content analysis to
+//! identify potential facts and calculate importance scores without requiring
+//! external AI API calls.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -281,6 +288,39 @@ impl MemoryManager {
         
         // Persist
         self.save_category(&category);
+    }
+
+    /// Automatically extract facts from conversation text and add them to memory.
+    /// Uses content analysis to identify potential facts and calculate importance scores.
+    /// Returns the number of facts extracted and added.
+    ///
+    /// This is the main entry point for automatic memory enrichment from conversations.
+    pub fn auto_extract(&self, text: &str, session_id: &str) -> usize {
+        use crate::agent::memory_extractor::{ExtractedFact, FactExtractor};
+
+        let extracted: Vec<ExtractedFact> = FactExtractor::extract(text)
+            .into_iter()
+            .map(|(content, category, importance)| ExtractedFact {
+                content,
+                category,
+                importance,
+                source_text: session_id.to_string(),
+            })
+            .collect();
+
+        let count = extracted.len();
+        for fact in extracted {
+            let memory_fact: MemoryFact = fact.into();
+            self.add_fact(memory_fact);
+        }
+
+        tracing::debug!(
+            session_id = %session_id,
+            count = count,
+            "Auto-extracted facts from conversation"
+        );
+
+        count
     }
 
     /// Add multiple facts at once
