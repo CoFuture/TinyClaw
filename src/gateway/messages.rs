@@ -654,6 +654,9 @@ async fn handle_agent_turn(
 
     debug!("[{}] Agent turn: session={}", request_id, session_key);
 
+    // Try to run memory decay (non-blocking, only runs if enough time has passed)
+    let _ = ctx.memory_manager.try_decay();
+
     // Emit turn started event
     ctx.event_emitter.emit(Event::TurnStarted {
         session_id: session_key.to_string(),

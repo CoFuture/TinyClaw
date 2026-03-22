@@ -376,6 +376,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ### Agent 自主执行能力（真正能做事的关键！）
 - [x] **自动记忆提取** - 基于内容分析的自动提取和重要性评分 ✅ v7.2.0
+- [x] **记忆衰减机制** - 重要性随时间自然衰减，低重要性事实自动清理 ✅ v7.3.0
 - [x] **任务抽象与执行** ✅ v5.9.0
 - [x] **后台任务队列** ✅ v5.9.0
 - [x] **定时任务系统** ✅ v6.0.0
@@ -439,6 +440,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v7.3.0 | Memory Decay System - 新增记忆衰减机制：事实重要性随时间自然衰减（每7天衰减10%），低于阈值(0.1)自动移除；`MemoryDecayStats` 追踪衰减统计；`decay_facts()` 和 `try_decay()` 方法；Gateway `handle_agent_turn` 中自动触发衰减检查；增强 `/api/memory/stats` 端点：新增 importanceDistribution、categoryDetails、decay 统计；5个新测试；cargo clippy 0 警告；cargo test 303 tests |
 | v7.2.0 | Automatic Memory Extraction - 新增 `agent/memory_extractor.rs`：`ImportanceCalculator`（内容分析自动计算重要性评分）和 `FactExtractor`（6种类别自动分类）；`MemoryManager::auto_extract()` 整合提取和存储；Gateway `handle_agent_turn` 后自动提取记忆；14个新测试；cargo clippy 0 警告；cargo test 287 tests |
 | v7.1.0 | 记忆 HTTP API 端点 + Agent 上下文集成 - 完整的记忆管理 REST API (GET/POST/DELETE /api/memory)；Agent turn 自动注入相关记忆到 system prompt；修复 memory 模块测试隔离问题；cargo clippy 0 警告；cargo test 273 tests |
 | v7.0.0 | Agent 长期记忆系统 - 新增 `agent/memory.rs`：`MemoryFact`、`FactCategory`、`MemoryManager` 结构；支持 6 种事实类别；关键词自动提取和检索；会话级检索和上下文提示生成；MemoryManager 集成到 Gateway 和 HTTP 状态；11 个新测试；cargo clippy 0 警告；cargo test 273 tests |
@@ -660,7 +662,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告
 - cargo test 287 tests
 
-**下一步**: 记忆衰减机制、记忆使用可视化面板
+**下一步**: WebUI 记忆管理面板、TUI 记忆命令
 
 ---
 

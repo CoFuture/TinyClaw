@@ -19,6 +19,7 @@ pub mod suggestion_manager;
 pub mod task;
 pub mod task_manager;
 pub mod tools;
+pub mod tool_result_formatter;
 pub mod turn_log;
 
 pub use client::Agent;

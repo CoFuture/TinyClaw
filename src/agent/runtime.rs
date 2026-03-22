@@ -6,6 +6,7 @@ use crate::agent::client::Agent;
 use crate::agent::context::{AgentContext, ExecutionState};
 use crate::agent::context_manager::{ContextManager, ContextOptions};
 use crate::agent::tools::{ToolExecutor, ToolResult};
+use crate::agent::tool_result_formatter::ToolResultFormatter;
 use crate::agent::turn_log::{TurnLog, TurnLogEntry, TurnAction};
 use crate::common::Result;
 use crate::gateway::events::{Event, EventEmitter};
@@ -257,9 +258,9 @@ impl AgentRuntime {
                     let result = self.execute_tool(&tool_call.name, &tool_call.arguments).await;
                     let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
                     
-                    // Format tool result - use structured error report on failure
+                    // Format tool result - use ToolResultFormatter for enhanced readability
                     let (tool_result_str, tool_success) = match &result {
-                        Ok(r) => (format_tool_result_for_history(&tool_call.name, r), r.success),
+                        Ok(r) => (ToolResultFormatter::format(&tool_call.name, r, tool_duration_ms), r.success),
                         Err(e) => (format!("Tool execution error: {}", e), false),
                     };
                     
@@ -429,22 +430,6 @@ impl AgentRuntime {
 impl Default for AgentRuntime {
     fn default() -> Self {
         Self::new(Arc::new(ToolExecutor::new()))
-    }
-}
-
-/// Format a ToolResult for inclusion in conversation history.
-/// On success: returns the output string.
-/// On failure: returns a structured error report with error kind, retryability, and suggestion.
-fn format_tool_result_for_history(tool_name: &str, result: &ToolResult) -> String {
-    use crate::agent::error_recovery::ErrorRecovery;
-
-    if result.success {
-        result.output.clone()
-    } else {
-        // Use structured error reporting for failures
-        let error_msg = result.error.as_deref().unwrap_or(&result.output);
-        let recovery = ErrorRecovery::from_error(tool_name, error_msg);
-        recovery.format_report(tool_name)
     }
 }
 

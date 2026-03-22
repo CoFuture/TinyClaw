@@ -806,17 +806,17 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/preferences", get(preferences_get))
         .route("/api/preferences", axum::routing::patch(preferences_update))
         // Session notes API
-        .route("/api/sessions/:session_id/notes", get(session_notes_list))
-        .route("/api/sessions/:session_id/notes", post(session_notes_add))
-        .route("/api/sessions/:session_id/notes/:note_id", axum::routing::put(session_notes_update))
-        .route("/api/sessions/:session_id/notes/:note_id", axum::routing::delete(session_notes_delete))
+        .route("/api/sessions/{session_id}/notes", get(session_notes_list))
+        .route("/api/sessions/{session_id}/notes", post(session_notes_add))
+        .route("/api/sessions/{session_id}/notes/{note_id}", axum::routing::put(session_notes_update))
+        .route("/api/sessions/{session_id}/notes/{note_id}", axum::routing::delete(session_notes_delete))
         // Session instructions API
-        .route("/api/sessions/:session_id/instructions", get(session_instructions_get))
-        .route("/api/sessions/:session_id/instructions", axum::routing::put(session_instructions_set))
+        .route("/api/sessions/{session_id}/instructions", get(session_instructions_get))
+        .route("/api/sessions/{session_id}/instructions", axum::routing::put(session_instructions_set))
         // Session suggestions API
-        .route("/api/sessions/:session_id/suggestions", get(suggestions_list))
-        .route("/api/sessions/:session_id/suggestions/:suggestion_id/accept", axum::routing::post(suggestions_accept))
-        .route("/api/sessions/:session_id/suggestions/:suggestion_id/dismiss", axum::routing::post(suggestions_dismiss))
+        .route("/api/sessions/{session_id}/suggestions", get(suggestions_list))
+        .route("/api/sessions/{session_id}/suggestions/{suggestion_id}/accept", axum::routing::post(suggestions_accept))
+        .route("/api/sessions/{session_id}/suggestions/{suggestion_id}/dismiss", axum::routing::post(suggestions_dismiss))
         // Memory API - long-term fact storage and retrieval
         .route("/api/memory", get(memory_list))
         .route("/api/memory/search", get(memory_search))
@@ -1602,17 +1602,56 @@ async fn memory_for_session(
 async fn memory_stats(
     State(state): State<Arc<HttpState>>,
 ) -> Json<serde_json::Value> {
+    use crate::agent::memory::FactCategory;
+    
     let total = state.memory_manager.count();
     let all = state.memory_manager.list_all();
+    let decay_stats = state.memory_manager.get_decay_stats();
     
     let mut by_category: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut importance_buckets: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    importance_buckets.insert("high".to_string(), 0); // >= 0.7
+    importance_buckets.insert("medium".to_string(), 0); // 0.4-0.7
+    importance_buckets.insert("low".to_string(), 0); // < 0.4
+    
     for fact in &all {
         *by_category.entry(fact.category.clone()).or_insert(0) += 1;
+        
+        if fact.importance >= 0.7 {
+            *importance_buckets.get_mut("high").unwrap() += 1;
+        } else if fact.importance >= 0.4 {
+            *importance_buckets.get_mut("medium").unwrap() += 1;
+        } else {
+            *importance_buckets.get_mut("low").unwrap() += 1;
+        }
+    }
+    
+    // Per-category importance breakdown
+    let mut category_details: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+    for cat_str in by_category.keys() {
+        let cat = FactCategory::from_str(cat_str);
+        let facts = state.memory_manager.get_by_category(&cat);
+        let high = facts.iter().filter(|f| f.importance >= 0.7).count();
+        let medium = facts.iter().filter(|f| f.importance >= 0.4 && f.importance < 0.7).count();
+        let low = facts.iter().filter(|f| f.importance < 0.4).count();
+        category_details.insert(cat_str.clone(), serde_json::json!({
+            "high": high,
+            "medium": medium,
+            "low": low,
+            "total": facts.len(),
+        }));
     }
     
     Json(serde_json::json!({
         "totalFacts": total,
         "byCategory": by_category,
+        "importanceDistribution": importance_buckets,
+        "categoryDetails": category_details,
+        "decay": {
+            "decayCycles": decay_stats.decay_cycles,
+            "factsDecayed": decay_stats.facts_decayed,
+            "lastDecayAt": decay_stats.last_decay_at,
+        },
     }))
 }
 
