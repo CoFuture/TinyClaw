@@ -1384,6 +1384,181 @@ pub async fn send_message_with_history(
     pub async fn send_message(&self, session_key: &str, message: &str, skill_prompt: Option<&str>) -> Result<String> {
         self.send_message_with_history(session_key, message, &[], skill_prompt).await
     }
+
+    /// Summarize content using the AI without tool calling.
+    /// Used internally for context compression.
+    ///
+    /// This is a lightweight call that doesn't trigger tool execution or
+    /// turn tracking - it's just for generating summaries.
+    pub async fn summarize_content(&self, content: &str) -> Result<String> {
+        let config = self.config.read().clone();
+
+        // Determine provider
+        let provider = config.provider.clone().unwrap_or_else(|| {
+            if config.model.starts_with("claude-") || config.model.starts_with("anthropic/") {
+                ModelProvider::Anthropic
+            } else if config.model.starts_with("gpt-") || config.model.starts_with("openai/") {
+                ModelProvider::OpenAI
+            } else {
+                ModelProvider::Ollama
+            }
+        });
+
+        // Build a simple request without tools
+        let system_prompt = "You are a helpful assistant that creates concise, accurate summaries. Focus on preserving key information, decisions, and context that would be important for continuing a conversation.";
+
+        match provider {
+            ModelProvider::Anthropic => {
+                self.summarize_anthropic(&config, content, system_prompt).await
+            }
+            ModelProvider::OpenAI => {
+                self.summarize_openai(&config, content, system_prompt).await
+            }
+            ModelProvider::Ollama => {
+                self.summarize_ollama(&config, content, system_prompt).await
+            }
+        }
+    }
+
+    /// Summarize using Anthropic API
+    async fn summarize_anthropic(&self, config: &AgentConfig, content: &str, system_prompt: &str) -> Result<String> {
+        if config.api_key.is_none() {
+            return Err(Error::Agent("API key not configured".into()));
+        }
+        let api_key = config.api_key.clone().unwrap();
+        
+        let request = serde_json::json!({
+            "model": config.model.trim_start_matches("anthropic/"),
+            "max_tokens": 2000,
+            "system": system_prompt,
+            "messages": [{
+                "role": "user",
+                "content": content
+            }]
+        });
+
+        // Use circuit breaker + retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let api_base = config.api_base.clone();
+        let response = self.execute_protected(|| {
+            let http_client = http_client.clone();
+            let api_base = api_base.clone();
+            let api_key = api_key.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/v1/messages", api_base))
+                    .header("x-api-key", api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .timeout(std::time::Duration::from_secs(60))
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        let json: serde_json::Value = response.json().await.map_err(|e| Error::Network(e.to_string()))?;
+        
+        // Extract text from response
+        let text = json["content"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|block| block["text"].as_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(text)
+    }
+
+    /// Summarize using OpenAI API
+    async fn summarize_openai(&self, config: &AgentConfig, content: &str, system_prompt: &str) -> Result<String> {
+        if config.api_key.is_none() {
+            return Err(Error::Agent("API key not configured".into()));
+        }
+        let api_key = config.api_key.clone().unwrap();
+        
+        let request = serde_json::json!({
+            "model": config.model.trim_start_matches("openai/"),
+            "max_tokens": 2000,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content}
+            ]
+        });
+
+        // Use circuit breaker + retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let api_base = config.api_base.clone();
+        let response = self.execute_protected(|| {
+            let http_client = http_client.clone();
+            let api_base = api_base.clone();
+            let api_key = api_key.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/v1/chat/completions", api_base))
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .timeout(std::time::Duration::from_secs(60))
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        let json: serde_json::Value = response.json().await.map_err(|e| Error::Network(e.to_string()))?;
+
+        let text = json["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|choice| choice["message"]["content"].as_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(text)
+    }
+
+    /// Summarize using Ollama API
+    async fn summarize_ollama(&self, config: &AgentConfig, content: &str, system_prompt: &str) -> Result<String> {
+        let full_prompt = format!("{}\n\n{}", system_prompt, content);
+
+        let request = serde_json::json!({
+            "model": config.model.trim_start_matches("ollama/"),
+            "prompt": full_prompt,
+            "stream": false
+        });
+
+        // Use circuit breaker + retry wrapper for the HTTP request
+        let http_client = self.http_client.clone();
+        let api_base = config.api_base.clone();
+        let response = self.execute_protected(|| {
+            let http_client = http_client.clone();
+            let api_base = api_base.clone();
+            let request = request.clone();
+            async move {
+                http_client
+                    .post(format!("{}/api/generate", api_base))
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .timeout(std::time::Duration::from_secs(120))
+                    .send()
+                    .await
+                    .map_err(|e| Error::Network(e.to_string()))
+            }
+        }).await?;
+
+        let json: serde_json::Value = response.json().await.map_err(|e| Error::Network(e.to_string()))?;
+
+        let text = json["response"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        Ok(text)
+    }
 }
 
 /// Format a ToolResult for inclusion in a tool result message.

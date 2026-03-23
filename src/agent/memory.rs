@@ -705,16 +705,22 @@ impl Default for MemoryManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    // Clear test memory before each test to avoid stale data
-    fn setup_test_memory() {
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    // Create a unique test directory for each test to avoid parallel test interference
+    fn setup_test_memory() -> PathBuf {
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
         let path = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("tiny_claw")
-            .join("memory");
+            .join("memory_test")
+            .join(format!("test_{}", test_id));
         if path.exists() {
             let _ = std::fs::remove_dir_all(&path);
         }
+        path
     }
 
     fn create_test_fact() -> MemoryFact {
@@ -755,8 +761,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_add_and_search() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         manager.add_fact(fact);
         
@@ -767,8 +772,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_search_no_match() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         manager.add_fact(fact);
         
@@ -778,8 +782,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_get_for_session() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         manager.add_fact(fact);
         
@@ -793,8 +796,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_delete_fact() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         let id = fact.id.clone();
         manager.add_fact(fact);
@@ -808,8 +810,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_generate_context_prompt() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         manager.add_fact(fact);
         
@@ -821,8 +822,7 @@ mod tests {
 
     #[test]
     fn test_memory_manager_generate_session_prompt() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let fact = create_test_fact();
         manager.add_fact(fact);
         
@@ -843,8 +843,7 @@ mod tests {
 
     #[test]
     fn test_list_all() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         
         let fact1 = MemoryFact::new(
             "Fact 1".to_string(),
@@ -868,8 +867,7 @@ mod tests {
 
     #[test]
     fn test_decay_stats_initial() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         let stats = manager.get_decay_stats();
         assert_eq!(stats.decay_cycles, 0);
         assert_eq!(stats.facts_decayed, 0);
@@ -878,8 +876,7 @@ mod tests {
 
     #[test]
     fn test_decay_removes_low_importance_facts() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         
         // Add a fact with very low importance
         let fact = MemoryFact::new(
@@ -905,8 +902,7 @@ mod tests {
 
     #[test]
     fn test_decay_skips_when_not_enough_time() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         
         // Add a fact
         let fact = MemoryFact::new(
@@ -927,8 +923,7 @@ mod tests {
 
     #[test]
     fn test_decay_respects_interval() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         
         // Add a fact
         let fact = MemoryFact::new(
@@ -955,8 +950,7 @@ mod tests {
 
     #[test]
     fn test_decay_importance_reduction() {
-        setup_test_memory();
-        let manager = MemoryManager::new();
+        let manager = MemoryManager::with_path(setup_test_memory());
         
         // Add a fact with medium importance
         let fact = MemoryFact::new(

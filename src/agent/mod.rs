@@ -3,6 +3,7 @@
 pub mod client;
 pub mod context;
 pub mod context_manager;
+pub mod context_summarizer;
 pub mod conversation_summary;
 pub mod error_recovery;
 pub mod memory;
@@ -25,6 +26,8 @@ pub mod turn_history;
 pub mod turn_log;
 
 pub use client::Agent;
+#[allow(unused_imports)]
+pub use context_summarizer::{ContextSummarizer, ContextSummary, SummarizedContext, SummarizerConfig};
 #[allow(unused_imports)]
 pub use memory::{FactCategory, MemoryFact, MemoryFactSummary, MemoryManager};
 pub use scheduled_task::ScheduledTaskSummary;

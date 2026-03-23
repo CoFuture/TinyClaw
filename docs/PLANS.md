@@ -53,6 +53,32 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v9.4.0 (已完成 ✅)
+
+**完成事项**:
+- **Flaky Test Fix** - 修复 memory 测试并行运行导致的竞态条件
+  - `setup_test_memory()` 改为使用唯一测试目录 (`memory_test/test_{id}`)
+  - 使用 `AtomicU64` 计数器确保每个测试使用独立目录
+  - 测试现在使用 `MemoryManager::with_path()` 创建隔离的 manager
+- **AI-Powered Context Summarization** - 新增 AI 驱动的上下文摘要模块
+  - 新增 `src/agent/context_summarizer.rs` 模块
+  - `ContextSummary` 结构：保存摘要文本、原始 token 数、压缩率、提取的主题/决策/工具
+  - `ContextSummarizer` 结构：使用 AI 生成智能摘要，保留关键信息
+  - `SummarizedContext` 结构：管理摘要 + 近期消息的组合上下文
+  - 摘要格式：保留决策、用户偏好、主题进展、关键信息
+- **Agent Summarization API** - 新增 Agent 内容摘要方法
+  - `Agent::summarize_content()` - 无需工具调用的轻量级 AI 调用
+  - `Agent::summarize_anthropic()` - Anthropic API 集成
+  - `Agent::summarize_openai()` - OpenAI API 集成
+  - `Agent::summarize_ollama()` - Ollama 本地模型集成
+  - 支持跨 Provider 的统一摘要接口
+- cargo clippy 0 警告
+- cargo test 337 tests
+
+**下一步**: 集成 ContextSummarizer 到 ContextManager、Agent 运行时
+
+---
+
 ### v9.3.0 (已完成 ✅)
 
 **完成事项**:
