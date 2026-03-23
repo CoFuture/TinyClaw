@@ -1,7 +1,7 @@
 //! TUI application state
 
 use crate::types::{Message, SessionHistory};
-use crate::tui::gateway_client::TuiGatewayStatus;
+use crate::tui::gateway_client::{TuiGatewayStatus, ToolCallPreview};
 use std::collections::HashMap;
 
 /// Agent activity type
@@ -248,6 +248,14 @@ pub struct AppState {
     pub instructions_session_id: Option<String>,
     /// Current instructions being edited (None = loading/fetching)
     pub current_instructions: Option<String>,
+    /// Whether we're in action confirmation mode (waiting for user to confirm/deny)
+    pub confirm_mode: bool,
+    /// Session ID for pending action confirmation
+    pub confirm_session_id: Option<String>,
+    /// Plan ID to confirm or deny
+    pub confirm_plan_id: Option<String>,
+    /// Tools in the pending action plan
+    pub confirm_tools: Vec<ToolCallPreview>,
 }
 
 impl Default for AppState {
@@ -282,6 +290,10 @@ impl Default for AppState {
             instructions_mode: false,
             instructions_session_id: None,
             current_instructions: None,
+            confirm_mode: false,
+            confirm_session_id: None,
+            confirm_plan_id: None,
+            confirm_tools: Vec::new(),
         }
     }
 }

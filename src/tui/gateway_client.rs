@@ -69,6 +69,11 @@ pub enum TuiGatewayEvent {
     SessionNotesLoaded { session_id: String, notes: Vec<SessionNoteInfo> },
     /// Session instructions loaded
     SessionInstructionsLoaded { session_id: String, instructions: Option<String> },
+    /// Action plan confirmation request - waiting for user to confirm
+    ActionPlanConfirm { session_id: String, plan_id: String, tools: Vec<ToolCallPreview> },
+    /// Action plan denied by user (plan_id kept for future use)
+    #[allow(dead_code)]
+    ActionDenied { session_id: String, plan_id: String },
 }
 
 /// Session note info
@@ -88,6 +93,15 @@ pub struct SessionInfo {
     pub label: Option<String>,
     #[allow(dead_code)]
     pub kind: String,
+}
+
+/// Tool call preview for action plan
+#[derive(Debug, Clone)]
+pub struct ToolCallPreview {
+    #[allow(dead_code)]
+    pub id: String,
+    pub name: String,
+    pub input: serde_json::Value,
 }
 
 /// Connection status
@@ -402,6 +416,32 @@ impl TuiGatewayClient {
                             let _ = event_tx.send(TuiGatewayEvent::ToolResult { tool, output });
                         }
                     }
+                    "action.plan_confirm" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let plan_id = params.get("plan_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let tools: Vec<ToolCallPreview> = params.get("tools")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|t| {
+                                        Some(ToolCallPreview {
+                                            id: t.get("id")?.as_str()?.to_string(),
+                                            name: t.get("name")?.as_str()?.to_string(),
+                                            input: t.get("input")?.clone(),
+                                        })
+                                    }).collect()
+                                })
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::ActionPlanConfirm { session_id, plan_id, tools });
+                        }
+                    }
+                    "action.denied" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let plan_id = params.get("plan_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::ActionDenied { session_id, plan_id });
+                        }
+                    }
                     _ => {
                         debug!("Unknown notification method: {}", resp.method);
                     }
@@ -525,6 +565,23 @@ impl TuiGatewayClient {
             method: methods::SESSION_CANCEL.to_string(),
             params: serde_json::json!({
                 "sessionKey": session_id
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Confirm or deny a pending action plan
+    pub async fn confirm_action(&self, session_id: &str, plan_id: &str, confirmed: bool) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-confirm-{}-{}", session_id, plan_id)),
+            method: methods::SESSION_CONFIRM_ACTION.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "planId": plan_id,
+                "confirmed": confirmed
             }),
         });
 

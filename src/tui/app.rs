@@ -473,6 +473,21 @@ impl TuiApp {
                     self.state.input_buffer = instructions.unwrap_or_default();
                 }
             }
+            TuiGatewayEvent::ActionPlanConfirm { session_id, plan_id, tools } => {
+                info!("Action plan confirmation requested: {} with {} tools", plan_id, tools.len());
+                self.state.confirm_mode = true;
+                self.state.confirm_session_id = Some(session_id);
+                self.state.confirm_plan_id = Some(plan_id);
+                self.state.confirm_tools = tools;
+                self.state.set_loading(false);
+            }
+            TuiGatewayEvent::ActionDenied { session_id, .. } => {
+                info!("Action plan denied for session: {}", session_id);
+                self.state.confirm_mode = false;
+                self.state.confirm_session_id = None;
+                self.state.confirm_plan_id = None;
+                self.state.confirm_tools.clear();
+            }
         }
     }
 
@@ -600,6 +615,86 @@ impl TuiApp {
                         self.state.instructions_session_id = None;
                         self.state.input_buffer.clear();
                         self.state.current_instructions = None;
+                        return Ok(true);
+                    }
+                    
+                    // Handle action confirmation mode (Enter confirms, Esc denies)
+                    if self.state.confirm_mode {
+                        if let (Some(ref session_id), Some(ref plan_id)) = 
+                            (self.state.confirm_session_id.clone(), self.state.confirm_plan_id.clone()) 
+                        {
+                            // Check if user typed :deny or :n
+                            let input_lower = self.state.input_buffer.to_lowercase();
+                            let confirmed = !input_lower.starts_with(":deny") && !input_lower.starts_with(":n");
+                            
+                            let client = self.gateway_client.clone();
+                            let sid = session_id.clone();
+                            let pid = plan_id.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.confirm_action(&sid, &pid, confirmed).await {
+                                    error!("Failed to send action confirmation: {}", e);
+                                }
+                            });
+                        }
+                        self.state.confirm_mode = false;
+                        self.state.confirm_session_id = None;
+                        self.state.confirm_plan_id = None;
+                        self.state.confirm_tools.clear();
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :confirm and :y commands (confirm from normal mode)
+                    let input_lower = self.state.input_buffer.to_lowercase();
+                    if (input_lower.starts_with(":confirm") || input_lower == ":y") 
+                        && self.state.confirm_session_id.is_some() 
+                        && self.state.confirm_plan_id.is_some() 
+                    {
+                        if let (Some(ref session_id), Some(ref plan_id)) = 
+                            (self.state.confirm_session_id.clone(), self.state.confirm_plan_id.clone()) 
+                        {
+                            let client = self.gateway_client.clone();
+                            let sid = session_id.clone();
+                            let pid = plan_id.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.confirm_action(&sid, &pid, true).await {
+                                    error!("Failed to confirm action: {}", e);
+                                }
+                            });
+                        }
+                        self.state.confirm_mode = false;
+                        self.state.confirm_session_id = None;
+                        self.state.confirm_plan_id = None;
+                        self.state.confirm_tools.clear();
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :deny and :n commands (deny from normal mode)
+                    if (input_lower.starts_with(":deny") || input_lower == ":n")
+                        && self.state.confirm_session_id.is_some() 
+                        && self.state.confirm_plan_id.is_some() 
+                    {
+                        if let (Some(ref session_id), Some(ref plan_id)) = 
+                            (self.state.confirm_session_id.clone(), self.state.confirm_plan_id.clone()) 
+                        {
+                            let client = self.gateway_client.clone();
+                            let sid = session_id.clone();
+                            let pid = plan_id.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.confirm_action(&sid, &pid, false).await {
+                                    error!("Failed to deny action: {}", e);
+                                }
+                            });
+                        }
+                        self.state.confirm_mode = false;
+                        self.state.confirm_session_id = None;
+                        self.state.confirm_plan_id = None;
+                        self.state.confirm_tools.clear();
+                        self.state.input_buffer.clear();
                         return Ok(true);
                     }
                     
@@ -1153,6 +1248,25 @@ impl TuiApp {
                         self.state.instructions_session_id = None;
                         self.state.input_buffer.clear();
                         self.state.current_instructions = None;
+                    } else if self.state.confirm_mode {
+                        // Esc in confirm mode = deny
+                        if let (Some(ref session_id), Some(ref plan_id)) = 
+                            (self.state.confirm_session_id.clone(), self.state.confirm_plan_id.clone()) 
+                        {
+                            let client = self.gateway_client.clone();
+                            let sid = session_id.clone();
+                            let pid = plan_id.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.confirm_action(&sid, &pid, false).await {
+                                    error!("Failed to deny action: {}", e);
+                                }
+                            });
+                        }
+                        self.state.confirm_mode = false;
+                        self.state.confirm_session_id = None;
+                        self.state.confirm_plan_id = None;
+                        self.state.confirm_tools.clear();
                     } else {
                         return Ok(false); // Quit
                     }
@@ -1201,7 +1315,9 @@ impl TuiApp {
 
         // Draw panels
         crate::tui::components::draw_sessions_panel(f, main_chunks[0], &self.state);
-        if self.state.instructions_mode {
+        if self.state.confirm_mode {
+            crate::tui::components::draw_confirm_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.instructions_mode {
             crate::tui::components::draw_instructions_panel(f, msg_chunks[0], &self.state);
         } else if self.state.notes_mode {
             crate::tui::components::draw_notes_panel(f, msg_chunks[0], &self.state);
@@ -1209,7 +1325,7 @@ impl TuiApp {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }
         crate::tui::components::draw_input_panel(f, msg_chunks[1], &self.state);
-        crate::tui::components::draw_help_bar(f, chunks[2]);
+        crate::tui::components::draw_help_bar(f, chunks[2], &self.state);
 
         // Draw help overlay if shown
         if self.state.show_help {

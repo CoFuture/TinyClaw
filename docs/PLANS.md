@@ -184,6 +184,36 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.5.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Action Confirmation Support** - 终端界面支持工具执行确认
+  - **TUI Gateway Client 增强**：`gateway_client.rs` 新增 `confirm_action()` 方法
+    - 发送 `session.confirm_action` JSON-RPC 请求
+    - 参数：session_id、plan_id、confirmed (true/false)
+  - **事件解析增强**：`gateway_client.rs` 新增 `action.plan_confirm` 和 `action.denied` 事件解析
+    - 解析工具列表 (ToolCallPreview) 并构造 TuiGatewayEvent
+  - **AppState 确认状态**：`state.rs` 新增字段
+    - `confirm_mode: bool` - 是否处于确认模式
+    - `confirm_session_id: Option<String>` - 待确认会话
+    - `confirm_plan_id: Option<String>` - 待确认计划 ID
+    - `confirm_tools: Vec<ToolCallPreview>` - 待确认工具列表
+  - **确认面板**：`components.rs` 新增 `draw_confirm_panel()`
+    - 显示计划执行的工具列表（名称、参数预览）
+    - 提示用户使用 :confirm/:y 允许或 :deny/:n 取消
+  - **命令支持**：`app.rs` 新增确认命令
+    - `:confirm` 或 `:y` - 确认执行
+    - `:deny` 或 `:n` - 拒绝执行
+    - Enter 键 - 确认执行（默认行为）
+    - Esc 键 - 拒绝执行
+  - **帮助栏增强**：确认模式下显示特定帮助提示
+- cargo clippy 0 警告（仅 pre-existing dead_code 警告）
+- cargo test 317 tests (2 flaky time-based tests pass when run individually)
+
+**下一步**: WebUI 确认弹窗实现
+
+---
+
 ### v7.3.0 (已完成 ✅)
 
 **完成事项**:

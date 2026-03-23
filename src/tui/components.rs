@@ -295,9 +295,70 @@ pub fn draw_instructions_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) 
     f.render_widget(paragraph, area);
 }
 
+/// Draw the action confirmation panel (waiting for user to confirm/deny tool execution)
+pub fn draw_confirm_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let block = Block::default()
+        .title(" ⚠️ Action Confirmation ")
+        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(vec![
+            Span::styled("Agent plans to execute the following tools:", Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+    ];
+
+    // List each tool
+    for (i, tool) in state.confirm_tools.iter().enumerate() {
+        let input_str = if let Some(obj) = tool.input.as_object() {
+            serde_json::to_string_pretty(obj).unwrap_or_default()
+        } else {
+            tool.input.to_string()
+        };
+        // Truncate long input
+        let input_preview = if input_str.len() > 100 {
+            format!("{}...", &input_str[..100])
+        } else {
+            input_str
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("{}. ", i + 1), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(&tool.name, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("   Input: "),
+            Span::styled(input_preview, Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(vec![
+        Span::styled("Type ", Style::default().fg(Color::White)),
+        Span::styled(":confirm", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(" or ", Style::default().fg(Color::White)),
+        Span::styled(":y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(" to allow, ", Style::default().fg(Color::White)),
+        Span::styled(":deny", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::styled(" or ", Style::default().fg(Color::White)),
+        Span::styled(":n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::raw(" to cancel."),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left);
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the input panel with enhanced features
 pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let title = if state.instructions_mode {
+    let title = if state.confirm_mode {
+        " Confirm "
+    } else if state.instructions_mode {
         " Instructions "
     } else if state.input_buffer.starts_with(':') {
         " Command "
@@ -392,8 +453,12 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 }
 
 /// Draw the help bar at the bottom
-pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect) {
-    let help_text = " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :rc Reconnect | 🤔 Thinking | 🔧 Tool active ";
+pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let help_text = if state.confirm_mode {
+        " ⚠️ :confirm/:y Allow | :deny/:n Cancel | Esc Cancel | "
+    } else {
+        " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :rc Reconnect | 🤔 Thinking | 🔧 Tool active "
+    };
     
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)
