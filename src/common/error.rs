@@ -46,6 +46,10 @@ pub enum Error {
     #[error("Cancelled")]
     Cancelled,
 
+    /// Action plan was denied by user confirmation
+    #[error("Action denied")]
+    ActionDenied,
+
     #[error("{0}")]
     Other(String),
 }

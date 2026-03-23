@@ -689,6 +689,9 @@ async fn sse_events(
                                     Event::SuggestionGenerated { session_id, .. } => session_id == filter,
                                     Event::SuggestionAccepted { session_id, .. } => session_id == filter,
                                     Event::SuggestionDismissed { session_id, .. } => session_id == filter,
+                                    // Action confirmation events - apply session filter
+                                    Event::ActionPlanConfirm { session_id, .. } => session_id == filter,
+                                    Event::ActionDenied { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -724,6 +727,8 @@ async fn sse_events(
                                     Event::SuggestionGenerated { .. } => "suggestion.generated",
                                     Event::SuggestionAccepted { .. } => "suggestion.accepted",
                                     Event::SuggestionDismissed { .. } => "suggestion.dismissed",
+                                    Event::ActionPlanConfirm { .. } => "action.plan_confirm",
+                                    Event::ActionDenied { .. } => "action.denied",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",

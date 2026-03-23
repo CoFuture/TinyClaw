@@ -200,6 +200,8 @@ pub mod error_codes {
     pub const TIMEOUT_ERROR: &str = "TIMEOUT_ERROR";
     /// Rate limit exceeded
     pub const RATE_LIMIT_ERROR: &str = "RATE_LIMIT_ERROR";
+    /// User denied - action plan was not confirmed
+    pub const USER_DENIED_ERROR: &str = "USER_DENIED_ERROR";
     /// WebSocket connection error
     pub const WS_ERROR: &str = "WS_ERROR";
 }
@@ -237,6 +239,8 @@ pub mod methods {
     pub const SESSION_RENAME: &str = "session.rename";
     /// Session cancel (cancel ongoing turn)
     pub const SESSION_CANCEL: &str = "session.cancel";
+    /// Session confirm action (confirm or deny pending action plan)
+    pub const SESSION_CONFIRM_ACTION: &str = "session.confirm_action";
     /// Session instructions get
     pub const SESSION_INSTRUCTIONS_GET: &str = "session.instructions.get";
     /// Session instructions set

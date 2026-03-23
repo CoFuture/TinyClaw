@@ -155,6 +155,35 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.4.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Action Confirmation System** - 用户可确认或拒绝 Agent 计划执行的工具
+  - **新事件类型**：`gateway/events.rs` 新增 `ActionPlanConfirm` 和 `ActionDenied` 事件
+    - `ActionPlanConfirm`：Agent 等待用户确认时发送，包含 plan_id 和工具列表
+    - `ActionDenied`：用户拒绝或超时未确认时发送
+  - **PendingActionPlan 结构**：`client.rs` 新增待确认计划管理
+    - plan_id 唯一标识、tools 列表、oneshot 通道用于接收确认响应
+    - 60秒超时机制，超时后自动拒绝
+  - **Agent 客户端增强**：
+    - Anthropic 和 OpenAI provider 在执行工具前等待用户确认
+    - `confirm_action()` 方法供 Gateway 调用
+    - `Error::ActionDenied` 新错误类型
+  - **Gateway JSON-RPC 方法**：`protocol.rs` 新增 `SESSION_CONFIRM_ACTION`
+    - `handle_session_confirm_action` 处理器
+    - 参数：sessionKey、planId、confirmed (true/false)
+  - **HTTP SSE 事件过滤**：`routes.rs` 支持新的 action 事件类型
+  - **错误处理增强**：`messages.rs` 处理 `Error::ActionDenied`
+    - 返回 `USER_DENIED_ERROR` 错误码
+    - 错误恢复提示用户需要确认才能执行工具
+- **WebUI 增强准备**：admin.html 中显示确认请求（待前端实现）
+- cargo clippy 0 警告（仅 dead_code 警告）
+- cargo test 319 tests
+
+**下一步**: WebUI 确认弹窗、TUI 命令支持
+
+---
+
 ### v7.3.0 (已完成 ✅)
 
 **完成事项**:

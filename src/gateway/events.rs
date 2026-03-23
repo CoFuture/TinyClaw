@@ -77,6 +77,16 @@ pub enum Event {
         tools: Vec<ToolCallPreview>,
     },
     
+    /// Action plan confirmation request - agent waiting for user to confirm tool execution
+    /// This indicates the agent has planned tools and is waiting for confirmation.
+    /// The client should call session.confirm_action to confirm or cancel.
+    #[serde(rename = "action.plan_confirm")]
+    ActionPlanConfirm {
+        session_id: String,
+        plan_id: String,
+        tools: Vec<ToolCallPreview>,
+    },
+    
     /// Tool result
     #[serde(rename = "tool_result")]
     ToolResult {
@@ -229,6 +239,12 @@ pub enum Event {
     #[serde(rename = "heartbeat")]
     Heartbeat {
         timestamp: i64,
+    },
+    
+    /// Action plan was denied by user (confirmation timeout or explicit denial)
+    #[serde(rename = "action.denied")]
+    ActionDenied {
+        session_id: String,
     },
 }
 

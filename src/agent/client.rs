@@ -1,6 +1,7 @@
 //! AI Model client with multi-provider support
 
 use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySettings};
+use uuid::Uuid;
 use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
 use crate::common::{Error, Result};
 use crate::config::{AgentConfig, ModelProvider};
@@ -10,8 +11,10 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
+use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing::{debug, error, info};
 
@@ -129,6 +132,18 @@ struct OllamaStreamResponse {
 /// Tool execution record for tracking during a turn (alias for turn_history::ToolExecution)
 pub use crate::agent::turn_history::ToolExecution;
 
+/// Pending action plan waiting for user confirmation
+#[derive(Debug)]
+#[allow(dead_code)]
+struct PendingActionPlan {
+    /// Unique plan ID
+    plan_id: String,
+    /// Tools planned for execution
+    tools: Vec<crate::gateway::events::ToolCallPreview>,
+    /// Channel to send confirmation response (wrapped in Mutex for shared access)
+    response_tx: Mutex<Option<oneshot::Sender<bool>>>,
+}
+
 /// Agent client for AI model interaction
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
@@ -145,6 +160,8 @@ pub struct Agent {
     current_session_key: RwLock<Option<String>>,
     /// Tool executions recorded during the last send_message_with_history call
     tool_executions: Arc<RwLock<Vec<ToolExecution>>>,
+    /// Pending action plan waiting for user confirmation (session_key -> plan)
+    pending_action_plan: RwLock<Option<PendingActionPlan>>,
 }
 
 /// History message for passing conversation context to API methods
@@ -214,6 +231,7 @@ impl Agent {
             event_emitter: None,
             current_session_key: RwLock::new(None),
             tool_executions: Arc::new(RwLock::new(Vec::new())),
+            pending_action_plan: RwLock::new(None),
         }
     }
 
@@ -230,7 +248,32 @@ impl Agent {
             event_emitter: None,
             current_session_key: RwLock::new(None),
             tool_executions: Arc::new(RwLock::new(Vec::new())),
+            pending_action_plan: RwLock::new(None),
         }
+    }
+
+    /// Set an action plan waiting for confirmation and return a receiver to wait on.
+    /// Returns the plan_id and a oneshot receiver.
+    fn set_pending_action_plan(&self, plan_id: String, tools: Vec<crate::gateway::events::ToolCallPreview>) -> oneshot::Receiver<bool> {
+        let (tx, rx) = oneshot::channel();
+        let plan = PendingActionPlan {
+            plan_id,
+            tools,
+            response_tx: Mutex::new(Some(tx)),
+        };
+        *self.pending_action_plan.write() = Some(plan);
+        rx
+    }
+
+    /// Clear the pending action plan (called when turn ends)
+    fn clear_pending_action_plan(&self) {
+        *self.pending_action_plan.write() = None;
+    }
+
+    /// Get the plan_id of the current pending action plan, if any
+    #[allow(dead_code)]
+    fn get_pending_plan_id(&self) -> Option<String> {
+        self.pending_action_plan.read().as_ref().map(|p| p.plan_id.clone())
     }
 
     /// Take and clear the tool executions recorded during the last turn.
@@ -288,6 +331,7 @@ impl Agent {
     }
 
     /// Emit an action plan preview event showing all planned tool calls
+    #[allow(dead_code)]
     fn emit_action_plan_preview(&self, tools: Vec<crate::gateway::events::ToolCallPreview>) {
         if let Some(emitter) = &self.event_emitter {
             let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
@@ -341,6 +385,31 @@ impl Agent {
     fn cleanup_turn_cancellation(&self, session_key: &str) {
         let mut cancellations = self.turn_cancellations.write();
         cancellations.remove(session_key);
+    }
+
+    /// Confirm or deny a pending action plan.
+    /// Returns true if the plan was found and confirmation was sent, false otherwise.
+    /// The `confirmed` parameter indicates whether to execute (true) or cancel (false) the plan.
+    pub fn confirm_action(&self, session_key: &str, plan_id: &str, confirmed: bool) -> bool {
+        let pending = self.pending_action_plan.read();
+        if let Some(ref plan) = *pending {
+            if plan.plan_id == plan_id {
+                // Try to take the sender from the mutex and send confirmation
+                if let Ok(mut guard) = plan.response_tx.lock() {
+                    if let Some(tx) = guard.take() {
+                        let _ = tx.send(confirmed);
+                        info!(
+                            session_id = %session_key,
+                            plan_id = %plan_id,
+                            confirmed = confirmed,
+                            "Action plan confirmation sent to agent"
+                        );
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Update retry settings
@@ -481,10 +550,42 @@ pub async fn send_message_with_history(
                                 input: tb["input"].clone(),
                             })
                         }).collect();
-                        if !preview_tools.is_empty() {
-                            self.emit_action_plan_preview(preview_tools);
+                        
+                        // If tools are planned, wait for user confirmation before executing
+                        let confirmed = if !preview_tools.is_empty() {
+                            let plan_id = Uuid::new_v4().to_string();
+                            let confirm_rx = self.set_pending_action_plan(plan_id.clone(), preview_tools.clone());
+                            
+                            // Emit confirmation request event
+                            let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
+                            if let Some(emitter) = &self.event_emitter {
+                                emitter.emit(crate::gateway::events::Event::ActionPlanConfirm {
+                                    session_id,
+                                    plan_id,
+                                    tools: preview_tools,
+                                });
+                            }
+                            
+                            // Wait for confirmation (60 second timeout)
+                            // If timeout or error, treat as cancelled
+                            match timeout(Duration::from_secs(60), confirm_rx).await {
+                                Ok(Ok(true)) => true,  // User confirmed
+                                Ok(Ok(false)) => false, // User cancelled
+                                _ => false, // Timeout or error
+                            }
+                        } else {
+                            true  // No tools, no confirmation needed
+                        };
+                        
+                        // Clear pending action plan after confirmation received
+                        self.clear_pending_action_plan();
+                        
+                        // Execute tools only if confirmed
+                        if !confirmed {
+                            // User denied or timeout - return action denied error
+                            return Err(Error::ActionDenied);
                         }
-
+                        
                         // Execute tools and add results
                         for tool_block in &tool_use_blocks {
                             let tool_name = tool_block["name"].as_str().unwrap_or("");
@@ -565,8 +666,38 @@ pub async fn send_message_with_history(
                                 input: args,
                             })
                         }).collect();
-                        if !preview_tools.is_empty() {
-                            self.emit_action_plan_preview(preview_tools);
+                        
+                        // If tools are planned, wait for user confirmation before executing
+                        let confirmed = if !preview_tools.is_empty() {
+                            let plan_id = Uuid::new_v4().to_string();
+                            let confirm_rx = self.set_pending_action_plan(plan_id.clone(), preview_tools.clone());
+                            
+                            // Emit confirmation request event
+                            let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
+                            if let Some(emitter) = &self.event_emitter {
+                                emitter.emit(crate::gateway::events::Event::ActionPlanConfirm {
+                                    session_id,
+                                    plan_id,
+                                    tools: preview_tools,
+                                });
+                            }
+                            
+                            // Wait for confirmation (60 second timeout)
+                            match timeout(Duration::from_secs(60), confirm_rx).await {
+                                Ok(Ok(true)) => true,
+                                Ok(Ok(false)) => false,
+                                _ => false,
+                            }
+                        } else {
+                            true
+                        };
+                        
+                        // Clear pending action plan after confirmation received
+                        self.clear_pending_action_plan();
+                        
+                        // Execute tools only if confirmed
+                        if !confirmed {
+                            return Err(Error::ActionDenied);
                         }
                         
                         // Execute tools and add results

@@ -156,6 +156,7 @@ pub async fn handle_request(
         methods::SESSIONS_DELETE => handle_sessions_delete(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_RENAME => handle_session_rename(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_CANCEL => handle_session_cancel(ctx, jsonrpc_id.clone(), params).await,
+        methods::SESSION_CONFIRM_ACTION => handle_session_confirm_action(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_INSTRUCTIONS_GET => handle_session_instructions_get(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_INSTRUCTIONS_SET => handle_session_instructions_set(ctx, jsonrpc_id.clone(), params).await,
         methods::AGENT_TURN => handle_agent_turn(ctx, request_id.clone(), jsonrpc_id.clone(), params).await,
@@ -302,6 +303,14 @@ fn map_error_to_response(id: Option<String>, error: &Error) -> ResponseError {
                 INTERNAL_ERROR,
                 "Request was cancelled",
                 "The request was cancelled. This may be due to a shutdown. Try again if needed.",
+            )
+        }
+        Error::ActionDenied => {
+            ResponseError::with_recovery(
+                id,
+                USER_DENIED_ERROR,
+                "Action was denied by user",
+                "The action plan was not confirmed by the user. To execute tools, confirm when prompted.",
             )
         }
         Error::Io(msg) => {
@@ -575,6 +584,44 @@ async fn handle_session_cancel(
     }))
 }
 
+/// Handle session.confirm_action - confirm or deny a pending action plan
+async fn handle_session_confirm_action(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_key = params
+        .get("sessionKey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main");
+    
+    let plan_id = params
+        .get("planId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::Protocol("planId required".to_string()))?;
+    
+    let confirmed = params
+        .get("confirmed")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Try to confirm/deny the action
+    let action_confirmed = ctx.agent.confirm_action(session_key, plan_id, confirmed);
+    
+    if action_confirmed {
+        info!(session_id = %session_key, plan_id = %plan_id, confirmed = confirmed, "Action plan confirmation processed");
+    } else {
+        debug!(session_id = %session_key, plan_id = %plan_id, "No pending action plan found or different plan_id");
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "sessionId": session_key,
+        "planId": plan_id,
+        "confirmed": action_confirmed,
+    }))
+}
+
 /// Handle session.instructions.get - get session instructions
 async fn handle_session_instructions_get(
     ctx: &HandlerContext,
@@ -733,6 +780,16 @@ async fn handle_agent_turn(
                 session_id: session_key.to_string(),
             });
             return Err(Error::Cancelled);
+        }
+        if matches!(err, crate::common::Error::ActionDenied) {
+            // Action was denied by user confirmation timeout or explicit denial
+            // Emit action denied event - turn completed but tools were not executed
+            ctx.event_emitter.emit(Event::ActionDenied {
+                session_id: session_key.to_string(),
+            });
+            // The turn was still successful from the agent's perspective
+            // but we return an error to indicate tools weren't executed
+            return Err(Error::ActionDenied);
         }
     }
 
