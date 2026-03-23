@@ -45,6 +45,8 @@ pub enum TuiGatewayEvent {
     TurnStarted { session_id: String, message: String },
     /// Agent is thinking (turn in progress)
     TurnThinking { session_id: String },
+    /// Streaming text fragment (for real-time streaming display)
+    StreamingText { session_id: String, text: String },
     /// Final response received (turn ended)
     TurnEnded(String),
     /// Connection error
@@ -400,6 +402,13 @@ impl TuiGatewayClient {
                             if let Some(text) = params.get("text") {
                                 let _ = event_tx.send(TuiGatewayEvent::AssistantText(text.to_string()));
                             }
+                        }
+                    }
+                    "assistant.partial" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let text = params.get("text").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::StreamingText { session_id, text });
                         }
                     }
                     "assistant.tool_use" => {

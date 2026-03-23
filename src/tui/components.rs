@@ -182,6 +182,28 @@ pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
             result.push(indicator);
         }
         
+        // Add streaming text indicator if streaming
+        if state.is_streaming && !state.partial_text.is_empty() {
+            // Show partial text with blinking cursor indicator
+            let partial = &state.partial_text;
+            // Truncate if too long for display
+            let display_text = if partial.len() > 200 {
+                format!("{}...", &partial[..200])
+            } else {
+                partial.clone()
+            };
+            result.push(Line::from(vec![
+                Span::raw("["),
+                Span::styled("streaming".to_string(), Style::default().fg(Color::DarkGray)),
+                Span::raw("] "),
+                Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::raw(": "),
+                Span::raw(display_text),
+                // Blinking cursor character to indicate streaming
+                Span::styled("▊", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            ]));
+        }
+        
         result
     };
 

@@ -248,22 +248,43 @@ impl TuiApp {
                     if let Some(history) = self.state.session_histories.get_mut(session_id) {
                         use crate::types::{Message, Role};
                         let clean_text = text.trim_matches('"').to_string();
-                        history.add_message(Message {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            role: Role::Assistant,
-                            content: clean_text,
-                            timestamp: chrono::Utc::now(),
-                            tool_call_id: None,
-                            tool_name: None,
-                        });
-                        self.save_current_history();
+                        // Only add if not empty (empty text during streaming means no new content)
+                        if !clean_text.is_empty() {
+                            history.add_message(Message {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                role: Role::Assistant,
+                                content: clean_text,
+                                timestamp: chrono::Utc::now(),
+                                tool_call_id: None,
+                                tool_name: None,
+                            });
+                            self.save_current_history();
+                            // Mark that a message was created (for streaming deduplication)
+                            if self.state.is_streaming {
+                                self.state.mark_streaming_message_created();
+                            }
+                        }
                     }
+                }
+            }
+            TuiGatewayEvent::StreamingText { session_id, text } => {
+                debug!("Streaming text for {}: {}", session_id, text);
+                // Only handle if this is for the current session
+                if self.state.current_session_id.as_deref() == Some(&session_id) {
+                    // Start streaming if not already
+                    if !self.state.is_streaming {
+                        self.state.start_streaming(&session_id);
+                    }
+                    // Accumulate the partial text
+                    self.state.append_streaming_text(&text);
                 }
             }
             TuiGatewayEvent::TurnStarted { session_id, message } => {
                 info!("Turn started: {} - {}", session_id, message);
                 self.state.set_thinking();
                 self.state.set_loading(true);
+                // Reset streaming state for the new turn
+                self.state.reset_streaming_state();
                 // Add user message to history if not already added locally
                 if let Some(current_sid) = &self.state.current_session_id {
                     if current_sid == &session_id {
@@ -341,20 +362,42 @@ impl TuiApp {
                 info!("Turn ended: {}", response);
                 self.state.set_loading(false);
                 self.state.set_idle();
-                // Add final response
-                if let Some(session_id) = &self.state.current_session_id {
-                    if let Some(history) = self.state.session_histories.get_mut(session_id) {
-                        use crate::types::{Message, Role};
-                        let clean = response.trim_matches('"').to_string();
-                        history.add_message(Message {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            role: Role::Assistant,
-                            content: clean,
-                            timestamp: chrono::Utc::now(),
-                            tool_call_id: None,
-                            tool_name: None,
-                        });
-                        self.save_current_history();
+                
+                // Determine what text to use for the message
+                let message_text = if self.state.is_streaming && !self.state.streaming_message_created {
+                    // Streaming was active but no message created yet (Ollama streaming path)
+                    // Use accumulated partial text, or fallback to response if empty
+                    let partial = self.state.end_streaming().unwrap_or_default();
+                    if !partial.is_empty() {
+                        partial
+                    } else {
+                        response.trim_matches('"').to_string()
+                    }
+                } else if self.state.is_streaming && self.state.streaming_message_created {
+                    // Message already created via AssistantText (non-streaming path)
+                    // Don't create duplicate - just clear streaming state
+                    self.state.end_streaming();
+                    String::new()
+                } else {
+                    // Not streaming - use response (shouldn't normally happen but handle it)
+                    response.trim_matches('"').to_string()
+                };
+                
+                // Add message only if we have text and no duplicate
+                if !message_text.is_empty() {
+                    if let Some(session_id) = &self.state.current_session_id {
+                        if let Some(history) = self.state.session_histories.get_mut(session_id) {
+                            use crate::types::{Message, Role};
+                            history.add_message(Message {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                role: Role::Assistant,
+                                content: message_text,
+                                timestamp: chrono::Utc::now(),
+                                tool_call_id: None,
+                                tool_name: None,
+                            });
+                            self.save_current_history();
+                        }
                     }
                 }
             }
@@ -362,6 +405,7 @@ impl TuiApp {
                 info!("Turn cancelled for session: {}", session_id);
                 self.state.set_loading(false);
                 self.state.set_idle();
+                self.state.cancel_streaming();
                 self.state.set_error(Some("Turn cancelled".to_string()));
             }
             TuiGatewayEvent::Pong => {

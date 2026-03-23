@@ -246,6 +246,39 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.8.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Streaming Text Display** - 终端界面实时流式文本显示
+  - **TUI Gateway Client 增强**：`gateway_client.rs` 新增 `StreamingText` 事件
+    - 解析 `assistant.partial` SSE 事件
+    - 支持增量文本累积
+  - **AppState 流式状态**：`state.rs` 新增字段和方法
+    - `is_streaming: bool` - 是否正在流式输出
+    - `partial_text: String` - 累积的部分文本
+    - `streaming_session_id: Option<String>` - 当前流式会话
+    - `streaming_message_created: bool` - 避免重复消息
+    - `start_streaming()`, `append_streaming_text()`, `end_streaming()`, `cancel_streaming()` 方法
+  - **消息面板流式显示**：`components.rs` 新增流式文本渲染
+    - 显示累积的部分文本
+    - 青色闪烁光标 `▊` 指示器
+    - 与加载指示器协同工作
+  - **App 事件处理增强**：`app.rs` 完善事件处理
+    - `StreamingText` 事件累积文本
+    - `TurnStarted` 重置流式状态
+    - `TurnEnded` 最终化流式消息
+    - `TurnCancelled` 取消流式状态
+    - 智能去重：避免 `AssistantText` 和 `TurnEnded` 创建重复消息
+  - **多 Provider 支持**：
+    - Ollama: 原生流式支持，实时显示文本
+    - Anthropic/OpenAI: 非流式回退，保持兼容
+- cargo clippy 0 警告（仅 pre-existing dead_code 警告）
+- cargo test 326 tests
+
+**下一步**: TUI Markdown 渲染、更多交互体验优化
+
+---
+
 ### v8.6.0 (已完成 ✅)
 
 **完成事项**:
@@ -670,6 +703,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v8.8.0 | TUI Streaming Text Display - 终端界面实时流式文本显示：Gateway Client 新增 `StreamingText` 事件解析 `assistant.partial`；AppState 流式状态字段（is_streaming、partial_text、streaming_session_id）；消息面板显示累积部分文本+青色闪烁光标；智能去重避免 `AssistantText` 和 `TurnEnded` 重复消息；支持 Ollama 原生流式、Anthropic/OpenAI 非流式回退；cargo clippy 0 警告；cargo test 326 tests |
+| v8.7.0 | Smart Context Truncation - 智能上下文截断：MessageImportance 枚举四级重要性；语言感知 Token 估算（CJK ~1.5 chars/token、代码调整、非 ASCII ~2 chars/token）；优先级截断策略保留重要消息；7 个新测试；cargo clippy 0 警告；cargo test 319 tests |
 | v8.6.0 | WebUI Action Confirmation Dialog - admin.html 新增完整确认弹窗：金色主题对话框显示计划执行的工具列表；两个按钮「🚫 拒绝」和「✅ 允许执行」；60秒超时提示；点击遮罩层或 Esc 键拒绝；SSE 事件处理 `action.plan_confirm` 和 `action.denied`；`confirmAction()` 发送 `session.confirm_action` WebSocket 消息；turn.ended/turn.cancelled 时自动关闭对话框；完整 CSS 样式；cargo clippy 0 警告；cargo test 319 tests |
 | v8.5.0 | TUI Action Confirmation Support - 终端界面支持工具执行确认：TUI Gateway Client 新增 `confirm_action()` 方法；事件解析支持 `action.plan_confirm` 和 `action.denied`；AppState 确认状态字段；确认面板 `draw_confirm_panel()`；命令支持 `:confirm/:y` 允许、`:deny/:n` 拒绝、Enter 确认、Esc 拒绝；cargo clippy 0 警告；cargo test 317 tests |
 | v8.4.0 | Agent Action Confirmation System - 用户可确认或拒绝 Agent 计划执行的工具：`ActionPlanConfirm` 和 `ActionDenied` 事件；`PendingActionPlan` 待确认计划管理（60秒超时）；Agent 客户端 `confirm_action()` 方法；Gateway `SESSION_CONFIRM_ACTION` JSON-RPC 方法；HTTP 错误处理增强；cargo clippy 0 警告；cargo test 319 tests |

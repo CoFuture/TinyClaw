@@ -256,6 +256,15 @@ pub struct AppState {
     pub confirm_plan_id: Option<String>,
     /// Tools in the pending action plan
     pub confirm_tools: Vec<ToolCallPreview>,
+    /// Whether we're currently streaming text from the agent
+    pub is_streaming: bool,
+    /// Accumulated streaming text (partial response being received)
+    pub partial_text: String,
+    /// Session ID of current streaming (for multi-session awareness)
+    pub streaming_session_id: Option<String>,
+    /// Whether a message has already been created for the current turn via AssistantText
+    /// (to avoid duplicate messages when TurnEnded also creates one)
+    pub streaming_message_created: bool,
 }
 
 impl Default for AppState {
@@ -294,6 +303,10 @@ impl Default for AppState {
             confirm_session_id: None,
             confirm_plan_id: None,
             confirm_tools: Vec::new(),
+            is_streaming: false,
+            partial_text: String::new(),
+            streaming_session_id: None,
+            streaming_message_created: false,
         }
     }
 }
@@ -599,4 +612,59 @@ impl AppState {
     pub fn has_search_results(&self) -> bool {
         !self.search_results.is_empty()
     }
+
+    // ========================================================================
+    // Streaming text helpers
+    // ========================================================================
+
+    /// Start streaming text for a session
+    pub fn start_streaming(&mut self, session_id: &str) {
+        self.is_streaming = true;
+        self.partial_text.clear();
+        self.streaming_session_id = Some(session_id.to_string());
+        self.streaming_message_created = false;
+    }
+
+    /// Append streaming text fragment
+    pub fn append_streaming_text(&mut self, text: &str) {
+        if self.is_streaming {
+            self.partial_text.push_str(text);
+        }
+    }
+
+    /// End streaming and finalize the accumulated text as an assistant message
+    /// Returns the final text if streaming was active
+    pub fn end_streaming(&mut self) -> Option<String> {
+        if self.is_streaming {
+            let text = self.partial_text.clone();
+            self.is_streaming = false;
+            self.partial_text.clear();
+            self.streaming_session_id = None;
+            Some(text)
+        } else {
+            None
+        }
+    }
+
+    /// Mark that a message was created for the current streaming turn
+    /// (called when AssistantText creates a message during a streaming turn)
+    pub fn mark_streaming_message_created(&mut self) {
+        self.streaming_message_created = true;
+    }
+
+    /// Reset all streaming state (called on turn start/cancel)
+    pub fn reset_streaming_state(&mut self) {
+        self.is_streaming = false;
+        self.partial_text.clear();
+        self.streaming_session_id = None;
+        self.streaming_message_created = false;
+    }
+
+    /// Cancel streaming (e.g., on turn cancelled)
+    pub fn cancel_streaming(&mut self) {
+        self.is_streaming = false;
+        self.partial_text.clear();
+        self.streaming_session_id = None;
+    }
+
 }
