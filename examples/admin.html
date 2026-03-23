@@ -932,6 +932,39 @@
             border-color: rgba(255,71,87,0.4);
             color: #ff6b7a;
         }
+        .token-stats {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 4px 10px;
+            background: rgba(0,217,255,0.1);
+            border: 1px solid rgba(0,217,255,0.2);
+            border-radius: 6px;
+            font-size: 11px;
+            color: #00d9ff;
+        }
+        .token-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .token-stat-label {
+            color: #888;
+        }
+        .token-stat-value {
+            font-weight: bold;
+        }
+        .token-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            background: rgba(0,217,255,0.15);
+            border-radius: 4px;
+            font-size: 10px;
+            color: #00d9ff;
+            margin-left: 8px;
+        }
         .message {
             margin-bottom: 12px;
             padding: 12px 16px;
@@ -3578,6 +3611,20 @@
                         <input type="text" class="chat-search-input" id="chatSearchInput" placeholder="搜索消息..." oninput="onChatSearchInput()">
                         <span class="chat-search-count" id="chatSearchCount"></span>
                     </div>
+                    <div class="token-stats" id="tokenUsageDisplay" title="Token 使用量统计">
+                        <div class="token-stat">
+                            <span class="token-stat-label">输入:</span>
+                            <span class="token-stat-value token-input">0</span>
+                        </div>
+                        <div class="token-stat">
+                            <span class="token-stat-label">输出:</span>
+                            <span class="token-stat-value token-output">0</span>
+                        </div>
+                        <div class="token-stat">
+                            <span class="token-stat-label">总计:</span>
+                            <span class="token-stat-value token-total">0</span>
+                        </div>
+                    </div>
                     <button class="chat-btn-icon clear" onclick="clearChatMessages()" title="清空聊天">清空</button>
                 </div>
                 <div class="chat-messages" id="chatMessages">
@@ -3807,6 +3854,76 @@
             });
         }
 
+        /// Format token count with K suffix for large numbers
+        function formatTokenCount(count) {
+            if (count >= 1000000) {
+                return (count / 1000000).toFixed(1) + 'M';
+            } else if (count >= 1000) {
+                return (count / 1000).toFixed(1) + 'K';
+            }
+            return count.toString();
+        }
+
+        /// Update token usage tracking and display
+        function updateTokenUsage(sessionId, inputTokens, outputTokens, totalTokens) {
+            // Update cumulative totals
+            tokenUsageTotal.input += inputTokens || 0;
+            tokenUsageTotal.output += outputTokens || 0;
+            tokenUsageTotal.total += totalTokens || 0;
+            
+            // Update per-session tracking
+            if (!tokenUsageBySession[sessionId]) {
+                tokenUsageBySession[sessionId] = { input: 0, output: 0, total: 0 };
+            }
+            tokenUsageBySession[sessionId].input += inputTokens || 0;
+            tokenUsageBySession[sessionId].output += outputTokens || 0;
+            tokenUsageBySession[sessionId].total += totalTokens || 0;
+            
+            // Update the display
+            updateTokenUsageDisplay();
+            
+            // Add a token usage badge to the last assistant message
+            addTokenBadgeToLastMessage(totalTokens);
+        }
+
+        /// Update the token usage display in the toolbar
+        function updateTokenUsageDisplay() {
+            const display = document.getElementById('tokenUsageDisplay');
+            if (!display) return;
+            
+            const inputEl = display.querySelector('.token-input');
+            const outputEl = display.querySelector('.token-output');
+            const totalEl = display.querySelector('.token-total');
+            
+            if (inputEl) inputEl.textContent = formatTokenCount(tokenUsageTotal.input);
+            if (outputEl) outputEl.textContent = formatTokenCount(tokenUsageTotal.output);
+            if (totalEl) totalEl.textContent = formatTokenCount(tokenUsageTotal.total);
+        }
+
+        /// Add a token badge to the last assistant message
+        function addTokenBadgeToLastMessage(totalTokens) {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            
+            // Find the last assistant message
+            const messages = container.querySelectorAll('.message.assistant');
+            if (messages.length === 0) return;
+            
+            const lastMessage = messages[messages.length - 1];
+            
+            // Don't add badge if already present
+            if (lastMessage.querySelector('.token-badge')) return;
+            
+            // Add token badge to the message role line
+            const roleLine = lastMessage.querySelector('.msg-role');
+            if (roleLine) {
+                const badge = document.createElement('span');
+                badge.className = 'token-badge';
+                badge.innerHTML = '⚡' + formatTokenCount(totalTokens) + ' tokens';
+                roleLine.appendChild(badge);
+            }
+        }
+
         /// Clear all chat messages from display (keeps session history on server)
         function clearChatMessages() {
             const container = document.getElementById('chatMessages');
@@ -3818,6 +3935,15 @@
             const searchInput = document.getElementById('chatSearchInput');
             if (searchInput) searchInput.value = '';
             updateSearchCount();
+            // Reset token usage for current session
+            if (tokenUsageBySession[chatCurrentSession]) {
+                const sessionUsage = tokenUsageBySession[chatCurrentSession];
+                tokenUsageTotal.input -= sessionUsage.input;
+                tokenUsageTotal.output -= sessionUsage.output;
+                tokenUsageTotal.total -= sessionUsage.total;
+                delete tokenUsageBySession[chatCurrentSession];
+                updateTokenUsageDisplay();
+            }
         }
 
         /// Handle chat search input
@@ -4101,6 +4227,9 @@
                 }
                 streamingMsgElement = null;
                 streamingTextBuffer = '';
+            } else if (eventType === 'turn.usage' && data.session_id) {
+                // Token usage event - update tracking and display
+                updateTokenUsage(data.session_id, data.input_tokens, data.output_tokens, data.total_tokens);
             }
         }
         
@@ -4409,6 +4538,10 @@
         let streamingMsgElement = null;
         let streamingTextBuffer = '';
         
+        // Token usage tracking
+        let tokenUsageTotal = { input: 0, output: 0, total: 0 };
+        let tokenUsageBySession = {};
+        
         function initEventStream() {
             const statusDot = document.getElementById('eventStreamStatus');
             const statusText = document.getElementById('eventStreamStatusText');
@@ -4437,7 +4570,7 @@
                 
                 // Handle all event types
                 const eventTypes = [
-                    'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.cancelled',
+                    'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat'
                 ];
@@ -4496,6 +4629,7 @@
             if (event.type === 'turn.started') cssClass += ' event-turn-started';
             else if (event.type === 'turn.thinking') cssClass += ' event-turn-thinking';
             else if (event.type === 'turn.ended') cssClass += ' event-turn-ended';
+            else if (event.type === 'turn.usage') cssClass += ' event-turn-ended';
             else if (event.type === 'error') cssClass += ' event-error';
             else if (event.type === 'assistant.tool_use') cssClass += ' event-tool';
             else if (event.type === 'action.plan_preview') cssClass += ' event-tool';
@@ -4527,6 +4661,8 @@
                 } else if (event.type === 'tool_result') {
                     const out = event.content.output || '';
                     contentText = '结果: ' + out.substring(0, 40) + (out.length > 40 ? '...' : '');
+                } else if (event.type === 'turn.usage') {
+                    contentText = 'Token: 输入 ' + (event.content.input_tokens || 0) + ' / 输出 ' + (event.content.output_tokens || 0) + ' / 总计 ' + (event.content.total_tokens || 0);
                 } else if (event.type === 'heartbeat') {
                     contentText = '心跳';
                 } else {
@@ -4554,6 +4690,7 @@
                 'turn.started': 'Turn开始',
                 'turn.thinking': '思考中',
                 'turn.ended': 'Turn结束',
+                'turn.usage': 'Token使用',
                 'assistant.text': 'AI回复',
                 'assistant.tool_use': '工具调用',
                 'action.plan_preview': '执行计划预览',

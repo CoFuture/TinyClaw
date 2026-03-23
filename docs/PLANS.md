@@ -107,6 +107,35 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v9.2.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Chat Token Usage Display** - 网页聊天界面 Token 使用量展示
+  - **CSS 样式增强**：新增 `.token-stats`、`.token-stat`、`.token-badge` 样式
+    - 青蓝色主题的 Token 统计栏
+    - 紧凑的 Token 徽章显示在消息角色旁
+  - **JavaScript Token 追踪**：
+    - `tokenUsageTotal` 全局统计对象（input/output/total）
+    - `tokenUsageBySession` 按会话分开统计
+    - `formatTokenCount()` 函数格式化大数字（K/M 后缀）
+  - **SSE 事件处理**：处理 `turn.usage` 事件
+    - `updateTokenUsage()` 更新累计统计和会话统计
+    - `updateTokenUsageDisplay()` 更新工具栏显示
+    - `addTokenBadgeToLastMessage()` 在消息后添加 Token 徽章
+  - **聊天工具栏增强**：显示实时 Token 使用量统计
+    - 输入 tokens / 输出 tokens / 总计 tokens
+    - 清空聊天时重置当前会话统计
+  - **事件日志集成**：
+    - `turn.usage` 事件添加到事件类型过滤列表
+    - 事件日志显示 Token 详情（输入/输出/总计）
+    - 事件类型映射中添加 "Token使用" 名称
+- cargo clippy 0 警告
+- cargo test 331 tests
+
+**下一步**: TUI Token 使用量显示、更多交互体验优化
+
+---
+
 ### v8.0.0 (已完成 ✅)
 
 **完成事项**:
@@ -757,6 +786,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v9.2.0 | WebUI Chat Token Usage Display - 网页聊天界面 Token 使用量展示：CSS 样式增强（.token-stats、.token-badge）；JavaScript Token 追踪（全局统计、会话统计）；`turn.usage` SSE 事件处理；聊天工具栏显示实时统计（输入/输出/总计 tokens）；消息后 Token 徽章；事件日志集成；cargo clippy 0 警告；cargo test 331 tests |
 | v9.1.0 | TUI Markdown 渲染 - 终端界面支持 Markdown 格式化输出：新增 `src/tui/markdown.rs` 模块（**bold**、*italic*、`inline code`、```code blocks```、# headers、lists、> blockquotes、[links]）；`draw_messages_panel()` 智能检测 Markdown 类型并分级渲染；8个单元测试；cargo clippy 0 警告；cargo test 331 tests |
 | v9.0.0 | Agent Token Usage Tracking - AI API Token 使用量追踪：TokenUsage 结构、TurnRecord/turn_history 增强、client.rs 从 Anthropic/OpenAI 提取 usage、TurnUsage 事件、Gateway 集成、统计增强；代码清理移除 dead code；cargo clippy 0 警告；cargo test 322 tests |
 | v8.8.0 | TUI Streaming Text Display - 终端界面实时流式文本显示：Gateway Client 新增 `StreamingText` 事件解析 `assistant.partial`；AppState 流式状态字段（is_streaming、partial_text、streaming_session_id）；消息面板显示累积部分文本+青色闪烁光标；智能去重避免 `AssistantText` 和 `TurnEnded` 重复消息；支持 Ollama 原生流式、Anthropic/OpenAI 非流式回退；cargo clippy 0 警告；cargo test 326 tests |
