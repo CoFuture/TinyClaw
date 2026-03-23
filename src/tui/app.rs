@@ -532,6 +532,10 @@ impl TuiApp {
                 self.state.confirm_plan_id = None;
                 self.state.confirm_tools.clear();
             }
+            TuiGatewayEvent::TurnUsage { session_id, input_tokens, output_tokens, total_tokens } => {
+                debug!("Token usage for {}: in={}, out={}, total={}", session_id, input_tokens, output_tokens, total_tokens);
+                self.state.update_token_usage(&session_id, input_tokens, output_tokens);
+            }
         }
     }
 

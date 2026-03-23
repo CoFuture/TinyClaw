@@ -524,10 +524,13 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 /// Draw the help bar at the bottom
 pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    // Build help text with token usage
+    let token_usage = state.formatted_token_usage();
+    
     let help_text = if state.confirm_mode {
-        " ⚠️ :confirm/:y Allow | :deny/:n Cancel | Esc Cancel | "
+        format!(" ⚠️ :confirm/:y Allow | :deny/:n Cancel | Esc Cancel | 📊 {} ", token_usage)
     } else {
-        " ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | :ren Rename | :rc Reconnect | 🤔 Thinking | 🔧 Tool active "
+        format!(" ↑↓ Navigate | Tab Complete | Enter Send | :q Quit | :h Help | 📊 {} ", token_usage)
     };
     
     let paragraph = Paragraph::new(help_text)

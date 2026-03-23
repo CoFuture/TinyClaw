@@ -76,6 +76,8 @@ pub enum TuiGatewayEvent {
     /// Action plan denied by user (plan_id kept for future use)
     #[allow(dead_code)]
     ActionDenied { session_id: String, plan_id: String },
+    /// Token usage update from a completed turn
+    TurnUsage { session_id: String, input_tokens: u32, output_tokens: u32, total_tokens: u32 },
 }
 
 /// Session note info
@@ -395,6 +397,20 @@ impl TuiGatewayClient {
                         if let Some(params) = resp.params {
                             let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
                             let _ = event_tx.send(TuiGatewayEvent::TurnCancelled { session_id });
+                        }
+                    }
+                    "turn.usage" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let input_tokens = params.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let output_tokens = params.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let total_tokens = params.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let _ = event_tx.send(TuiGatewayEvent::TurnUsage {
+                                session_id,
+                                input_tokens,
+                                output_tokens,
+                                total_tokens,
+                            });
                         }
                     }
                     "assistant.text" => {

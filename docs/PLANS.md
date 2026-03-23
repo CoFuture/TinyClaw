@@ -53,6 +53,32 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v9.3.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Token Usage Display** - 终端界面 Token 使用量显示
+  - **AppState 状态追踪**：`src/tui/state.rs` 新增字段
+    - `token_input_total` / `token_output_total`：累计输入/输出 tokens
+    - `token_usage_by_session`：按会话统计 token 使用量
+    - `update_token_usage()`：更新 token 统计方法
+    - `format_token_count()`：格式化大数字显示（K/M 后缀）
+    - `formatted_token_usage()`：生成显示字符串
+  - **Gateway Client 事件处理**：`src/tui/gateway_client.rs`
+    - 新增 `TurnUsage` 事件变体（session_id, input_tokens, output_tokens, total_tokens）
+    - 在 `handle_response()` 中解析 `turn.usage` SSE 事件
+  - **App 事件处理**：`src/tui/app.rs`
+    - `handle_gateway_event()` 处理 `TuiGatewayEvent::TurnUsage`
+    - 调用 `state.update_token_usage()` 更新统计
+  - **UI 显示**：`src/tui/components.rs`
+    - `draw_help_bar()` 在帮助栏显示 Token 使用量
+    - 格式：`📊 In: 1.2K | Out: 500`
+- cargo clippy 0 警告
+- cargo test 331 tests
+
+**下一步**: 多 Session 并发执行支持、Agent 上下文摘要增强
+
+---
+
 ### v9.0.0 (已完成 ✅)
 
 **完成事项**:
@@ -786,6 +812,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v9.3.0 | TUI Token Usage Display - 终端界面 Token 使用量显示：AppState 状态追踪（token_input_total/output_total、token_usage_by_session）；Gateway Client TurnUsage 事件处理；App handle_gateway_event 更新统计；draw_help_bar 显示 `📊 In: 1.2K | Out: 500`；格式化大数字（K/M 后缀）；cargo clippy 0 警告；cargo test 331 tests |
 | v9.2.0 | WebUI Chat Token Usage Display - 网页聊天界面 Token 使用量展示：CSS 样式增强（.token-stats、.token-badge）；JavaScript Token 追踪（全局统计、会话统计）；`turn.usage` SSE 事件处理；聊天工具栏显示实时统计（输入/输出/总计 tokens）；消息后 Token 徽章；事件日志集成；cargo clippy 0 警告；cargo test 331 tests |
 | v9.1.0 | TUI Markdown 渲染 - 终端界面支持 Markdown 格式化输出：新增 `src/tui/markdown.rs` 模块（**bold**、*italic*、`inline code`、```code blocks```、# headers、lists、> blockquotes、[links]）；`draw_messages_panel()` 智能检测 Markdown 类型并分级渲染；8个单元测试；cargo clippy 0 警告；cargo test 331 tests |
 | v9.0.0 | Agent Token Usage Tracking - AI API Token 使用量追踪：TokenUsage 结构、TurnRecord/turn_history 增强、client.rs 从 Anthropic/OpenAI 提取 usage、TurnUsage 事件、Gateway 集成、统计增强；代码清理移除 dead code；cargo clippy 0 警告；cargo test 322 tests |

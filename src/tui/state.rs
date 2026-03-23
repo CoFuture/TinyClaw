@@ -265,6 +265,12 @@ pub struct AppState {
     /// Whether a message has already been created for the current turn via AssistantText
     /// (to avoid duplicate messages when TurnEnded also creates one)
     pub streaming_message_created: bool,
+    /// Total input tokens used (cumulative across all sessions)
+    pub token_input_total: u64,
+    /// Total output tokens used (cumulative across all sessions)
+    pub token_output_total: u64,
+    /// Token usage by session (session_id -> (input, output))
+    pub token_usage_by_session: HashMap<String, (u64, u64)>,
 }
 
 impl Default for AppState {
@@ -307,6 +313,9 @@ impl Default for AppState {
             partial_text: String::new(),
             streaming_session_id: None,
             streaming_message_created: false,
+            token_input_total: 0,
+            token_output_total: 0,
+            token_usage_by_session: HashMap::new(),
         }
     }
 }
@@ -665,6 +674,54 @@ impl AppState {
         self.is_streaming = false;
         self.partial_text.clear();
         self.streaming_session_id = None;
+    }
+
+    // ========================================================================
+    // Token usage tracking
+    // ========================================================================
+
+    /// Update token usage from a turn.usage event
+    pub fn update_token_usage(&mut self, session_id: &str, input_tokens: u32, output_tokens: u32) {
+        // Update totals
+        self.token_input_total += input_tokens as u64;
+        self.token_output_total += output_tokens as u64;
+
+        // Update per-session tracking
+        let entry = self.token_usage_by_session.entry(session_id.to_string()).or_insert((0, 0));
+        entry.0 += input_tokens as u64;
+        entry.1 += output_tokens as u64;
+    }
+
+    /// Get total tokens used
+    #[allow(dead_code)]
+    pub fn total_tokens(&self) -> u64 {
+        self.token_input_total + self.token_output_total
+    }
+
+    /// Get token usage for a specific session
+    #[allow(dead_code)]
+    pub fn session_tokens(&self, session_id: &str) -> (u64, u64) {
+        self.token_usage_by_session.get(session_id).copied().unwrap_or((0, 0))
+    }
+
+    /// Format token count for display (e.g., "1.2K", "3.5M")
+    pub fn format_token_count(count: u64) -> String {
+        if count >= 1_000_000 {
+            format!("{:.1}M", count as f64 / 1_000_000.0)
+        } else if count >= 1_000 {
+            format!("{:.1}K", count as f64 / 1_000.0)
+        } else {
+            count.to_string()
+        }
+    }
+
+    /// Get formatted token usage string (e.g., "In: 1.2K | Out: 500")
+    pub fn formatted_token_usage(&self) -> String {
+        format!(
+            "In: {} | Out: {}",
+            Self::format_token_count(self.token_input_total),
+            Self::format_token_count(self.token_output_total)
+        )
     }
 
 }
