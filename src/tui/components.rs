@@ -1,5 +1,6 @@
 //! TUI UI components
 
+use crate::tui::markdown::{contains_markdown, is_markdown_heavy, parse_markdown};
 use crate::tui::state::{AppState, AgentActivityType};
 use ratatui::{
     layout::Alignment,
@@ -118,21 +119,68 @@ pub fn draw_messages_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
                 }
                 crate::types::Role::Assistant => {
                     let content = msg.content.trim();
-                    let content_lines: Vec<&str> = content.split('\n').collect();
-                    let first_line = content_lines.first().unwrap_or(&"").to_string();
-                    result.push(Line::from(vec![
-                        Span::raw("["),
-                        Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
-                        Span::raw("] "),
-                        Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                        Span::raw(": "),
-                        Span::raw(first_line),
-                    ]));
-                    for line in content_lines.iter().skip(1) {
+
+                    // Use markdown rendering for assistant messages with markdown content
+                    if is_markdown_heavy(content) {
+                        // Full markdown rendering for rich content
+                        let prefix = vec![
+                            Span::raw("["),
+                            Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                            Span::raw("] "),
+                            Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                            Span::raw(": "),
+                        ];
+                        let md_lines = parse_markdown(content);
+                        for (i, md_line) in md_lines.into_iter().enumerate() {
+                            if i == 0 {
+                                // First line: prefix + first content
+                                let mut combined: Vec<Span> = prefix.clone();
+                                combined.extend(md_line.spans);
+                                result.push(Line::from(combined));
+                            } else {
+                                // Continuation lines: indent
+                                let indent = Span::raw("                        ");
+                                let mut continued: Vec<Span> = vec![indent];
+                                continued.extend(md_line.spans);
+                                result.push(Line::from(continued));
+                            }
+                        }
+                    } else if contains_markdown(content) {
+                        // Light markdown: inline formatting only
+                        let content_lines: Vec<&str> = content.split('\n').collect();
+                        let first_line = content_lines.first().unwrap_or(&"").to_string();
+                        let styled_line = crate::tui::markdown::render_inline(&first_line);
                         result.push(Line::from(vec![
-                            Span::raw("          "),
-                            Span::raw(line.to_string()),
+                            Span::raw("["),
+                            Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                            Span::raw("] "),
+                            Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                            Span::raw(": "),
+                        ].into_iter().chain(styled_line.spans).collect::<Vec<_>>()));
+                        for line in content_lines.iter().skip(1) {
+                            let styled = crate::tui::markdown::render_inline(line);
+                            result.push(Line::from(vec![
+                                Span::raw("          "),
+                            ].into_iter().chain(styled.spans).collect::<Vec<_>>()));
+                        }
+                    } else {
+                        // Plain text - original behavior
+                        let content_lines: Vec<&str> = content.split('\n').collect();
+                        let first_line = content_lines.first().unwrap_or(&"").to_string();
+                        result.push(Line::from(vec![
+                            Span::raw("["),
+                            Span::styled(ts.clone(), Style::default().fg(Color::DarkGray)),
+                            Span::raw("] "),
+                            Span::styled("Assistant", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                            Span::raw(": "),
+                            Span::raw(first_line),
                         ]));
+                        for line in content_lines.iter().skip(1) {
+                            result.push(Line::from(vec![
+                                Span::raw("          "),
+                                Span::raw(line.to_string()),
+                            ]));
+                        }
                     }
                 }
                 crate::types::Role::System => {

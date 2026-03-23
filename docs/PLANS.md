@@ -82,6 +82,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v9.1.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Markdown 渲染** - 终端界面支持 Markdown 格式化输出
+  - 新增 `src/tui/markdown.rs` 模块：完整的 Markdown 到 styled ratatui Lines 解析器
+    - 支持 **bold** (`**text**`)、*italic* (`*text*` / `_text_`)、***bold+italic***
+    - 支持 `inline code` (反引号)、代码块 (``` ``` ```)
+    - 支持 # Headers (h1-h6 不同颜色和样式)
+    - 支持 - unordered lists、1. ordered lists
+    - 支持 > blockquotes (左侧竖线)
+    - 支持 [text](url) 链接渲染
+    - 智能检测：`contains_markdown()` 和 `is_markdown_heavy()` 函数
+  - **组件集成**：`src/tui/components.rs` 的 `draw_messages_panel()` 增强
+    - 检测消息内容是否包含 Markdown（轻量/重量分级）
+    - 重量 Markdown（代码块、headers、lists）→ 完整解析渲染
+    - 轻量 Markdown（仅 inline 格式）→ 简化渲染
+    - 无 Markdown → 保持原有纯文本行为
+  - 8 个单元测试覆盖核心解析功能
+- cargo clippy 0 警告
+- cargo test 331 tests (8个 markdown 测试全部通过，3个 memory 时间相关 flaky 测试单独通过)
+
+**下一步**: TUI 交互体验继续优化、Agent 上下文管理增强
+
+---
+
 ### v8.0.0 (已完成 ✅)
 
 **完成事项**:
@@ -732,6 +757,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v9.1.0 | TUI Markdown 渲染 - 终端界面支持 Markdown 格式化输出：新增 `src/tui/markdown.rs` 模块（**bold**、*italic*、`inline code`、```code blocks```、# headers、lists、> blockquotes、[links]）；`draw_messages_panel()` 智能检测 Markdown 类型并分级渲染；8个单元测试；cargo clippy 0 警告；cargo test 331 tests |
+| v9.0.0 | Agent Token Usage Tracking - AI API Token 使用量追踪：TokenUsage 结构、TurnRecord/turn_history 增强、client.rs 从 Anthropic/OpenAI 提取 usage、TurnUsage 事件、Gateway 集成、统计增强；代码清理移除 dead code；cargo clippy 0 警告；cargo test 322 tests |
 | v8.8.0 | TUI Streaming Text Display - 终端界面实时流式文本显示：Gateway Client 新增 `StreamingText` 事件解析 `assistant.partial`；AppState 流式状态字段（is_streaming、partial_text、streaming_session_id）；消息面板显示累积部分文本+青色闪烁光标；智能去重避免 `AssistantText` 和 `TurnEnded` 重复消息；支持 Ollama 原生流式、Anthropic/OpenAI 非流式回退；cargo clippy 0 警告；cargo test 326 tests |
 | v8.7.0 | Smart Context Truncation - 智能上下文截断：MessageImportance 枚举四级重要性；语言感知 Token 估算（CJK ~1.5 chars/token、代码调整、非 ASCII ~2 chars/token）；优先级截断策略保留重要消息；7 个新测试；cargo clippy 0 警告；cargo test 319 tests |
 | v8.6.0 | WebUI Action Confirmation Dialog - admin.html 新增完整确认弹窗：金色主题对话框显示计划执行的工具列表；两个按钮「🚫 拒绝」和「✅ 允许执行」；60秒超时提示；点击遮罩层或 Esc 键拒绝；SSE 事件处理 `action.plan_confirm` 和 `action.denied`；`confirmAction()` 发送 `session.confirm_action` WebSocket 消息；turn.ended/turn.cancelled 时自动关闭对话框；完整 CSS 样式；cargo clippy 0 警告；cargo test 319 tests |

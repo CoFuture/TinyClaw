@@ -5,6 +5,7 @@
 mod app;
 mod components;
 mod gateway_client;
+mod markdown;
 mod persistence;
 mod state;
 
