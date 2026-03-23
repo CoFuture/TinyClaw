@@ -212,6 +212,40 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.7.0 (已完成 ✅)
+
+**完成事项**:
+- **Smart Context Truncation with Priority-Based Message Retention** - 智能上下文截断
+  - **MessageImportance 枚举**：Low/Medium/High/Critical 四级重要性
+  - **语言感知 Token 估算**：`estimate_tokens()` 改进
+    - 中文/日文/韩文字符：~1.5 chars/token（vs 英文 ~4 chars/token）
+    - 代码内容：识别并调整估算（代码压缩效果好）
+    - 非 ASCII 非 CJK 字符：~2 chars/token
+  - **消息重要性评分**：`score_message_importance()` 方法
+    - Critical: 工具结果（提供关键上下文）
+    - High: 决策、偏好、重要用户信息
+    - Medium: 问题、技术内容、有实质内容的助手回复
+    - Low: 短确认、问候语
+  - **优先级截断策略**：`truncate_to_fit()` 改进
+    - Phase 1: 始终保留最近消息（当前上下文锚点）
+    - Phase 2: 保留高/关键重要性消息
+    - Phase 3: 用中等重要性消息填充剩余预算
+    - Phase 4: 低重要性消息仅在有额外空间时保留
+  - **新增 7 个测试**：
+    - `test_token_estimation_chinese` - 中文 token 估算
+    - `test_token_estimation_code` - 代码 token 估算
+    - `test_message_importance_high` - 高重要性消息识别
+    - `test_message_importance_preference` - 偏好消息识别
+    - `test_message_importance_tool_result` - 工具结果重要性
+    - `test_message_importance_low` - 低重要性消息识别
+    - `test_truncate_preserves_important` - 截断保留重要消息
+- cargo clippy 0 警告（仅 pre-existing dead_code 警告）
+- cargo test 319 tests (15 context_manager tests)
+
+**下一步**: Agent 历史上下文集成、多轮对话记忆优化
+
+---
+
 ### v8.6.0 (已完成 ✅)
 
 **完成事项**:
