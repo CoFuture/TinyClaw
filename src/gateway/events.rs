@@ -42,6 +42,15 @@ pub enum Event {
         response: String,
     },
     
+    /// Turn token usage - emitted after a turn completes with token usage info
+    #[serde(rename = "turn.usage")]
+    TurnUsage {
+        session_id: String,
+        input_tokens: u32,
+        output_tokens: u32,
+        total_tokens: u32,
+    },
+    
     /// Turn was cancelled
     #[serde(rename = "turn.cancelled")]
     TurnCancelled {

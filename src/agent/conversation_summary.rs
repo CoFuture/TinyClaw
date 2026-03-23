@@ -430,26 +430,6 @@ impl ConversationSummary {
         None
     }
 
-    /// Mark questions as answered when the agent provides a response
-    pub fn mark_questions_answered(&mut self) {
-        // Clear all open questions when agent responds (they're likely answered)
-        self.open_questions.clear();
-    }
-
-    /// Reset the summary (for new conversation)
-    pub fn reset(&mut self) {
-        let now = current_timestamp();
-        self.topics.clear();
-        self.decisions.clear();
-        self.preferences.clear();
-        self.open_questions.clear();
-        self.current_focus.clear();
-        self.overview.clear();
-        self.turn_count = 0;
-        self.last_updated = now;
-        self.started_at = now;
-    }
-
     /// Check if the conversation is getting long enough to need a summary
     pub fn needs_summary(&self) -> bool {
         // If conversation has 8+ turns or meaningful content, include summary
@@ -546,33 +526,9 @@ impl ConversationSummaryManager {
         summary.update(user_message, assistant_response);
     }
 
-    /// Mark questions as answered for a session
-    pub fn mark_answered(&mut self, session_key: &str) {
-        if let Some(summary) = self.summaries.get_mut(session_key) {
-            summary.mark_questions_answered();
-        }
-    }
-
-    /// Reset summary for a session (new conversation)
-    pub fn reset(&mut self, session_key: &str) {
-        if let Some(summary) = self.summaries.get_mut(session_key) {
-            summary.reset();
-        }
-    }
-
-    /// Remove summary for a session
-    pub fn remove(&mut self, session_key: &str) {
-        self.summaries.remove(session_key);
-    }
-
     /// Get summary for API response
     pub fn get(&self, session_key: &str) -> Option<&ConversationSummary> {
         self.summaries.get(session_key)
-    }
-
-    /// List all sessions with summaries
-    pub fn list_sessions(&self) -> Vec<&str> {
-        self.summaries.keys().map(|s| s.as_str()).collect()
     }
 }
 
@@ -654,19 +610,6 @@ mod tests {
     }
 
     #[test]
-    fn test_reset() {
-        let mut summary = ConversationSummary::new("test");
-        summary.update("Tell me about Rust", "Rust is...");
-        
-        assert!(summary.turn_count > 0);
-        
-        summary.reset();
-        
-        assert_eq!(summary.turn_count, 0);
-        assert!(summary.topics.is_empty());
-    }
-
-    #[test]
     fn test_manager_multiple_sessions() {
         let mut manager = ConversationSummaryManager::new();
         
@@ -683,28 +626,5 @@ mod tests {
             let summary2 = manager.get_summary("session2");
             assert_eq!(summary2.turn_count, 1);
         }
-    }
-
-    #[test]
-    fn test_remove_session() {
-        let mut manager = ConversationSummaryManager::new();
-        manager.record_turn("session1", "Hello", "Hi!");
-        
-        assert!(manager.get("session1").is_some());
-        
-        manager.remove("session1");
-        
-        assert!(manager.get("session1").is_none());
-    }
-
-    #[test]
-    fn test_mark_questions_answered() {
-        let mut summary = ConversationSummary::new("test");
-        summary.update("What is Rust?", "It's a programming language.");
-        
-        assert!(summary.open_questions.is_empty() || summary.turn_count == 1);
-        
-        summary.mark_questions_answered();
-        assert!(summary.open_questions.is_empty());
     }
 }

@@ -144,6 +144,9 @@ struct PendingActionPlan {
     response_tx: Mutex<Option<oneshot::Sender<bool>>>,
 }
 
+/// Re-export TokenUsage from turn_history for use in the agent client
+pub use crate::agent::turn_history::TokenUsage;
+
 /// Agent client for AI model interaction
 pub struct Agent {
     config: Arc<RwLock<AgentConfig>>,
@@ -160,6 +163,8 @@ pub struct Agent {
     current_session_key: RwLock<Option<String>>,
     /// Tool executions recorded during the last send_message_with_history call
     tool_executions: Arc<RwLock<Vec<ToolExecution>>>,
+    /// Token usage recorded during the last send_message call
+    token_usage: Arc<RwLock<Option<TokenUsage>>>,
     /// Pending action plan waiting for user confirmation (session_key -> plan)
     pending_action_plan: RwLock<Option<PendingActionPlan>>,
 }
@@ -231,6 +236,7 @@ impl Agent {
             event_emitter: None,
             current_session_key: RwLock::new(None),
             tool_executions: Arc::new(RwLock::new(Vec::new())),
+            token_usage: Arc::new(RwLock::new(None)),
             pending_action_plan: RwLock::new(None),
         }
     }
@@ -248,6 +254,7 @@ impl Agent {
             event_emitter: None,
             current_session_key: RwLock::new(None),
             tool_executions: Arc::new(RwLock::new(Vec::new())),
+            token_usage: Arc::new(RwLock::new(None)),
             pending_action_plan: RwLock::new(None),
         }
     }
@@ -284,6 +291,18 @@ impl Agent {
         let result = executions.clone();
         executions.clear();
         result
+    }
+
+    /// Take and clear the token usage recorded during the last turn.
+    /// Returns the token usage if available, and clears the buffer.
+    #[allow(dead_code)]
+    pub fn take_token_usage(&self) -> Option<TokenUsage> {
+        self.token_usage.write().take()
+    }
+
+    /// Set token usage (called internally after API calls)
+    fn set_token_usage(&self, usage: Option<TokenUsage>) {
+        *self.token_usage.write() = usage;
     }
 
     /// Record a tool execution during message processing.
@@ -508,6 +527,17 @@ pub async fn send_message_with_history(
                 ModelProvider::Anthropic => {
                     let response = self.send_anthropic_with_tools(&config, &messages, &tools, skill_prompt).await?;
                     
+                    // Extract token usage from response (only on final turn to avoid overwriting)
+                    if !response["usage"]["input_tokens"].is_null() {
+                        let input_tokens = response["usage"]["input_tokens"].as_u64().unwrap_or(0) as u32;
+                        let output_tokens = response["usage"]["output_tokens"].as_u64().unwrap_or(0) as u32;
+                        self.set_token_usage(Some(TokenUsage {
+                            input_tokens,
+                            output_tokens,
+                            total_tokens: input_tokens + output_tokens,
+                        }));
+                    }
+                    
                     // Extract text content
                     let text_content: Option<String> = response["content"]
                         .as_array()
@@ -637,6 +667,17 @@ pub async fn send_message_with_history(
                 ModelProvider::OpenAI => {
                     let response = self.send_openai_with_tools(&config, &messages, &tools, skill_prompt).await?;
                     
+                    // Extract token usage from response (only on final turn)
+                    if !response["usage"]["prompt_tokens"].is_null() {
+                        let input_tokens = response["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as u32;
+                        let output_tokens = response["usage"]["completion_tokens"].as_u64().unwrap_or(0) as u32;
+                        self.set_token_usage(Some(TokenUsage {
+                            input_tokens,
+                            output_tokens,
+                            total_tokens: input_tokens + output_tokens,
+                        }));
+                    }
+                    
                     // Check for tool_calls in response
                     let has_tool_calls = response["choices"]
                         .as_array()
@@ -759,7 +800,8 @@ pub async fn send_message_with_history(
                     }
                 }
                 ModelProvider::Ollama => {
-                    // Ollama doesn't support tools, just return direct response
+                    // Ollama doesn't support tools or token usage tracking
+                    self.set_token_usage(None);
                     return self.send_ollama(&config, message).await;
                 }
             }

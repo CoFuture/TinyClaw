@@ -12,6 +12,17 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// Token usage from an AI API response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenUsage {
+    /// Number of input/prompt tokens
+    pub input_tokens: u32,
+    /// Number of output/completion tokens
+    pub output_tokens: u32,
+    /// Total tokens used
+    pub total_tokens: u32,
+}
+
 /// A tool execution record within a turn
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolExecution {
@@ -46,6 +57,9 @@ pub struct TurnRecord {
     pub success: bool,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
+    /// Token usage for this turn (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_usage: Option<TokenUsage>,
 }
 
 impl TurnRecord {
@@ -61,6 +75,7 @@ impl TurnRecord {
             duration_ms: 0,
             success: true,
             created_at: Utc::now(),
+            token_usage: None,
         }
     }
 
@@ -108,7 +123,15 @@ impl TurnRecord {
             } else {
                 self.user_message.clone()
             },
+            total_tokens: self.token_usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
         }
+    }
+
+    /// Set token usage
+    #[allow(dead_code)]
+    pub fn with_token_usage(mut self, usage: TokenUsage) -> Self {
+        self.token_usage = Some(usage);
+        self
     }
 }
 
@@ -123,6 +146,8 @@ pub struct TurnSummary {
     pub success: bool,
     pub created_at: DateTime<Utc>,
     pub message_preview: String,
+    /// Total tokens used in this turn (0 if not available)
+    pub total_tokens: u32,
 }
 
 /// Aggregated turn statistics
@@ -138,6 +163,10 @@ pub struct TurnStats {
     pub tool_success_rate: f64,
     /// Average turn duration (ms)
     pub avg_duration_ms: f64,
+    /// Total tokens used across all turns
+    pub total_tokens: u64,
+    /// Average tokens per turn
+    pub avg_tokens: f64,
     /// Tools by name (name -> count)
     pub tools_by_name: HashMap<String, u64>,
     /// Turns by session (session_id -> count)
@@ -227,6 +256,31 @@ impl TurnHistoryManager {
         turn.duration_ms = duration_ms;
         turn.success = success;
         turn.tools = tools;
+        turn
+    }
+
+    /// Create a new turn record with full details including token usage (for use from gateway)
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_turn_full(
+        _manager: &Arc<TurnHistoryManager>,
+        session_id: &str,
+        user_message: &str,
+        response: &str,
+        duration_ms: u64,
+        success: bool,
+        tools: Vec<ToolExecution>,
+        token_usage: Option<TokenUsage>,
+    ) -> TurnRecord {
+        let mut turn = TurnRecord::new(session_id, user_message);
+        turn.response_preview = if response.len() > 500 {
+            format!("{}...", &response[..500])
+        } else {
+            response.to_string()
+        };
+        turn.duration_ms = duration_ms;
+        turn.success = success;
+        turn.tools = tools;
+        turn.token_usage = token_usage;
         turn
     }
 
@@ -386,6 +440,11 @@ impl TurnHistoryManager {
                 stats.successful_tools += turn.tools.iter().filter(|t| t.success).count() as u64;
                 stats.avg_duration_ms += turn.duration_ms as f64;
                 
+                // Track token usage
+                if let Some(ref usage) = turn.token_usage {
+                    stats.total_tokens += usage.total_tokens as u64;
+                }
+                
                 for tool in &turn.tools {
                     *stats.tools_by_name.entry(tool.name.clone()).or_insert(0) += 1;
                 }
@@ -394,6 +453,7 @@ impl TurnHistoryManager {
         
         if stats.total_turns > 0 {
             stats.avg_duration_ms /= stats.total_turns as f64;
+            stats.avg_tokens = stats.total_tokens as f64 / stats.total_turns as f64;
         }
         
         // Calculate tool success rate

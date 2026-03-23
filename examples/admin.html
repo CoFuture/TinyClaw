@@ -2377,6 +2377,7 @@
                             <div style="display: flex; gap: 15px; font-size: 12px; color: #888;">
                                 <span>${expandIcon} 🔧 工具: ${toolCount}个</span>
                                 <span>⏱️ 耗时: ${duration}</span>
+                                ${turn.total_tokens > 0 ? `<span>📊 Tokens: ${turn.total_tokens}</span>` : ''}
                                 ${turn.successful_tools !== undefined ? `<span>✓ 成功: ${turn.successful_tools}/${toolCount}</span>` : ''}
                             </div>
                             <div class="turn-tools-detail" id="turn-tools-${turn.id}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">

@@ -53,6 +53,35 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v9.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Token Usage Tracking** - AI API Token 使用量追踪
+  - 新增 `TokenUsage` 结构体到 `turn_history.rs`：input_tokens、output_tokens、total_tokens
+  - `TurnRecord` 新增 `token_usage` 字段存储每轮 Token 使用量
+  - `TurnSummary` 新增 `total_tokens` 字段
+  - `TurnStats` 新增 `total_tokens` 和 `avg_tokens` 统计字段
+  - **Agent 客户端增强**：`client.rs` 新增 `token_usage` 字段存储和 `take_token_usage()` 方法
+    - 从 Anthropic API 响应中提取 `usage.input_tokens` 和 `usage.output_tokens`
+    - 从 OpenAI API 响应中提取 `usage.prompt_tokens` 和 `usage.completion_tokens`
+    - Ollama 不支持 Token 使用量追踪（设为 None）
+  - **Gateway 事件系统**：`events.rs` 新增 `TurnUsage` 事件
+    - 实时发送 Token 使用量信息给客户端
+    - SSE 事件过滤和 session 过滤支持
+  - **Gateway 集成**：`handle_agent_turn` 完成后捕获 Token 使用量
+    - 发射 `turn.usage` 事件
+    - 存储到 TurnRecord 中
+  - **统计增强**：`get_stats()` 方法计算总 Token 量和平均每轮 Token 量
+- **代码清理**：移除 `conversation_summary.rs` 中未使用的方法
+  - 删除 `mark_questions_answered`、`reset`、`mark_answered`、`remove`、`list_sessions` 等 dead code
+  - 删除相关测试用例
+- cargo clippy 0 警告
+- cargo test 322 tests (1个 flaky test 单独通过)
+
+**下一步**: WebUI Token 使用量展示、统计图表集成
+
+---
+
 ### v8.0.0 (已完成 ✅)
 
 **完成事项**:

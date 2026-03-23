@@ -813,9 +813,21 @@ async fn handle_agent_turn(
         response: response.clone(),
     });
 
-    // Record turn in history (with tool executions if any)
+    // Record turn in history (with tool executions and token usage)
     let tool_executions = ctx.agent.take_tool_executions();
-    let turn_record = crate::agent::TurnHistoryManager::record_turn_with_tools(
+    let token_usage = ctx.agent.take_token_usage();
+    
+    // Emit token usage event if available
+    if let Some(ref usage) = token_usage {
+        ctx.event_emitter.emit(Event::TurnUsage {
+            session_id: session_key.to_string(),
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            total_tokens: usage.total_tokens,
+        });
+    }
+    
+    let turn_record = crate::agent::TurnHistoryManager::record_turn_full(
         &ctx.turn_history,
         session_key,
         &turn_user_message,
@@ -823,6 +835,7 @@ async fn handle_agent_turn(
         turn_duration,
         turn_success,
         tool_executions,
+        token_usage,
     );
     ctx.turn_history.record(turn_record);
 
