@@ -193,6 +193,7 @@ impl TurnHistoryManager {
     }
 
     /// Create a new turn record (for use from gateway)
+    #[allow(dead_code)]
     pub fn record_turn(
         _manager: &Arc<TurnHistoryManager>,
         session_id: &str,
@@ -464,9 +465,10 @@ impl TurnHistoryManager {
         // Limit results
         period_stats.truncate(limit);
         
-        let mut stats = TurnStats::default();
-        stats.period_stats = period_stats;
-        stats
+        TurnStats {
+            period_stats,
+            ..Default::default()
+        }
     }
 
     /// Clear turns for a session

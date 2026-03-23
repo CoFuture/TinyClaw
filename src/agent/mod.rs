@@ -3,6 +3,7 @@
 pub mod client;
 pub mod context;
 pub mod context_manager;
+pub mod conversation_summary;
 pub mod error_recovery;
 pub mod memory;
 pub mod memory_extractor;
@@ -46,3 +47,5 @@ pub use task_manager::TaskManager;
 pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, ToolExecution};
 #[allow(unused_imports)]
 pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};
+#[allow(unused_imports)]
+pub use conversation_summary::{ConversationSummary, ConversationSummaryManager};

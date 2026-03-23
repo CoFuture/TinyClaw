@@ -135,6 +135,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Turn history manager initialized");
     
+    // Create conversation summary manager for tracking conversation state
+    let conversation_summary_manager = Arc::new(parking_lot::RwLock::new(
+        crate::agent::ConversationSummaryManager::new()
+    ));
+    info!("Conversation summary manager initialized");
+    
     // Create metrics collector and rate limiter
     let metrics = Arc::new(MetricsCollector::new());
     let rate_limiter = Arc::new(RateLimiter::new());
@@ -240,6 +246,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         suggestion_manager: suggestion_manager.clone(),
         memory_manager: memory_manager.clone(),
         turn_history: turn_history.clone(),
+        conversation_summary: conversation_summary_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -263,6 +270,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         suggestion_manager.clone(), // Suggestion manager for interactive suggestions
         memory_manager.clone(), // Memory manager for long-term fact storage
         turn_history.clone(), // Turn history manager
+        conversation_summary_manager.clone(), // Conversation summary manager
     );
     
     let ws_handle = tokio::spawn(async move {

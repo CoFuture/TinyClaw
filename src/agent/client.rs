@@ -287,6 +287,17 @@ impl Agent {
         }
     }
 
+    /// Emit an action plan preview event showing all planned tool calls
+    fn emit_action_plan_preview(&self, tools: Vec<crate::gateway::events::ToolCallPreview>) {
+        if let Some(emitter) = &self.event_emitter {
+            let session_id = self.get_session_key().unwrap_or_else(|| "unknown".to_string());
+            emitter.emit(crate::gateway::events::Event::ActionPlanPreview {
+                session_id,
+                tools,
+            });
+        }
+    }
+
     /// Emit a tool result event if event emitter is configured
     fn emit_tool_result(&self, tool_call_id: &str, output: &str, _success: bool) {
         if let Some(emitter) = &self.event_emitter {
@@ -462,6 +473,18 @@ pub async fn send_message_with_history(
                             "content": tool_use_blocks
                         }));
 
+                        // Emit action plan preview (shows all planned tools before execution)
+                        let preview_tools: Vec<_> = tool_use_blocks.iter().filter_map(|tb| {
+                            Some(crate::gateway::events::ToolCallPreview {
+                                id: tb["id"].as_str()?.to_string(),
+                                name: tb["name"].as_str()?.to_string(),
+                                input: tb["input"].clone(),
+                            })
+                        }).collect();
+                        if !preview_tools.is_empty() {
+                            self.emit_action_plan_preview(preview_tools);
+                        }
+
                         // Execute tools and add results
                         for tool_block in &tool_use_blocks {
                             let tool_name = tool_block["name"].as_str().unwrap_or("");
@@ -529,6 +552,22 @@ pub async fn send_message_with_history(
                         messages.push(message_obj.clone());
 
                         let tool_calls = message_obj["tool_calls"].as_array().unwrap();
+                        
+                        // Emit action plan preview (shows all planned tools before execution)
+                        let preview_tools: Vec<_> = tool_calls.iter().filter_map(|tc| {
+                            let name = tc["function"]["name"].as_str()?;
+                            let args: serde_json::Value = serde_json::from_str(
+                                tc["function"]["arguments"].as_str().unwrap_or("{}")
+                            ).unwrap_or(serde_json::json!({}));
+                            Some(crate::gateway::events::ToolCallPreview {
+                                id: tc["id"].as_str()?.to_string(),
+                                name: name.to_string(),
+                                input: args,
+                            })
+                        }).collect();
+                        if !preview_tools.is_empty() {
+                            self.emit_action_plan_preview(preview_tools);
+                        }
                         
                         // Execute tools and add results
                         for tool_call in tool_calls {

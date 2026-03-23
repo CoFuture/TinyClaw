@@ -1035,6 +1035,47 @@
             color: #9c27b0;
             font-size: 14px;
         }
+        .message.action-plan-preview {
+            border-left: 3px solid #00bcd4;
+            background: linear-gradient(135deg, rgba(0,188,212,0.1) 0%, rgba(0,0,0,0.2) 100%);
+        }
+        .action-plan-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .action-plan-tool {
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+            border-left: 2px solid #00bcd4;
+        }
+        .action-plan-tool-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .tool-number {
+            color: #00bcd4;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .tool-name {
+            color: #00bcd4;
+            font-weight: 500;
+        }
+        .action-plan-tool-args {
+            font-size: 12px;
+            color: rgba(255,255,255,0.7);
+            margin-left: 20px;
+        }
+        .action-plan-tool-args pre {
+            margin: 4px 0 0 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 11px;
+        }
         .msg-role {
             font-size: 11px;
             opacity: 0.7;
@@ -1397,7 +1438,22 @@
                 <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
             </div>
         </div>
-        
+
+        <!-- Conversation Summary Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>💬 会话摘要 <span class="tool-count-badge" id="conversationTurnCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">追踪对话状态：主题、决策、偏好、待解决问题</p>
+            <div style="margin-bottom: 15px;">
+                <select id="conversationSummarySession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-right: 10px;" onchange="loadConversationSummary()">
+                    <option value="main">main</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadConversationSummary()">🔄 刷新</button>
+            </div>
+            <div class="conversation-summary-panel" id="conversationSummaryPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">选择会话查看摘要...</div>
+            </div>
+        </div>
+
         <!-- Config Editor -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⚡ 配置编辑器</h2>
@@ -3859,6 +3915,9 @@
             } else if (eventType === 'assistant.tool_use' && data.tool) {
                 // Show tool use indicator
                 showToolUseIndicator(data.tool);
+            } else if (eventType === 'action.plan_preview' && data.tools) {
+                // Show action plan preview - displays all tools the agent plans to execute
+                showActionPlanPreview(data.tools);
             } else if (eventType === 'assistant.partial' && data.text) {
                 // Real-time streaming partial text - update UI incrementally
                 // First, clear any thinking/tool indicators
@@ -3947,6 +4006,41 @@
                 activityIndicatorElement.parentNode.removeChild(activityIndicatorElement);
             }
             activityIndicatorElement = null;
+        }
+        
+        /// Show an action plan preview - displays all planned tool calls before execution
+        function showActionPlanPreview(tools) {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            
+            // Remove existing indicator if any
+            hideActivityIndicator();
+            
+            const indicator = document.createElement('div');
+            indicator.className = 'message assistant action-plan-preview';
+            indicator.id = 'activityIndicator';
+            const time = new Date().toLocaleTimeString();
+            
+            // Build the preview content
+            let toolsHtml = '';
+            tools.forEach((tool, index) => {
+                const argsStr = JSON.stringify(tool.input || {}, null, 2);
+                const argsPreview = argsStr.length > 200 ? argsStr.substring(0, 200) + '...' : argsStr;
+                toolsHtml += '<div class="action-plan-tool">';
+                toolsHtml += '<div class="action-plan-tool-header">';
+                toolsHtml += '<span class="tool-number">' + (index + 1) + '.</span>';
+                toolsHtml += '<span class="tool-name">🔧 ' + escapeHtml(tool.name) + '</span>';
+                toolsHtml += '</div>';
+                toolsHtml += '<div class="action-plan-tool-args"><pre>' + escapeHtml(argsPreview) + '</pre></div>';
+                toolsHtml += '</div>';
+            });
+            
+            indicator.innerHTML = '<div class="msg-role">📋 执行计划 <span class="msg-time">' + time + '</span></div>' +
+                '<div class="msg-content"><div class="action-plan-container">' + toolsHtml + '</div></div>';
+            
+            container.appendChild(indicator);
+            activityIndicatorElement = indicator;
+            container.scrollTop = container.scrollHeight;
         }
         
         /// Create a streaming message element with a typing indicator
@@ -4099,7 +4193,7 @@
                 // Handle all event types
                 const eventTypes = [
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.cancelled',
-                    'assistant.text', 'assistant.partial', 'assistant.tool_use', 'tool_result',
+                    'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat'
                 ];
                 
@@ -4159,6 +4253,7 @@
             else if (event.type === 'turn.ended') cssClass += ' event-turn-ended';
             else if (event.type === 'error') cssClass += ' event-error';
             else if (event.type === 'assistant.tool_use') cssClass += ' event-tool';
+            else if (event.type === 'action.plan_preview') cssClass += ' event-tool';
             else if (event.type === 'tool_result') cssClass += ' event-tool-result';
             else if (event.type === 'heartbeat') cssClass += ' event-heartbeat';
             else if (event.type === 'system') cssClass += ' event-system';
@@ -4181,6 +4276,9 @@
                     contentText = (event.content.text || '').substring(0, 60) + ((event.content.text || '').length > 60 ? '...' : '');
                 } else if (event.type === 'assistant.tool_use') {
                     contentText = '调用工具: ' + event.content.tool;
+                } else if (event.type === 'action.plan_preview') {
+                    const tools = event.content.tools || [];
+                    contentText = '计划执行 ' + tools.length + ' 个工具: ' + tools.map(t => t.name).join(', ');
                 } else if (event.type === 'tool_result') {
                     const out = event.content.output || '';
                     contentText = '结果: ' + out.substring(0, 40) + (out.length > 40 ? '...' : '');
@@ -4213,6 +4311,7 @@
                 'turn.ended': 'Turn结束',
                 'assistant.text': 'AI回复',
                 'assistant.tool_use': '工具调用',
+                'action.plan_preview': '执行计划预览',
                 'tool_result': '工具结果',
                 'session.created': '会话创建',
                 'session.ended': '会话结束',

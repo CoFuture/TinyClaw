@@ -49,6 +49,8 @@ pub struct HttpState {
     pub suggestion_manager: Arc<SuggestionManager>,
     pub memory_manager: Arc<MemoryManager>,
     pub turn_history: Arc<TurnHistoryManager>,
+    #[allow(dead_code)]
+    pub conversation_summary: Arc<RwLock<crate::agent::ConversationSummaryManager>>,
 }
 
 /// Health check response
@@ -667,6 +669,7 @@ async fn sse_events(
                                     Event::AssistantText { session_id, .. } => session_id == filter,
                                     Event::AssistantPartial { session_id, .. } => session_id == filter,
                                     Event::AssistantToolUse { session_id, .. } => session_id == filter,
+                                    Event::ActionPlanPreview { session_id, .. } => session_id == filter,
                                     Event::ToolResult { session_id, .. } => session_id == filter,
                                     Event::TurnLogUpdated { session_id, .. } => session_id == filter,
                                     Event::TurnLogCompleted { session_id, .. } => session_id == filter,
@@ -701,6 +704,7 @@ async fn sse_events(
                                     Event::AssistantText { .. } => "assistant.text",
                                     Event::AssistantPartial { .. } => "assistant.partial",
                                     Event::AssistantToolUse { .. } => "assistant.tool_use",
+                                    Event::ActionPlanPreview { .. } => "action.plan_preview",
                                     Event::ToolResult { .. } => "tool_result",
                                     Event::TurnLogUpdated { .. } => "turn.log_updated",
                                     Event::TurnLogCompleted { .. } => "turn.log_completed",
@@ -834,6 +838,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/stats", get(turns_stats))
         .route("/api/turns/stats/period", get(turns_stats_period))
         .route("/api/turns/export", get(turns_export))
+        // Conversation summary API - transient conversation state tracking
+        .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1769,6 +1775,47 @@ async fn turns_export(
         .header(header::CONTENT_TYPE, "application/json")
         .body(axum::body::Body::from(json))
         .unwrap()
+}
+
+// ============================================================
+// Conversation Summary API Endpoints
+// ============================================================
+
+/// Get conversation summary for a session
+async fn conversation_summary_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let summary_manager = state.conversation_summary.read();
+    match summary_manager.get(&session_id) {
+        Some(summary) => {
+            let needs_summary = summary.needs_summary();
+            Json(serde_json::json!({
+                "success": true,
+                "sessionId": session_id,
+                "summary": {
+                    "sessionKey": summary.session_key,
+                    "topics": summary.topics,
+                    "decisions": summary.decisions,
+                    "preferences": summary.preferences,
+                    "openQuestions": summary.open_questions,
+                    "currentFocus": summary.current_focus,
+                    "overview": summary.overview,
+                    "turnCount": summary.turn_count,
+                    "needsSummary": needs_summary,
+                    "lastUpdated": summary.last_updated,
+                    "startedAt": summary.started_at,
+                },
+                "systemPrompt": if needs_summary { summary.to_system_prompt() } else { String::new() },
+            }))
+        }
+        None => {
+            Json(serde_json::json!({
+                "success": false,
+                "error": "No conversation summary found for this session",
+            }))
+        }
+    }
 }
 
 // ============================================================

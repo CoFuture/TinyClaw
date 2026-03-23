@@ -6,6 +6,7 @@ use crate::agent::session_notes::SessionNotesManager;
 use crate::agent::SuggestionManager;
 use crate::agent::MemoryManager;
 use crate::agent::TurnHistoryManager;
+use crate::agent::ConversationSummaryManager;
 use crate::common::{Error, Result};
 use crate::config::Config;
 use crate::gateway::events::{Event, EventEmitter};
@@ -76,6 +77,8 @@ pub struct HandlerContext {
     pub memory_manager: Arc<MemoryManager>,
     /// Turn history manager for tracking agent turns
     pub turn_history: Arc<TurnHistoryManager>,
+    /// Conversation summary manager for tracking conversation state
+    pub conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
 }
 
 impl HandlerContext {
@@ -96,6 +99,7 @@ impl HandlerContext {
         suggestion_manager: Arc<SuggestionManager>,
         memory_manager: Arc<MemoryManager>,
         turn_history: Arc<TurnHistoryManager>,
+        conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
     ) -> Self {
         Self {
             session_manager,
@@ -113,6 +117,7 @@ impl HandlerContext {
             suggestion_manager,
             memory_manager,
             turn_history,
+            conversation_summary,
         }
     }
 
@@ -374,6 +379,17 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<St
     let memory_prompt = ctx.memory_manager.generate_session_prompt(session_key, 5);
     if !memory_prompt.is_empty() {
         parts.push(memory_prompt);
+    }
+
+    // 3b. Conversation summary - for longer conversations to maintain context
+    {
+        let summary_manager = ctx.conversation_summary.read();
+        if let Some(summary) = summary_manager.get(session_key) {
+            let summary_prompt = summary.to_system_prompt();
+            if !summary_prompt.is_empty() {
+                parts.push(summary_prompt);
+            }
+        }
     }
 
     // 4. Session instructions (highest priority - user-defined persona/instructions)
@@ -763,6 +779,12 @@ async fn handle_agent_turn(
             count = extracted_count,
             "Auto-extracted facts from agent turn"
         );
+    }
+
+    // Update conversation summary for this session
+    {
+        let mut summary_manager = ctx.conversation_summary.write();
+        summary_manager.record_turn(session_key, message, &response);
     }
 
     // Generate proactive suggestions based on conversation context

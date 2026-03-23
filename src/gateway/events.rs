@@ -7,6 +7,17 @@ use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 use crate::agent::task::TaskSummary;
 use crate::agent::suggestion::Suggestion;
 
+/// Tool call info for action plan preview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallPreview {
+    /// Unique ID for the tool call
+    pub id: String,
+    /// Name of the tool
+    pub name: String,
+    /// Arguments to the tool (JSON)
+    pub input: serde_json::Value,
+}
+
 /// Event types for real-time streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -57,6 +68,13 @@ pub enum Event {
         session_id: String,
         tool: String,
         input: serde_json::Value,
+    },
+    
+    /// Action plan preview - shows all planned tool calls before execution
+    #[serde(rename = "action.plan_preview")]
+    ActionPlanPreview {
+        session_id: String,
+        tools: Vec<ToolCallPreview>,
     },
     
     /// Tool result

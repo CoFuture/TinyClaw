@@ -126,6 +126,35 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v8.3.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Action Plan Preview System** - 工具执行前预览所有计划操作
+  - **新事件类型**：`gateway/events.rs` 新增 `ActionPlanPreview` 事件
+    - 在工具执行前显示所有计划调用的工具列表
+    - 包含每个工具的 id、name、input 参数
+  - **ToolCallPreview 结构**：新增结构体用于传递工具调用预览信息
+  - **Agent 客户端增强**：`client.rs` 新增 `emit_action_plan_preview()` 方法
+    - 在 Anthropic 和 OpenAI provider 的工具调用循环中，先收集所有 tool_use 块
+    - 批量发送 `ActionPlanPreview` 事件，再逐个执行工具
+  - **HTTP SSE 集成**：`routes.rs` 新增事件过滤支持
+  - **协议常量**：`protocol.rs` 新增 `ACTION_PLAN_PREVIEW` 常量
+  - **WebUI 增强**：`admin.html` 新增执行计划预览显示
+    - 新增 `showActionPlanPreview()` 函数，显示计划执行的工具列表
+    - 青绿色主题的预览卡片，显示工具序号、名称、参数预览
+    - CSS 样式：`.action-plan-preview`、`.action-plan-tool`、`.tool-number` 等
+    - 事件日志显示：显示"计划执行 N 个工具: tool1, tool2, ..."
+- **Clippy 警告修复**：修复 `turn_history.rs` 中的 `let_and_return` 警告
+- **Conversation Summary 模块**：新增 `agent/conversation_summary.rs`
+  - 追踪会话对话状态、未回答问题等
+  - 支持 turn 记录和问题追踪
+- cargo clippy 0 警告（仅 dead_code 警告）
+- cargo test 319 tests
+
+**下一步**: 工具执行确认机制（用户可取消）、TUI 预览支持
+
+---
+
 ### v7.3.0 (已完成 ✅)
 
 **完成事项**:

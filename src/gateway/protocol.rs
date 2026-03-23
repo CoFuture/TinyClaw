@@ -310,6 +310,8 @@ pub mod events {
     pub const ASSISTANT_TEXT: &str = "assistant.text";
     /// Assistant tool use event
     pub const ASSISTANT_TOOL_USE: &str = "assistant.tool_use";
+    /// Action plan preview event
+    pub const ACTION_PLAN_PREVIEW: &str = "action.plan_preview";
     /// Tool result event
     pub const TOOL_RESULT: &str = "tool_result";
     /// Session ended event
