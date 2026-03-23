@@ -210,7 +210,34 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告（仅 pre-existing dead_code 警告）
 - cargo test 317 tests (2 flaky time-based tests pass when run individually)
 
-**下一步**: WebUI 确认弹窗实现
+---
+
+### v8.6.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Action Confirmation Dialog** - 网页界面工具执行确认弹窗
+  - **确认对话框 UI**：`examples/admin.html` 新增完整确认弹窗
+    - 金色主题对话框，显示计划执行的工具列表（序号、名称、参数预览）
+    - 两个按钮：「🚫 拒绝」和「✅ 允许执行」
+    - 60秒超时提示
+    - 点击遮罩层背景 = 拒绝操作
+    - Esc 键 = 拒绝操作
+  - **SSE 事件处理**：新增 `action.plan_confirm` 和 `action.denied` 事件处理
+    - 收到 `action.plan_confirm` 时弹出确认对话框
+    - 收到 `action.denied` 时关闭对话框并显示系统消息
+    - `turn.ended` 和 `turn.cancelled` 时自动关闭对话框
+  - **WebSocket 确认发送**：新增 `confirmAction(planId, confirmed)` 函数
+    - 发送 `session.confirm_action` JSON-RPC 请求
+    - 发送后显示用户反馈消息（✅已允许/🚫已拒绝）
+  - **CSS 样式**：完整金色主题确认对话框样式
+    - `.action-confirm-overlay` - 黑色半透明遮罩
+    - `.action-confirm-dialog` - 金色边框对话框
+    - `.action-confirm-tool` - 工具项样式（左侧金色边框）
+    - 按钮样式：绿色确认按钮、红色拒绝按钮（悬停动画）
+- cargo clippy 0 警告（仅 pre-existing dead_code 警告）
+- cargo test 319 tests
+
+**下一步**: 多会话支持增强、Agent 上下文优化
 
 ---
 
@@ -596,6 +623,7 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - [x] Agent 主动建议 ✅ v6.2.0
 - [x] WebUI 会话笔记管理面板 ✅ v6.5.0
 - [x] TUI 笔记命令 ✅ v6.5.0
+- [x] WebUI Action Confirmation Dialog ✅ v8.6.0
 
 ### 稳定性
 - [x] 日志优化 (结构化日志) ✅ v4.1.0
@@ -608,6 +636,13 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v8.6.0 | WebUI Action Confirmation Dialog - admin.html 新增完整确认弹窗：金色主题对话框显示计划执行的工具列表；两个按钮「🚫 拒绝」和「✅ 允许执行」；60秒超时提示；点击遮罩层或 Esc 键拒绝；SSE 事件处理 `action.plan_confirm` 和 `action.denied`；`confirmAction()` 发送 `session.confirm_action` WebSocket 消息；turn.ended/turn.cancelled 时自动关闭对话框；完整 CSS 样式；cargo clippy 0 警告；cargo test 319 tests |
+| v8.5.0 | TUI Action Confirmation Support - 终端界面支持工具执行确认：TUI Gateway Client 新增 `confirm_action()` 方法；事件解析支持 `action.plan_confirm` 和 `action.denied`；AppState 确认状态字段；确认面板 `draw_confirm_panel()`；命令支持 `:confirm/:y` 允许、`:deny/:n` 拒绝、Enter 确认、Esc 拒绝；cargo clippy 0 警告；cargo test 317 tests |
+| v8.4.0 | Agent Action Confirmation System - 用户可确认或拒绝 Agent 计划执行的工具：`ActionPlanConfirm` 和 `ActionDenied` 事件；`PendingActionPlan` 待确认计划管理（60秒超时）；Agent 客户端 `confirm_action()` 方法；Gateway `SESSION_CONFIRM_ACTION` JSON-RPC 方法；HTTP 错误处理增强；cargo clippy 0 警告；cargo test 319 tests |
+| v8.3.0 | Agent Action Plan Preview System - 工具执行前预览所有计划操作：`ActionPlanPreview` 事件类型；Agent 客户端 `emit_action_plan_preview()` 批量发送工具预览；HTTP SSE 事件过滤增强；WebUI `showActionPlanPreview()` 函数；青绿色主题预览卡片；Cargo clippy 0 警告；cargo test 319 tests |
+| v8.2.0 | Turn History Statistics Dashboard - 执行统计可视化面板：`TurnStats` 增强（tool_success_rate、PeriodStat）；按时间周期分组统计 API；WebUI 统计仪表板（摘要卡片、柱状图、条形图）；cargo clippy 0 警告；cargo test 308 tests |
+| v8.1.0 | Turn History Tool Detail Enhancement - 工具执行详情捕获与展示：Agent 工具追踪增强（tool_executions 字段）；HTTP Export Endpoint (`/api/turns/export`)；WebUI 工具详情视图（展开查看输入/输出/状态/耗时）；cargo clippy 0 警告；cargo test 308 tests |
+| v8.0.0 | Agent Turn History System - 追踪和持久化 Agent 执行历史：`TurnRecord`、`TurnStats`、`ToolExecution` 结构；JSON 文件持久化；Gateway 集成；HTTP API 端点；WebUI 面板；cargo clippy 0 警告；cargo test 308 tests |
 | v7.3.0 | Memory Decay System - 新增记忆衰减机制：事实重要性随时间自然衰减（每7天衰减10%），低于阈值(0.1)自动移除；`MemoryDecayStats` 追踪衰减统计；`decay_facts()` 和 `try_decay()` 方法；Gateway `handle_agent_turn` 中自动触发衰减检查；增强 `/api/memory/stats` 端点：新增 importanceDistribution、categoryDetails、decay 统计；5个新测试；cargo clippy 0 警告；cargo test 303 tests |
 | v7.2.0 | Automatic Memory Extraction - 新增 `agent/memory_extractor.rs`：`ImportanceCalculator`（内容分析自动计算重要性评分）和 `FactExtractor`（6种类别自动分类）；`MemoryManager::auto_extract()` 整合提取和存储；Gateway `handle_agent_turn` 后自动提取记忆；14个新测试；cargo clippy 0 警告；cargo test 287 tests |
 | v7.1.0 | 记忆 HTTP API 端点 + Agent 上下文集成 - 完整的记忆管理 REST API (GET/POST/DELETE /api/memory)；Agent turn 自动注入相关记忆到 system prompt；修复 memory 模块测试隔离问题；cargo clippy 0 警告；cargo test 273 tests |

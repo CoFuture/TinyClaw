@@ -1131,6 +1131,141 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* Action Confirmation Dialog */
+        .action-confirm-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .action-confirm-overlay.active {
+            display: flex;
+        }
+        .action-confirm-dialog {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 560px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255,193,7,0.3);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .action-confirm-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .action-confirm-icon {
+            font-size: 32px;
+        }
+        .action-confirm-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffc107;
+        }
+        .action-confirm-subtitle {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 4px;
+        }
+        .action-confirm-tools {
+            margin: 16px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .action-confirm-tool {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #ffc107;
+        }
+        .action-confirm-tool-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .action-confirm-tool-num {
+            background: #ffc107;
+            color: #1a1a2e;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .action-confirm-tool-name {
+            color: #ffc107;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .action-confirm-tool-args {
+            font-size: 12px;
+            color: rgba(255,255,255,0.6);
+            margin-left: 30px;
+        }
+        .action-confirm-tool-args pre {
+            margin: 6px 0 0 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 11px;
+            background: rgba(0,0,0,0.2);
+            padding: 6px;
+            border-radius: 4px;
+        }
+        .action-confirm-hint {
+            font-size: 12px;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .action-confirm-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .action-confirm-btn {
+            padding: 12px 32px;
+            border-radius: 8px;
+            border: none;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .action-confirm-btn-confirm {
+            background: linear-gradient(135deg, #00c853 0%, #009624 100%);
+            color: #fff;
+        }
+        .action-confirm-btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,200,83,0.4);
+        }
+        .action-confirm-btn-deny {
+            background: rgba(255,255,255,0.1);
+            color: #ff5252;
+            border: 1px solid rgba(255,82,82,0.3);
+        }
+        .action-confirm-btn-deny:hover {
+            background: rgba(255,82,82,0.2);
+        }
     </style>
     <!-- Markdown + Code Highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -3908,6 +4043,7 @@
             } else if (eventType === 'turn.cancelled') {
                 // Turn was cancelled - hide indicators and cancel button
                 hideActivityIndicator();
+                hideConfirmDialog();
                 showChatCancelButton(false);
                 addChatMessage('[已取消]', 'system');
                 streamingMsgElement = null;
@@ -3918,6 +4054,13 @@
             } else if (eventType === 'action.plan_preview' && data.tools) {
                 // Show action plan preview - displays all tools the agent plans to execute
                 showActionPlanPreview(data.tools);
+            } else if (eventType === 'action.plan_confirm' && data.plan_id && data.tools) {
+                // Show confirmation dialog - agent waiting for user to confirm tool execution
+                showConfirmDialog(data.plan_id, data.tools);
+            } else if (eventType === 'action.denied' && data.session_id) {
+                // Action was denied (by user or timeout) - hide dialog and show message
+                hideConfirmDialog();
+                addChatMessage('🚫 操作已被拒绝（超时或用户取消）', 'system');
             } else if (eventType === 'assistant.partial' && data.text) {
                 // Real-time streaming partial text - update UI incrementally
                 // First, clear any thinking/tool indicators
@@ -3950,6 +4093,7 @@
             } else if (eventType === 'turn.ended') {
                 // Turn ended - finalize any streaming message and hide indicators
                 hideActivityIndicator();
+                hideConfirmDialog();
                 showChatCancelButton(false);
                 if (streamingMsgElement && streamingTextBuffer) {
                     finalizeStreamingMessage(streamingMsgElement, streamingTextBuffer, 'assistant');
@@ -4042,7 +4186,107 @@
             activityIndicatorElement = indicator;
             container.scrollTop = container.scrollHeight;
         }
-        
+
+        /// Current confirmation state
+        let currentConfirmPlanId = null;
+
+        /// Show action confirmation dialog - user must confirm or deny tool execution
+        function showConfirmDialog(planId, tools) {
+            // Remove existing dialog if any
+            hideConfirmDialog();
+
+            currentConfirmPlanId = planId;
+
+            // Build tools HTML
+            let toolsHtml = '';
+            tools.forEach((tool, index) => {
+                const argsStr = JSON.stringify(tool.input || {}, null, 2);
+                const argsPreview = argsStr.length > 300 ? argsStr.substring(0, 300) + '...' : argsStr;
+                toolsHtml += '<div class="action-confirm-tool">';
+                toolsHtml += '<div class="action-confirm-tool-header">';
+                toolsHtml += '<span class="action-confirm-tool-num">' + (index + 1) + '</span>';
+                toolsHtml += '<span class="action-confirm-tool-name">🔧 ' + escapeHtml(tool.name) + '</span>';
+                toolsHtml += '</div>';
+                toolsHtml += '<div class="action-confirm-tool-args"><pre>' + escapeHtml(argsPreview) + '</pre></div>';
+                toolsHtml += '</div>';
+            });
+
+            const dialogHtml = `
+                <div class="action-confirm-overlay active" id="actionConfirmOverlay">
+                    <div class="action-confirm-dialog">
+                        <div class="action-confirm-header">
+                            <span class="action-confirm-icon">⏳</span>
+                            <div>
+                                <div class="action-confirm-title">确认执行计划</div>
+                                <div class="action-confirm-subtitle">AI 代理请求执行以下操作，请确认</div>
+                            </div>
+                        </div>
+                        <div class="action-confirm-tools">${toolsHtml}</div>
+                        <div class="action-confirm-hint">⏱️ 如果不选择，系统将在 60 秒后自动拒绝</div>
+                        <div class="action-confirm-actions">
+                            <button class="action-confirm-btn action-confirm-btn-deny" onclick="confirmAction('${planId}', false)">🚫 拒绝</button>
+                            <button class="action-confirm-btn action-confirm-btn-confirm" onclick="confirmAction('${planId}', true)">✅ 允许执行</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', dialogHtml);
+
+            // Click on overlay background = deny
+            const overlay = document.getElementById('actionConfirmOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) {
+                        confirmAction(planId, false);
+                    }
+                });
+            }
+
+            // Escape key = deny
+            const escHandler = function(e) {
+                if (e.key === 'Escape') {
+                    confirmAction(planId, false);
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        }
+
+        /// Hide the confirmation dialog
+        function hideConfirmDialog() {
+            const overlay = document.getElementById('actionConfirmOverlay');
+            if (overlay) {
+                overlay.remove();
+            }
+            currentConfirmPlanId = null;
+        }
+
+        /// Send confirmation response via WebSocket
+        function confirmAction(planId, confirmed) {
+            hideConfirmDialog();
+
+            if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
+                addChatMessage('WebSocket 未连接，无法发送确认', 'error');
+                return;
+            }
+
+            const request = {
+                id: String(chatMessageId++),
+                method: 'session.confirm_action',
+                params: { sessionKey: chatCurrentSession, planId: planId, confirmed: confirmed }
+            };
+
+            chatWs.send(JSON.stringify(request));
+
+            // Add system message feedback
+            if (confirmed) {
+                addChatMessage('✅ 已允许执行计划', 'system');
+            } else {
+                addChatMessage('🚫 已拒绝执行计划', 'system');
+            }
+        }
+
         /// Create a streaming message element with a typing indicator
         function createStreamingMessage(content, type) {
             const container = document.getElementById('chatMessages');
