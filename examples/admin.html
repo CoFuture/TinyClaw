@@ -5509,6 +5509,12 @@
             } else if (eventType === 'context.summarized' && data.session_id) {
                 // Context summarized event - update summary stats
                 updateSummaryStats(data.session_id, data.messages_summarized, data.original_tokens, data.summary_tokens, data.compression_ratio);
+            } else if (eventType === 'session.quality' && data.session_id) {
+                // Session quality event - update quality panel in real-time
+                updateQualityPanel(data);
+            } else if (eventType === 'agent.self_evaluation' && data.session_id) {
+                // Self-evaluation event - show toast notification and log
+                showToast('📊 评估: ' + (data.overall_score * 100).toFixed(0) + '%', 'info');
             }
         }
         
@@ -5883,6 +5889,37 @@
             }, 3000);
         }
         
+        /// Update the quality panel in real-time from SSE event
+        function updateQualityPanel(data) {
+            const panel = document.getElementById('sessionQualityPanel');
+            if (!panel || !panel.classList.contains('active')) return; // Only update if panel is visible
+            
+            // Update the quality display elements
+            const sqScore = document.getElementById('sqScore');
+            const sqTaskRate = document.getElementById('sqTaskRate');
+            const sqToolRate = document.getElementById('sqToolRate');
+            const sqRating = document.getElementById('sqRating');
+            const sqIssuesList = document.getElementById('sqIssuesList');
+            
+            if (sqScore) sqScore.textContent = (data.quality_score * 100).toFixed(0) + '%';
+            if (sqTaskRate) sqTaskRate.textContent = (data.task_completion_rate * 100).toFixed(0) + '%';
+            if (sqToolRate) sqToolRate.textContent = (data.tool_success_rate * 100).toFixed(0) + '%';
+            
+            // Update rating stars
+            if (sqRating) {
+                const stars = '★'.repeat(data.rating || 0) + '☆'.repeat(5 - (data.rating || 0));
+                sqRating.textContent = stars;
+            }
+            
+            // Update issue count display if there's an issue list
+            if (sqIssuesList && data.issue_count > 0) {
+                sqIssuesList.innerHTML = '<span style="color: #ff9800;">⚠️ 检测到 ' + data.issue_count + ' 个问题</span>';
+            }
+            
+            // Show toast notification
+            showToast('📊 质量更新: ' + (data.quality_score * 100).toFixed(0) + '%', 'info');
+        }
+        
         function initEventStream() {
             const statusDot = document.getElementById('eventStreamStatus');
             const statusText = document.getElementById('eventStreamStatusText');
@@ -5914,7 +5951,7 @@
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
-                    'context.summarized'
+                    'context.summarized', 'session.quality', 'agent.self_evaluation'
                 ];
                 
                 eventTypes.forEach(type => {
@@ -5978,6 +6015,7 @@
             else if (event.type === 'tool_result') cssClass += ' event-tool-result';
             else if (event.type === 'heartbeat') cssClass += ' event-heartbeat';
             else if (event.type === 'context.summarized') cssClass += ' event-turn-ended';
+            else if (event.type === 'session.quality') cssClass += ' event-turn-ended';
             else if (event.type === 'agent.self_evaluation') cssClass += ' event-turn-ended';
             else if (event.type === 'system') cssClass += ' event-system';
             
@@ -6014,6 +6052,11 @@
                     if (event.content.strengths && event.content.strengths.length > 0) {
                         contentText += ' ✓ ' + event.content.strengths[0];
                     }
+                } else if (event.type === 'session.quality') {
+                    contentText = '质量: ' + ((event.content.quality_score || 0) * 100).toFixed(0) + '% | ' + 
+                        '任务: ' + ((event.content.task_completion_rate || 0) * 100).toFixed(0) + '% | ' +
+                        '工具: ' + ((event.content.tool_success_rate || 0) * 100).toFixed(0) + '%' +
+                        (event.content.issue_count > 0 ? ' | ⚠️ ' + event.content.issue_count + ' issues' : '');
                 } else if (event.type === 'heartbeat') {
                     contentText = '心跳';
                 } else {

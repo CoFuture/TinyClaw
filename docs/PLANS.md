@@ -135,6 +135,28 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.4.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Real-time Quality Panel** - Web 界面实时质量面板
+  - **SSE 事件监听**：
+    - 添加 `'session.quality'` 事件到事件类型列表
+    - 添加 `'agent.self_evaluation'` 事件到事件类型列表
+  - **实时更新处理**：
+    - 添加 `updateQualityPanel()` 函数 - 当收到 session.quality 事件时实时更新质量面板
+    - 添加 `handleSseChatEvent()` 中的 session.quality 事件处理
+    - 添加 agent.self_evaluation 事件处理 - 显示 toast 通知
+  - **事件日志显示**：
+    - 添加 session.quality 事件的 CSS 样式
+    - 添加 session.quality 事件内容显示（质量评分、任务完成率、工具成功率、问题数）
+  - **Toast 通知**：收到质量更新时显示实时通知
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 358 tests
+
+**下一步**: 更多 Agent 能力增强、Agent 技能自动推荐
+
+---
+
 ### v11.3.0 (已完成 ✅)
 
 **完成事项**:
