@@ -176,6 +176,36 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v10.1.0 (已完成 ✅)
+
+**完成事项**:
+- **Summary History 后端集成** - 将摘要记录功能接入 Agent 实际工作流
+  - `SummaryHistoryManager` 新增 `impl Default` 解决 clippy 警告
+  - `Agent` 新增 `summarize_and_record()` 方法：
+    - 支持根据 `SummarizerConfig` 配置（min_messages、token_threshold、enabled）检查是否需要摘要
+    - 格式化会话消息为可摘要格式
+    - 调用 AI 生成智能摘要
+    - 解析摘要文本提取结构化信息（topics、decisions、tools）
+    - 创建 `ContextSummary` 并调用 `record_summary()` 记录到历史
+  - 新增 `parse_summary_structured_info()` 辅助方法
+
+- **Gateway 集成** - 在每次 Agent Turn 后自动触发摘要
+  - `handle_agent_turn` 结束后以非阻塞方式调用 `agent.summarize_and_record()`
+  - 从 `history_manager` 获取会话消息
+  - 异步执行，不影响响应延迟
+  - 摘要失败时静默跳过（仅记录 debug 日志）
+
+- **Config Getter 使用** - 使用 SummarizerConfig 的 getter 方法
+  - `summarize_and_record()` 使用 `is_enabled()`、`min_messages()`、`token_threshold()` 检查条件
+  - 解决 clippy 警告（getter 方法未被使用）
+
+- cargo clippy 0 警告
+- cargo test 336 tests
+
+**下一步**: WebUI 摘要历史可视化、摘要配置面板
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:

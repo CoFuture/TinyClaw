@@ -159,6 +159,12 @@ pub struct SummaryHistoryManager {
     history: parking_lot::RwLock<SummaryHistory>,
 }
 
+impl Default for SummaryHistoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SummaryHistoryManager {
     /// Create a new manager with default path
     pub fn new() -> Self {
@@ -221,7 +227,8 @@ impl SummaryHistoryManager {
         self.save();
     }
 
-    /// Get the history
+    /// Get the history (useful for debugging)
+    #[allow(dead_code)]
     pub fn history(&self) -> parking_lot::RwLockReadGuard<'_, SummaryHistory> {
         self.history.read()
     }

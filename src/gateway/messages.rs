@@ -890,6 +890,36 @@ async fn handle_agent_turn(
         });
     }
 
+    // Trigger background summarization for this session
+    // This is non-blocking - runs in background and won't affect response time
+    let agent_clone = ctx.agent.clone();
+    let session_key_clone = session_key.to_string();
+    let history_manager_clone = ctx.history_manager.clone();
+    tokio::spawn(async move {
+        // Get session history
+        if let Some(history) = history_manager_clone.get(&session_key_clone) {
+            let messages: Vec<(String, String)> = history.read()
+                .get_messages()
+                .iter()
+                .map(|m| {
+                    let role = match m.role {
+                        crate::types::Role::User => "user",
+                        crate::types::Role::Assistant => "assistant",
+                        crate::types::Role::System => "system",
+                        crate::types::Role::Tool => "tool",
+                    };
+                    (role.to_string(), m.content.clone())
+                })
+                .collect();
+
+            // Attempt to summarize and record (will fail gracefully if conditions not met)
+            if let Err(e) = agent_clone.summarize_and_record(&session_key_clone, &messages).await {
+                // Summarization failure is non-critical, just log
+                tracing::debug!(session_id = %session_key_clone, error = %e, "Summarization skipped");
+            }
+        }
+    });
+
     Ok(serde_json::json!({
         "text": response
     }))

@@ -1,6 +1,6 @@
 //! AI Model client with multi-provider support
 
-use crate::agent::context_summarizer::{SummarizerConfig, SummaryHistoryEntry, SummaryHistoryManager, SummaryHistoryStats};
+use crate::agent::context_summarizer::{ContextSummary, SummarizerConfig, SummaryHistoryEntry, SummaryHistoryManager, SummaryHistoryStats};
 use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySettings};
 use uuid::Uuid;
 use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
@@ -283,8 +283,134 @@ impl Agent {
     }
 
     /// Record a summary event to history
-    pub fn record_summary(&self, session_id: &str, summary: &crate::agent::context_summarizer::ContextSummary) {
+    pub fn record_summary(&self, session_id: &str, summary: &ContextSummary) {
         self.summary_history.record(session_id, summary);
+    }
+
+    /// Summarize conversation history and record to history.
+    /// This is called by the gateway to summarize accumulated context.
+    pub async fn summarize_and_record(&self, session_id: &str, messages: &[(String, String)]) -> Result<ContextSummary> {
+        // Check if summarization is enabled using config getters
+        let (enabled, min_messages, token_threshold) = {
+            let config = self.summarizer_config.read();
+            (config.is_enabled(), config.min_messages(), config.token_threshold())
+        };
+
+        if !enabled {
+            return Err(Error::Agent("Summarization is disabled".into()));
+        }
+        if messages.len() < min_messages {
+            return Err(Error::Agent(format!("Not enough messages to summarize: {} < {}", messages.len(), min_messages)));
+        }
+
+        // Estimate tokens and check threshold
+        let estimated_tokens: usize = messages.iter().map(|(_, c)| c.len() / 4).sum();
+        if estimated_tokens < token_threshold {
+            return Err(Error::Agent(format!("Token threshold not reached: {} < {}", estimated_tokens, token_threshold)));
+        }
+
+        // Format messages for summarization
+        let conversation_text = messages
+            .iter()
+            .map(|(role, content)| format!("[{}]: {}", role, content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        // Estimate original tokens (~4 chars per token)
+        let original_tokens = conversation_text.len() / 4;
+
+        // Build summarization prompt
+        let summary_prompt = format!(
+            r#"Please summarize the following conversation history. Your summary should:
+
+1. Preserve ALL important decisions made
+2. Note any user preferences or requirements mentioned
+3. Track the progression of topics discussed
+4. Remember key information that might be needed later
+
+Format your response as:
+
+TOPICS: [list main topics, comma-separated]
+DECISIONS: [list key decisions, one per line, starting with -]
+TOOLS: [list tools/commands used, comma-separated]
+
+SUMMARY:
+[Write a concise narrative summary of the conversation, focusing on information that would be important for continuing this conversation. Include specific details like file names, code snippets discussed, error messages encountered, etc.]
+
+---
+
+CONVERSATION TO SUMMARIZE:
+
+{}"#,
+            conversation_text
+        );
+
+        // Generate summary using AI
+        let summary_text = self.summarize_content(&summary_prompt).await?;
+
+        // Parse structured info from summary text
+        let (topics, decisions, tools) = self.parse_summary_structured_info(&summary_text);
+
+        // Calculate summary tokens
+        let summary_tokens = summary_text.len() / 4;
+
+        // Create context summary
+        let summary = ContextSummary::new(
+            summary_text,
+            messages.len(),
+            original_tokens,
+            topics,
+            decisions,
+            tools,
+        );
+
+        // Record to history
+        self.record_summary(session_id, &summary);
+
+        info!(
+            session_id = session_id,
+            messages_summarized = messages.len(),
+            original_tokens = original_tokens,
+            summary_tokens = summary_tokens,
+            compression = format!("{:.1}%", summary.compression_ratio() * 100.0),
+            "Session history summarized and recorded"
+        );
+
+        Ok(summary)
+    }
+
+    /// Parse structured info (topics, decisions, tools) from summary text
+    fn parse_summary_structured_info(&self, summary_text: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+        let mut topics = Vec::new();
+        let mut decisions = Vec::new();
+        let mut tools = Vec::new();
+
+        for line in summary_text.lines() {
+            let line = line.trim();
+
+            if line.starts_with("TOPICS:") {
+                let t = line.strip_prefix("TOPICS:").unwrap_or("");
+                topics = t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            }
+            if line.starts_with("- ") {
+                decisions.push(line.strip_prefix("- ").unwrap_or(line).to_string());
+            }
+            if line.starts_with("TOOLS:") {
+                let t = line.strip_prefix("TOOLS:").unwrap_or("");
+                tools = t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            }
+        }
+
+        // Also extract tool names mentioned in the summary if not already captured
+        let tool_keywords = ["read_file", "write_file", "exec", "http_request", "list_dir",
+                            "grep", "find", "glob", "cp", "mv", "rm", "cat", "mkdir", "touch"];
+        for tool in tool_keywords {
+            if summary_text.contains(tool) && !tools.contains(&tool.to_string()) {
+                tools.push(tool.to_string());
+            }
+        }
+
+        (topics, decisions, tools)
     }
 
     /// Get summary history statistics
