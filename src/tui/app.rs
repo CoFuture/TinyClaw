@@ -536,6 +536,17 @@ impl TuiApp {
                 debug!("Token usage for {}: in={}, out={}, total={}", session_id, input_tokens, output_tokens, total_tokens);
                 self.state.update_token_usage(&session_id, input_tokens, output_tokens);
             }
+            TuiGatewayEvent::ContextSummarized { session_id, messages_summarized, summary_tokens, compression_ratio, .. } => {
+                // Format summary info for display: "📝 10 msgs → 200 tokens (10%)"
+                let info = format!(
+                    "📝 {} msgs → {} tokens ({:.0}%)",
+                    messages_summarized,
+                    summary_tokens,
+                    compression_ratio * 100.0
+                );
+                self.state.last_summary_info = Some(info.clone());
+                debug!("Context summarized for {}: {}", session_id, info);
+            }
         }
     }
 
@@ -1425,6 +1436,12 @@ impl TuiApp {
         };
         spans.push(Span::raw(" | "));
         spans.push(Span::styled(cb_indicator.0, Style::default().fg(cb_indicator.1)));
+        
+        // Add context summarization indicator if available
+        if let Some(ref summary_info) = self.state.last_summary_info {
+            spans.push(Span::raw(" | "));
+            spans.push(Span::styled(summary_info.clone(), Style::default().fg(Color::Magenta)));
+        }
         
         let paragraph = Paragraph::new(Line::from(spans))
             .alignment(Alignment::Center);

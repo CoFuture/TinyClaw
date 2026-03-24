@@ -22,8 +22,6 @@ pub struct SummarizerConfig {
     pub min_messages: usize,
     /// Token threshold to trigger summarization (default: 100k)
     pub token_threshold: usize,
-    /// Target summary length in tokens (default: 2000)
-    pub target_summary_tokens: usize,
     /// Whether summarization is enabled
     pub enabled: bool,
 }
@@ -33,7 +31,6 @@ impl Default for SummarizerConfig {
         Self {
             min_messages: 10,
             token_threshold: 100_000,
-            target_summary_tokens: 2000,
             enabled: true,
         }
     }
@@ -324,60 +321,6 @@ CONVERSATION TO SUMMARIZE:
     }
 }
 
-/// Context state that may include a summary
-#[derive(Debug, Clone)]
-pub struct SummarizedContext {
-    /// Optional summary of old messages
-    pub summary: Option<ContextSummary>,
-    /// Recent messages (not summarized)
-    pub recent_messages: Vec<Message>,
-    /// Total original token estimate
-    pub total_original_tokens: usize,
-}
-
-impl SummarizedContext {
-    /// Create a new summarized context
-    pub fn new(
-        summary: Option<ContextSummary>,
-        recent_messages: Vec<Message>,
-        total_original_tokens: usize,
-    ) -> Self {
-        Self {
-            summary,
-            recent_messages,
-            total_original_tokens,
-        }
-    }
-
-    /// Get messages for API call (includes summary as system message if present)
-    pub fn to_messages(&self) -> Vec<Message> {
-        let mut messages = Vec::new();
-
-        // Add summary as first message if present
-        if let Some(ref summary) = self.summary {
-            messages.push(ContextSummarizer::create_summary_message(summary));
-        }
-
-        // Add recent messages
-        messages.extend(self.recent_messages.clone());
-
-        messages
-    }
-
-    /// Estimate total tokens in the context
-    pub fn estimate_tokens(&self) -> usize {
-        let summary_tokens = self.summary.as_ref()
-            .map(|s| s.summary_tokens)
-            .unwrap_or(0);
-        
-        let recent_tokens = self.recent_messages.iter()
-            .map(|m| m.content.len() / 4)
-            .sum::<usize>();
-
-        summary_tokens + recent_tokens
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,30 +359,6 @@ mod tests {
         assert!(prompt.contains("5 messages compressed"));
         assert!(prompt.contains("rust"));
         assert!(prompt.contains("tokio runtime"));
-    }
-
-    #[test]
-    fn test_summarized_context_to_messages() {
-        let summary = ContextSummary::new(
-            "Test summary".to_string(),
-            3,
-            1000,
-            vec![],
-            vec![],
-            vec![],
-        );
-
-        let recent = vec![
-            Message::user("Hello"),
-            Message::assistant("Hi there!"),
-        ];
-
-        let context = SummarizedContext::new(Some(summary), recent.clone(), 1000);
-        let messages = context.to_messages();
-
-        assert_eq!(messages.len(), 3); // 1 summary + 2 recent
-        assert_eq!(messages[0].role, Role::System);
-        assert_eq!(messages[1].role, Role::User);
     }
 
     #[test]

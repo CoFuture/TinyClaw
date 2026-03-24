@@ -51,6 +51,20 @@ pub enum Event {
         total_tokens: u32,
     },
     
+    /// Context was summarized - emitted when AI summarizes conversation history
+    #[serde(rename = "context.summarized")]
+    ContextSummarized {
+        session_id: String,
+        /// Number of messages that were summarized
+        messages_summarized: usize,
+        /// Original token count before summarization
+        original_tokens: usize,
+        /// Token count of the summary
+        summary_tokens: usize,
+        /// Compression ratio (summary_tokens / original_tokens)
+        compression_ratio: f32,
+    },
+    
     /// Turn was cancelled
     #[serde(rename = "turn.cancelled")]
     TurnCancelled {

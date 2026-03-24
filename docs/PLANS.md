@@ -83,6 +83,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v9.6.0 (已完成 ✅)
+
+**完成事项**:
+- **Dead Code Cleanup** - 清理 context_summarizer.rs 中未使用的代码
+  - 移除 `SummarizedContext` 结构体及其 `new()`、`to_messages()`、`estimate_tokens()` 方法
+  - 移除 `SummarizerConfig` 中未使用的 `target_summary_tokens` 字段
+  - 移除相关测试 `test_summarized_context_to_messages`
+  - 从 `mod.rs` 导出中移除 `SummarizedContext`
+- **Context Summarized Event** - 新增 `context.summarized` 事件通知客户端
+  - `gateway/events.rs` 新增 `ContextSummarized` 事件变体
+    - 包含：session_id, messages_summarized, original_tokens, summary_tokens, compression_ratio
+  - `runtime.rs` 在成功摘要后发射事件
+  - `http/routes.rs` SSE 事件过滤支持新事件类型
+- **TUI Summarization Status Display** - 终端界面显示摘要状态
+  - `tui/state.rs` 新增 `last_summary_info: Option<String>` 字段
+  - `tui/gateway_client.rs` 新增 `ContextSummarized` 事件变体和解析逻辑
+  - `tui/app.rs` 处理事件并更新状态，标题栏显示摘要信息
+  - 显示格式：`📝 10 msgs → 200 tokens (10%)`
+- cargo clippy 0 警告
+- cargo test 330 passed (6 flaky tests unrelated to changes)
+
+**下一步**: WebUI 摘要状态显示、摘要配置化、持久化摘要历史
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:

@@ -78,6 +78,9 @@ pub enum TuiGatewayEvent {
     ActionDenied { session_id: String, plan_id: String },
     /// Token usage update from a completed turn
     TurnUsage { session_id: String, input_tokens: u32, output_tokens: u32, total_tokens: u32 },
+    /// Context was summarized
+    #[allow(dead_code)]
+    ContextSummarized { session_id: String, messages_summarized: usize, original_tokens: usize, summary_tokens: usize, compression_ratio: f32 },
 }
 
 /// Session note info
@@ -410,6 +413,22 @@ impl TuiGatewayClient {
                                 input_tokens,
                                 output_tokens,
                                 total_tokens,
+                            });
+                        }
+                    }
+                    "context.summarized" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let messages_summarized = params.get("messages_summarized").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let original_tokens = params.get("original_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let summary_tokens = params.get("summary_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let compression_ratio = params.get("compression_ratio").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                            let _ = event_tx.send(TuiGatewayEvent::ContextSummarized {
+                                session_id,
+                                messages_summarized,
+                                original_tokens,
+                                summary_tokens,
+                                compression_ratio,
                             });
                         }
                     }

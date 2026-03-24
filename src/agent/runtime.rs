@@ -407,6 +407,18 @@ impl AgentRuntime {
                         summary.original_tokens,
                         summary.compression_ratio() * 100.0
                     );
+                    // Emit context.summarized event to notify clients
+                    if self.config.read().emit_events {
+                        if let Some(emitter) = &self.event_emitter {
+                            emitter.emit(Event::ContextSummarized {
+                                session_id: context.session_id.clone(),
+                                messages_summarized: summary.messages_summarized,
+                                original_tokens: summary.original_tokens,
+                                summary_tokens: summary.summary_tokens,
+                                compression_ratio: summary.compression_ratio(),
+                            });
+                        }
+                    }
                     // Build history with summary message
                     let summary_msg = ContextSummarizer::create_summary_message(&summary);
                     let recent_msgs: Vec<_> = history.iter()

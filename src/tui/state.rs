@@ -228,6 +228,8 @@ pub struct AppState {
     pub input_history_saved: Option<String>,
     /// AI provider circuit breaker state: "closed", "open", or "half_open"
     pub circuit_breaker_state: String,
+    /// Last context summarization info for display (e.g., "📝 10 msgs → 200 tokens (10%)")
+    pub last_summary_info: Option<String>,
     /// Whether we're in search mode
     pub search_mode: bool,
     /// Current search query
@@ -295,6 +297,7 @@ impl Default for AppState {
             input_history_index: None,
             input_history_saved: None,
             circuit_breaker_state: "closed".to_string(),
+            last_summary_info: None,
             search_mode: false,
             search_query: String::new(),
             search_results: Vec::new(),
