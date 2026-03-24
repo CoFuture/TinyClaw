@@ -81,6 +81,8 @@ pub struct HandlerContext {
     pub conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
     /// Self-evaluation manager for agent performance evaluation
     pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
+    /// Session quality manager for tracking session quality metrics
+    pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
 }
 
 impl HandlerContext {
@@ -103,6 +105,7 @@ impl HandlerContext {
         turn_history: Arc<TurnHistoryManager>,
         conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
         self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
+        session_quality_manager: Arc<crate::agent::SessionQualityManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -122,6 +125,7 @@ impl HandlerContext {
             turn_history,
             conversation_summary,
             self_evaluation_manager,
+            session_quality_manager,
         }
     }
 
@@ -864,6 +868,22 @@ async fn handle_agent_turn(
     });
     
     ctx.turn_history.record(turn_record);
+
+    // Analyze session quality and emit event
+    let turns = ctx.turn_history.get_turn_records(session_key);
+    let evaluations = ctx.self_evaluation_manager.get_by_session(session_key);
+    let quality = ctx.session_quality_manager.analyze_session(session_key, &turns, &evaluations);
+    
+    ctx.event_emitter.emit(Event::SessionQuality {
+        session_id: session_key.to_string(),
+        quality_score: quality.quality_score,
+        turn_count: quality.turn_count,
+        task_completion_rate: quality.task_completion_rate,
+        tool_success_rate: quality.tool_success_rate,
+        rating: quality.rating,
+        issue_count: quality.issues.len(),
+        suggestions: quality.suggestions,
+    });
 
     // Auto-extract facts from conversation into long-term memory
     // Combine user message and assistant response for analysis

@@ -436,7 +436,7 @@ impl SessionQualityAnalyzer {
         let score = metrics_score - issue_penalty;
         
         // Clamp to 0.0 - 1.0
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
     
     /// Calculate rating (1-5 stars)

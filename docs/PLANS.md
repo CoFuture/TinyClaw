@@ -109,6 +109,32 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.2.0 (已完成 ✅)
+
+**完成事项**:
+- **SessionQualityManager Integration** - 将 SessionQualityManager 集成到运行时
+  - **HandlerContext 新增字段**：`session_quality_manager: Arc<SessionQualityManager>`
+  - **HttpState 新增字段**：`session_quality_manager: Arc<SessionQualityManager>`
+  - **main.rs 初始化**：创建 SessionQualityManager 并传递到 HandlerContext 和 HttpState
+  - **server.rs 更新**：每次连接创建新的 HandlerContext 时传递 session_quality_manager
+  - **gateway/events.rs 新增事件**：`SessionQuality` 事件
+    - 字段：session_id、quality_score、turn_count、task_completion_rate、tool_success_rate、rating、issue_count、suggestions
+  - **HTTP API 增强**：
+    - `GET /api/sessions/{session_id}/quality` - 使用 manager 缓存，支持 cached 字段
+    - `DELETE /api/sessions/{session_id}/quality` - 调用 manager.invalidate() 清除缓存
+    - `GET /api/sessions/quality/list` - 使用 manager.get_summaries() 获取缓存的摘要
+  - **Gateway 实时事件**：每轮 Agent Turn 结束后自动分析并发射 `session.quality` 事件
+  - **SSE 事件过滤**：SessionQuality 事件支持 session_id 过滤
+- **Bug Fix**：`session_quality.rs` 修复 calculate_quality_score 函数返回值 bug
+  - 原代码 `score.max(0.0).min(1.0)` 计算了值但未返回
+  - 修复为 `score.clamp(0.0, 1.0)`
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 358 tests
+
+**下一步**: 更多 Agent 能力增强、WebUI 实时质量面板
+
+---
+
 ### v11.0.0 (已完成 ✅)
 
 **完成事项**:

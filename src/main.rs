@@ -148,6 +148,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Self-evaluation manager initialized");
     
+    // Create session quality manager for tracking session quality metrics
+    let session_quality_manager = Arc::new(agent::SessionQualityManager::new());
+    info!("Session quality manager initialized");
+    
     // Create conversation summary manager for tracking conversation state
     let conversation_summary_manager = Arc::new(parking_lot::RwLock::new(
         crate::agent::ConversationSummaryManager::new()
@@ -261,6 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         turn_history: turn_history.clone(),
         conversation_summary: conversation_summary_manager.clone(),
         self_evaluation_manager: self_evaluation_manager.clone(),
+        session_quality_manager: session_quality_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -286,6 +291,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         turn_history.clone(), // Turn history manager
         conversation_summary_manager.clone(), // Conversation summary manager
         self_evaluation_manager.clone(), // Self-evaluation manager
+        session_quality_manager.clone(), // Session quality manager
     );
     
     let ws_handle = tokio::spawn(async move {

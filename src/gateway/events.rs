@@ -280,6 +280,19 @@ pub enum Event {
         strengths: Vec<String>,
         weaknesses: Vec<String>,
     },
+    
+    /// Session quality analysis updated (periodic or after turn)
+    #[serde(rename = "session.quality")]
+    SessionQuality {
+        session_id: String,
+        quality_score: f64,
+        turn_count: u32,
+        task_completion_rate: f64,
+        tool_success_rate: f64,
+        rating: u8,
+        issue_count: usize,
+        suggestions: Vec<String>,
+    },
 }
 
 /// Dimension score for self-evaluation events
