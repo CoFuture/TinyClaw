@@ -1390,6 +1390,248 @@
         /* Inline code in user messages */
         .message.user .msg-content code { background: rgba(0,0,0,0.3); }
         .message.user .msg-content pre { background: rgba(0,0,0,0.4); }
+        
+        /* Conversation Summary Panel */
+        .conversation-summary-panel {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .conversation-summary-section {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+        .conversation-summary-section-title {
+            color: #00d9ff;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .conversation-summary-section-content {
+            color: #ccc;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .conversation-summary-item {
+            display: inline-block;
+            background: rgba(0,217,255,0.1);
+            color: #00d9ff;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px 4px 2px 0;
+        }
+        .conversation-summary-question {
+            background: rgba(255,165,2,0.1);
+            color: #ffa502;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px 4px 2px 0;
+            display: inline-block;
+        }
+        .conversation-summary-overview {
+            color: #aaa;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+        .conversation-summary-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+        }
+        
+        /* Summary History Panel */
+        .summary-history-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .summary-history-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            border-left: 3px solid #b482ff;
+        }
+        .summary-history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .summary-history-session {
+            color: #b482ff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .summary-history-time {
+            color: #666;
+            font-size: 11px;
+        }
+        .summary-history-stats {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        .summary-history-stat {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .summary-history-ratio {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        .summary-history-ratio.medium { color: #ffa502; }
+        .summary-history-ratio.low { color: #ff5252; }
+        .summary-history-topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .summary-history-topic {
+            background: rgba(180,130,255,0.1);
+            color: #b482ff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+        .summary-history-empty {
+            color: #888;
+            padding: 30px;
+            text-align: center;
+            font-size: 13px;
+        }
+        
+        /* Summarizer Config Panel */
+        .summarizer-config-panel {
+            padding: 5px 0;
+        }
+        .summarizer-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .summarizer-stat-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        .summarizer-stat-value {
+            color: #b482ff;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .summarizer-stat-label {
+            color: #666;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .config-row:last-child {
+            border-bottom: none;
+        }
+        .config-label {
+            color: #ccc;
+            font-size: 13px;
+        }
+        .config-desc {
+            color: #666;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .config-value {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .config-input {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #eee;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            width: 80px;
+            text-align: center;
+        }
+        .config-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .config-toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+        .config-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .config-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 24px;
+            transition: 0.3s;
+        }
+        .config-toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .config-toggle input:checked + .config-toggle-slider {
+            background: rgba(0,217,255,0.3);
+        }
+        .config-toggle input:checked + .config-toggle-slider:before {
+            transform: translateX(20px);
+        }
+        .config-save-btn {
+            margin-top: 12px;
+            background: rgba(0,217,255,0.2);
+            border: 1px solid rgba(0,217,255,0.3);
+            color: #00d9ff;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .config-save-btn:hover {
+            background: rgba(0,217,255,0.3);
+        }
+        .config-save-btn.saving {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -1660,6 +1902,30 @@
             </div>
         </div>
 
+        <!-- Summary History Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📜 摘要历史 <span class="tool-count-badge" id="summaryHistoryCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">AI 上下文摘要记录，显示压缩率和提取的主题</p>
+            <div style="margin-bottom: 15px;">
+                <select id="summaryHistorySession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-right: 10px;">
+                    <option value="">全部会话</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadSummaryHistory()">🔄 刷新</button>
+            </div>
+            <div class="summary-history-panel" id="summaryHistoryPanel">
+                <div class="summary-history-empty">加载中...</div>
+            </div>
+        </div>
+
+        <!-- Summarizer Config Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>⚙️ 摘要配置</h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">配置 AI 上下文摘要行为</p>
+            <div class="summarizer-config-panel" id="summarizerConfigPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+
         <!-- Config Editor -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⚡ 配置编辑器</h2>
@@ -1900,6 +2166,28 @@
                     loadTurnStats();
                 } catch (e) {
                     // Turn stats API might not be available
+                }
+                
+                // Fetch conversation summary session list and load current summary
+                try {
+                    refreshConversationSummarySessionList();
+                } catch (e) {
+                    // Conversation summary API might not be available
+                }
+                
+                // Fetch summary history
+                try {
+                    refreshSummaryHistorySessionList();
+                    loadSummaryHistory();
+                } catch (e) {
+                    // Summary history API might not be available
+                }
+                
+                // Fetch summarizer config
+                try {
+                    loadSummarizerConfig();
+                } catch (e) {
+                    // Summarizer config API might not be available
                 }
                 
                 document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
@@ -2786,6 +3074,371 @@
                 }
             } catch (e) {
                 console.error('Failed to refresh session list:', e);
+            }
+        }
+        
+        // ============================================================
+        // Conversation Summary Functions
+        // ============================================================
+        
+        function renderConversationSummary(data) {
+            const panel = document.getElementById('conversationSummaryPanel');
+            const turnCount = document.getElementById('conversationTurnCount');
+            
+            if (!data || !data.success || !data.summary) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无摘要信息</div>';
+                turnCount.textContent = '-';
+                return;
+            }
+            
+            const s = data.summary;
+            turnCount.textContent = s.turnCount + ' turns';
+            
+            let html = '';
+            
+            // Overview
+            if (s.overview) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">📋 概述</div>';
+                html += '<div class="conversation-summary-overview">' + escapeHtml(s.overview) + '</div>';
+                html += '</div>';
+            }
+            
+            // Current Focus
+            if (s.currentFocus) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">🎯 当前焦点</div>';
+                html += '<div class="conversation-summary-section-content">' + escapeHtml(s.currentFocus) + '</div>';
+                html += '</div>';
+            }
+            
+            // Topics
+            if (s.topics && s.topics.length > 0) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">💡 主题</div>';
+                html += '<div>' + s.topics.map(t => '<span class="conversation-summary-item">' + escapeHtml(t) + '</span>').join('') + '</div>';
+                html += '</div>';
+            }
+            
+            // Decisions
+            if (s.decisions && s.decisions.length > 0) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">✅ 决策</div>';
+                html += '<div class="conversation-summary-section-content">';
+                s.decisions.forEach(d => { html += '<div style="margin-bottom: 4px;">• ' + escapeHtml(d) + '</div>'; });
+                html += '</div></div>';
+            }
+            
+            // Preferences
+            if (s.preferences && s.preferences.length > 0) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">❤️ 偏好</div>';
+                html += '<div class="conversation-summary-section-content">';
+                s.preferences.forEach(p => { html += '<div style="margin-bottom: 4px;">• ' + escapeHtml(p) + '</div>'; });
+                html += '</div></div>';
+            }
+            
+            // Open Questions
+            if (s.openQuestions && s.openQuestions.length > 0) {
+                html += '<div class="conversation-summary-section">';
+                html += '<div class="conversation-summary-section-title">❓ 待解决问题</div>';
+                html += '<div>' + s.openQuestions.map(q => '<span class="conversation-summary-question">' + escapeHtml(q) + '</span>').join('') + '</div>';
+                html += '</div>';
+            }
+            
+            // Meta info
+            html += '<div class="conversation-summary-meta">';
+            if (s.startedAt) {
+                html += '<span>开始: ' + new Date(s.startedAt).toLocaleString('zh-CN') + '</span>';
+            }
+            if (s.lastUpdated) {
+                html += '<span>更新: ' + new Date(s.lastUpdated).toLocaleString('zh-CN') + '</span>';
+            }
+            html += '</div>';
+            
+            if (!html) {
+                html = '<div style="color: #888; padding: 20px; text-align: center;">暂无摘要信息</div>';
+            }
+            
+            panel.innerHTML = html;
+        }
+        
+        async function loadConversationSummary() {
+            const panel = document.getElementById('conversationSummaryPanel');
+            const select = document.getElementById('conversationSummarySession');
+            const sessionId = select.value;
+            
+            if (!sessionId) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">选择会话查看摘要...</div>';
+                document.getElementById('conversationTurnCount').textContent = '-';
+                return;
+            }
+            
+            panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">加载中...</div>';
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/conversation-summary');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    renderConversationSummary(data);
+                } else {
+                    panel.innerHTML = '<div style="color: #ff5252; padding: 20px; text-align: center;">加载失败</div>';
+                }
+            } catch (e) {
+                panel.innerHTML = '<div style="color: #ff5252; padding: 20px; text-align: center;">加载出错: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        
+        async function refreshConversationSummarySessionList() {
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const select = document.getElementById('conversationSummarySession');
+                    const currentValue = select.value;
+                    select.innerHTML = '';
+                    if (data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.id;
+                            opt.textContent = (s.label || s.id) + ' (' + (s.messageCount || 0) + ' msgs)';
+                            select.appendChild(opt);
+                        });
+                    }
+                    if (currentValue) select.value = currentValue;
+                    // Auto-load if we have a value
+                    if (select.value) loadConversationSummary();
+                }
+            } catch (e) {
+                console.error('Failed to refresh conversation summary session list:', e);
+            }
+        }
+        
+        // ============================================================
+        // Summary History Functions
+        // ============================================================
+        
+        function renderSummaryHistory(entries) {
+            const panel = document.getElementById('summaryHistoryPanel');
+            const countBadge = document.getElementById('summaryHistoryCount');
+            
+            countBadge.textContent = entries ? entries.length : 0;
+            
+            if (!entries || entries.length === 0) {
+                panel.innerHTML = '<div class="summary-history-empty">暂无摘要历史记录</div>';
+                return;
+            }
+            
+            panel.innerHTML = entries.map(e => {
+                const ratio = (e.compressionRatio * 100).toFixed(1);
+                const ratioClass = ratio < 20 ? 'low' : ratio < 40 ? 'medium' : '';
+                const time = e.createdAt ? new Date(e.createdAt).toLocaleString('zh-CN') : '-';
+                const topicsHtml = e.topics && e.topics.length > 0
+                    ? '<div class="summary-history-topics">' + e.topics.slice(0, 5).map(t => '<span class="summary-history-topic">' + escapeHtml(t) + '</span>').join('') + '</div>'
+                    : '';
+                
+                return '<div class="summary-history-item">' +
+                    '<div class="summary-history-header">' +
+                        '<span class="summary-history-session">' + escapeHtml(e.sessionId || '-') + '</span>' +
+                        '<span class="summary-history-time">' + time + '</span>' +
+                    '</div>' +
+                    '<div class="summary-history-stats">' +
+                        '<span class="summary-history-stat"><span style="color:#888;">压缩:</span> <span class="summary-history-ratio ' + ratioClass + '">' + ratio + '%</span></span>' +
+                        '<span class="summary-history-stat"><span style="color:#888;"> msgs:</span> ' + (e.messagesSummarized || 0) + '</span>' +
+                        '<span class="summary-history-stat"><span style="color:#888;"> original:</span> ' + formatTokenCount(e.originalTokens || 0) + '</span>' +
+                        '<span class="summary-history-stat"><span style="color:#888;"> summary:</span> ' + formatTokenCount(e.summaryTokens || 0) + '</span>' +
+                    '</div>' +
+                    topicsHtml +
+                '</div>';
+            }).join('');
+        }
+        
+        async function loadSummaryHistory() {
+            const panel = document.getElementById('summaryHistoryPanel');
+            const sessionSelect = document.getElementById('summaryHistorySession');
+            const sessionId = sessionSelect.value;
+            
+            panel.innerHTML = '<div class="summary-history-empty">加载中...</div>';
+            
+            try {
+                let url = API_BASE + '/api/summarizer/history?limit=50';
+                const resp = await fetch(url);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    let entries = data.entries || [];
+                    // Filter by session if selected
+                    if (sessionId) {
+                        entries = entries.filter(e => e.sessionId === sessionId);
+                    }
+                    renderSummaryHistory(entries);
+                } else {
+                    panel.innerHTML = '<div class="summary-history-empty" style="color:#ff5252;">加载失败</div>';
+                }
+            } catch (e) {
+                panel.innerHTML = '<div class="summary-history-empty" style="color:#ff5252;">加载出错: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        
+        async function refreshSummaryHistorySessionList() {
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const select = document.getElementById('summaryHistorySession');
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">全部会话</option>';
+                    if (data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.id;
+                            opt.textContent = s.label || s.id;
+                            select.appendChild(opt);
+                        });
+                    }
+                    if (currentValue) select.value = currentValue;
+                }
+            } catch (e) {
+                console.error('Failed to refresh summary history session list:', e);
+            }
+        }
+        
+        // ============================================================
+        // Summarizer Config Functions
+        // ============================================================
+        
+        let currentSummarizerConfig = null;
+        
+        function renderSummarizerConfig(config, stats) {
+            const panel = document.getElementById('summarizerConfigPanel');
+            currentSummarizerConfig = config;
+            
+            const enabled = config.enabled !== false;
+            const minMsg = config.minMessages || 10;
+            const tokenThresh = config.tokenThreshold || 4000;
+            
+            // Stats cards
+            let statsHtml = '';
+            if (stats) {
+                statsHtml = '<div class="summarizer-stats-grid">' +
+                    '<div class="summarizer-stat-card">' +
+                        '<div class="summarizer-stat-value">' + (stats.totalSummaries || 0) + '</div>' +
+                        '<div class="summarizer-stat-label">总摘要次数</div>' +
+                    '</div>' +
+                    '<div class="summarizer-stat-card">' +
+                        '<div class="summarizer-stat-value">' + (stats.totalMessagesSummarized || 0).toLocaleString() + '</div>' +
+                        '<div class="summarizer-stat-label">汇总消息数</div>' +
+                    '</div>' +
+                    '<div class="summarizer-stat-card">' +
+                        '<div class="summarizer-stat-value">' + ((stats.avgCompressionRatio || 0) * 100).toFixed(1) + '%</div>' +
+                        '<div class="summarizer-stat-label">平均压缩率</div>' +
+                    '</div>' +
+                    '<div class="summarizer-stat-card">' +
+                        '<div class="summarizer-stat-value">' + (stats.sessionsCount || 0) + '</div>' +
+                        '<div class="summarizer-stat-label">会话数</div>' +
+                    '</div>' +
+                '</div>';
+            }
+            
+            panel.innerHTML = statsHtml + `
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">启用摘要</div>
+                        <div class="config-desc">当上下文过长时自动生成 AI 摘要</div>
+                    </div>
+                    <div class="config-value">
+                        <label class="config-toggle">
+                            <input type="checkbox" id="cfgEnabled" ${enabled ? 'checked' : ''}>
+                            <span class="config-toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">最小消息数</div>
+                        <div class="config-desc">触发摘要前的最小消息数量</div>
+                    </div>
+                    <div class="config-value">
+                        <input type="number" class="config-input" id="cfgMinMessages" value="${minMsg}" min="2" max="100">
+                    </div>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">Token 阈值</div>
+                        <div class="config-desc">上下文超过此 Token 数时触发摘要</div>
+                    </div>
+                    <div class="config-value">
+                        <input type="number" class="config-input" id="cfgTokenThreshold" value="${tokenThresh}" min="500" max="100000" step="500">
+                    </div>
+                </div>
+                <button class="config-save-btn" id="saveSummarizerConfigBtn" onclick="saveSummarizerConfig()">💾 保存配置</button>
+                <span id="summarizerConfigStatus" style="margin-left: 10px; font-size: 12px;"></span>
+            `;
+        }
+        
+        async function loadSummarizerConfig() {
+            const panel = document.getElementById('summarizerConfigPanel');
+            panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">加载中...</div>';
+            
+            try {
+                const [configResp, statsResp] = await Promise.all([
+                    fetch(API_BASE + '/api/summarizer/config'),
+                    fetch(API_BASE + '/api/summarizer/stats')
+                ]);
+                
+                let config = { enabled: true, minMessages: 10, tokenThreshold: 4000 };
+                let stats = null;
+                
+                if (configResp.ok) {
+                    const data = await configResp.json();
+                    config = data.config || config;
+                }
+                
+                if (statsResp.ok) {
+                    const data = await statsResp.json();
+                    stats = data.stats;
+                }
+                
+                renderSummarizerConfig(config, stats);
+            } catch (e) {
+                panel.innerHTML = '<div style="color: #ff5252; padding: 20px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        
+        async function saveSummarizerConfig() {
+            const btn = document.getElementById('saveSummarizerConfigBtn');
+            const status = document.getElementById('summarizerConfigStatus');
+            const enabled = document.getElementById('cfgEnabled').checked;
+            const minMessages = parseInt(document.getElementById('cfgMinMessages').value, 10);
+            const tokenThreshold = parseInt(document.getElementById('cfgTokenThreshold').value, 10);
+            
+            btn.classList.add('saving');
+            btn.disabled = true;
+            status.textContent = '';
+            status.style.color = '#888';
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/summarizer/config', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, minMessages, tokenThreshold })
+                });
+                
+                if (resp.ok) {
+                    status.textContent = '✅ 保存成功';
+                    status.style.color = '#00ff88';
+                    // Reload to show updated values
+                    setTimeout(loadSummarizerConfig, 1000);
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    status.textContent = '❌ 保存失败: ' + (err.error || err.message || '未知错误');
+                    status.style.color = '#ff5252';
+                }
+            } catch (e) {
+                status.textContent = '❌ 保存失败: ' + e.message;
+                status.style.color = '#ff5252';
+            } finally {
+                btn.classList.remove('saving');
+                btn.disabled = false;
             }
         }
         

@@ -206,6 +206,43 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v10.2.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Conversation Summary Panel** - 实现会话摘要面板完整功能
+  - 新增 `loadConversationSummary()` 函数：从 `/api/sessions/{session_id}/conversation-summary` 加载摘要
+  - 新增 `renderConversationSummary()` 函数：渲染会话摘要（概述、主题、决策、偏好、待解决问题）
+  - 新增 `refreshConversationSummarySessionList()` 函数：刷新会话选择下拉列表
+  - CSS 样式：`.conversation-summary-panel`、`.conversation-summary-section`、`.conversation-summary-item`、`.conversation-summary-question` 等
+  - 显示元数据：开始时间、更新时间、Turn 数量
+
+- **WebUI Summary History Panel** - 新增摘要历史可视化面板
+  - 新增 `loadSummaryHistory()` 函数：从 `/api/summarizer/history` 加载历史记录
+  - 新增 `renderSummaryHistory()` 函数：渲染摘要历史列表
+  - 显示信息：会话 ID、压缩率（颜色编码）、原始/摘要 Token 数、提取的主题标签
+  - 新增 `refreshSummaryHistorySessionList()` 函数：支持按会话过滤
+  - CSS 样式：`.summary-history-panel`、`.summary-history-item`、`.summary-history-ratio`（低/中/高三色）
+
+- **WebUI Summarizer Config Panel** - 新增摘要配置面板
+  - 新增 `loadSummarizerConfig()` 函数：加载摘要配置和统计信息
+  - 新增 `renderSummarizerConfig()` 函数：渲染配置表单
+  - 新增 `saveSummarizerConfig()` 函数：保存配置到 `/api/summarizer/config`
+  - 配置项：启用/禁用摘要、最小消息数、Token 阈值
+  - 统计卡片：总摘要次数、汇总消息数、平均压缩率、会话数
+  - CSS 样式：`.summarizer-config-panel`、`.summarizer-stats-grid`、`.config-toggle`（开关样式）
+
+- **refreshData() 集成** - 在数据刷新时自动加载新面板
+  - 调用 `refreshConversationSummarySessionList()` 和 `loadConversationSummary()`
+  - 调用 `refreshSummaryHistorySessionList()` 和 `loadSummaryHistory()`
+  - 调用 `loadSummarizerConfig()`
+
+- cargo clippy 0 警告
+- cargo test 336 tests
+
+**下一步**: TUI 摘要命令支持、更多 Agent 能力增强
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:
