@@ -108,6 +108,30 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v9.7.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Summary Status Display** - 网页界面显示上下文摘要状态
+  - `examples/admin.html` 新增 `context.summarized` SSE 事件监听
+  - 新增摘要统计追踪：summaryStatsTotal、summaryStatsMessages、summaryStatsRatio
+  - 新增 `updateSummaryStats()` 函数更新统计
+  - 新增 `updateSummaryStatsDisplay()` 函数更新工具栏显示
+  - 新增 `showSummaryToast()` 函数显示摘要通知 toast
+  - 聊天工具栏新增 `summary-stats` 显示区域：
+    - 摘要次数、汇总消息数、压缩率
+  - 事件日志支持 `context.summarized` 事件显示
+  - 格式：`摘要: 10 msgs → 200 tokens (10%)`
+- **CSS 样式增强**：
+  - `.summary-stats` - 紫色主题摘要统计栏
+  - `.summary-stat` / `.summary-stat-label` / `.summary-stat-value`
+  - `.summary-toast` - 底部居中 Toast 通知动画
+- cargo clippy 0 警告
+- cargo test 336 tests
+
+**下一步**: 摘要配置化、持久化摘要历史
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:

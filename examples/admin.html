@@ -965,6 +965,44 @@
             color: #00d9ff;
             margin-left: 8px;
         }
+        .summary-stats {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 4px 10px;
+            background: rgba(180,130,255,0.1);
+            border: 1px solid rgba(180,130,255,0.25);
+            border-radius: 6px;
+            font-size: 11px;
+            color: #b482ff;
+        }
+        .summary-stat {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .summary-stat-label {
+            color: #888;
+        }
+        .summary-stat-value {
+            font-weight: bold;
+        }
+        .summary-toast {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            background: rgba(180,130,255,0.9);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+        }
         .message {
             margin-bottom: 12px;
             padding: 12px 16px;
@@ -3625,11 +3663,26 @@
                             <span class="token-stat-value token-total">0</span>
                         </div>
                     </div>
+                    <div class="summary-stats" id="summaryUsageDisplay" title="上下文摘要统计">
+                        <div class="summary-stat">
+                            <span class="summary-stat-label">摘要:</span>
+                            <span class="summary-stat-value summary-count">0</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-stat-label">消息:</span>
+                            <span class="summary-stat-value summary-messages">0</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-stat-label">压缩:</span>
+                            <span class="summary-stat-value summary-ratio">0%</span>
+                        </div>
+                    </div>
                     <button class="chat-btn-icon clear" onclick="clearChatMessages()" title="清空聊天">清空</button>
                 </div>
                 <div class="chat-messages" id="chatMessages">
                     <div class="message notice">欢迎使用 TinyClaw AI 对话！请在下方输入消息开始聊天。</div>
                 </div>
+                <div class="summary-toast" id="summaryToast"></div>
                 <div class="chat-input-container">
                     <input type="text" id="chatInput" placeholder="输入消息..." disabled onkeypress="if(event.key==='Enter')sendChatMessage()">
                     <button class="btn" id="chatSendBtn" onclick="sendChatMessage()" disabled>发送</button>
@@ -4230,6 +4283,9 @@
             } else if (eventType === 'turn.usage' && data.session_id) {
                 // Token usage event - update tracking and display
                 updateTokenUsage(data.session_id, data.input_tokens, data.output_tokens, data.total_tokens);
+            } else if (eventType === 'context.summarized' && data.session_id) {
+                // Context summarized event - update summary stats
+                updateSummaryStats(data.session_id, data.messages_summarized, data.original_tokens, data.summary_tokens, data.compression_ratio);
             }
         }
         
@@ -4542,6 +4598,68 @@
         let tokenUsageTotal = { input: 0, output: 0, total: 0 };
         let tokenUsageBySession = {};
         
+        // Summary stats tracking
+        let summaryStatsTotal = 0;
+        let summaryStatsMessages = 0;
+        let summaryStatsRatio = 0; // Running average compression ratio
+        let summaryStatsBySession = {};
+        
+        /// Update summary stats tracking
+        function updateSummaryStats(sessionId, messagesSummarized, originalTokens, summaryTokens, compressionRatio) {
+            // Update cumulative stats
+            summaryStatsTotal++;
+            summaryStatsMessages += messagesSummarized || 0;
+            
+            // Update running average compression ratio
+            const newRatio = compressionRatio || 0;
+            summaryStatsRatio = ((summaryStatsRatio * (summaryStatsTotal - 1)) + newRatio) / summaryStatsTotal;
+            
+            // Update per-session tracking
+            if (!summaryStatsBySession[sessionId]) {
+                summaryStatsBySession[sessionId] = { count: 0, messages: 0, ratio: 0 };
+            }
+            const sessStats = summaryStatsBySession[sessionId];
+            sessStats.count++;
+            sessStats.messages += messagesSummarized || 0;
+            sessStats.ratio = ((sessStats.ratio * (sessStats.count - 1)) + newRatio) / sessStats.count;
+            
+            // Update the display
+            updateSummaryStatsDisplay();
+            
+            // Show a brief toast notification
+            showSummaryToast(messagesSummarized, originalTokens, summaryTokens, compressionRatio);
+        }
+        
+        /// Update the summary stats display in the toolbar
+        function updateSummaryStatsDisplay() {
+            const display = document.getElementById('summaryUsageDisplay');
+            if (!display) return;
+            
+            const countEl = display.querySelector('.summary-count');
+            const msgsEl = display.querySelector('.summary-messages');
+            const ratioEl = display.querySelector('.summary-ratio');
+            
+            if (countEl) countEl.textContent = summaryStatsTotal;
+            if (msgsEl) msgsEl.textContent = formatTokenCount(summaryStatsMessages);
+            if (ratioEl) ratioEl.textContent = (summaryStatsRatio * 100).toFixed(0) + '%';
+        }
+        
+        /// Show a brief toast when context is summarized
+        function showSummaryToast(messages, originalTokens, summaryTokens, ratio) {
+            const toast = document.getElementById('summaryToast');
+            if (!toast) return;
+            
+            toast.innerHTML = '📝 ' + messages + ' msgs → ' + formatTokenCount(summaryTokens) + ' tokens (' + (ratio * 100).toFixed(0) + '%)';
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+            }, 3000);
+        }
+        
         function initEventStream() {
             const statusDot = document.getElementById('eventStreamStatus');
             const statusText = document.getElementById('eventStreamStatusText');
@@ -4572,7 +4690,8 @@
                 const eventTypes = [
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
-                    'session.created', 'session.ended', 'error', 'status', 'heartbeat'
+                    'session.created', 'session.ended', 'error', 'status', 'heartbeat',
+                    'context.summarized'
                 ];
                 
                 eventTypes.forEach(type => {
@@ -4635,6 +4754,7 @@
             else if (event.type === 'action.plan_preview') cssClass += ' event-tool';
             else if (event.type === 'tool_result') cssClass += ' event-tool-result';
             else if (event.type === 'heartbeat') cssClass += ' event-heartbeat';
+            else if (event.type === 'context.summarized') cssClass += ' event-turn-ended';
             else if (event.type === 'system') cssClass += ' event-system';
             
             // Format content display
@@ -4663,6 +4783,8 @@
                     contentText = '结果: ' + out.substring(0, 40) + (out.length > 40 ? '...' : '');
                 } else if (event.type === 'turn.usage') {
                     contentText = 'Token: 输入 ' + (event.content.input_tokens || 0) + ' / 输出 ' + (event.content.output_tokens || 0) + ' / 总计 ' + (event.content.total_tokens || 0);
+                } else if (event.type === 'context.summarized') {
+                    contentText = '摘要: ' + (event.content.messages_summarized || 0) + ' msgs → ' + (event.content.summary_tokens || 0) + ' tokens (' + ((event.content.compression_ratio || 0) * 100).toFixed(0) + '%)';
                 } else if (event.type === 'heartbeat') {
                     contentText = '心跳';
                 } else {
@@ -4691,6 +4813,7 @@
                 'turn.thinking': '思考中',
                 'turn.ended': 'Turn结束',
                 'turn.usage': 'Token使用',
+                'context.summarized': '上下文摘要',
                 'assistant.text': 'AI回复',
                 'assistant.tool_use': '工具调用',
                 'action.plan_preview': '执行计划预览',
