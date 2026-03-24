@@ -165,6 +165,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Edit session instructions",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":sum",
+        aliases: &["summary"],
+        description: "View summarizer config & stats",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -273,6 +279,14 @@ pub struct AppState {
     pub token_output_total: u64,
     /// Token usage by session (session_id -> (input, output))
     pub token_usage_by_session: HashMap<String, (u64, u64)>,
+    /// Whether we're in summarizer viewing mode
+    pub summarizer_mode: bool,
+    /// Cached summarizer config for display (JSON string)
+    pub summarizer_config: Option<String>,
+    /// Cached summarizer stats for display (JSON string)
+    pub summarizer_stats: Option<String>,
+    /// Cached summarizer history for display (JSON string)
+    pub summarizer_history: Option<String>,
 }
 
 impl Default for AppState {
@@ -319,6 +333,10 @@ impl Default for AppState {
             token_input_total: 0,
             token_output_total: 0,
             token_usage_by_session: HashMap::new(),
+            summarizer_mode: false,
+            summarizer_config: None,
+            summarizer_stats: None,
+            summarizer_history: None,
         }
     }
 }

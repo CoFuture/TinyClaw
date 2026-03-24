@@ -53,6 +53,25 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v10.3.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Summarizer Commands** - 终端界面支持摘要器命令
+  - 新增 `:sum` / `:summary` 命令查看摘要器配置和统计
+  - `TUI_COMMANDS` 新增 `:sum` / `:summary` 命令元数据
+  - **AppState 状态字段**：`summarizer_mode`、`summarizer_config`、`summarizer_stats`、`summarizer_history`
+  - **Gateway Client 方法**：`get_summarizer_config()`、`get_summarizer_stats()`、`get_summarizer_history()`、`set_summarizer_config()`
+  - **TuiGatewayEvent 新变体**：`SummarizerConfigLoaded`、`SummarizerStatsLoaded`、`SummarizerHistoryLoaded`
+  - **Summarizer Panel**：`draw_summarizer_panel()` 组件显示配置、统计和最近历史
+  - Esc 键退出摘要模式
+  - 显示内容：配置（enabled/minMessages/tokenThreshold）、统计（总摘要数/汇总消息数/平均压缩率）、最近5条历史记录
+- cargo clippy 0 警告
+- cargo test 336 tests
+
+**下一步**: 更多 Agent 能力增强、TUI 配置编辑支持
+
+---
+
 ### v9.5.0 (已完成 ✅)
 
 **完成事项**:

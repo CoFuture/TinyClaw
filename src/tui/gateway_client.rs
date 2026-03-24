@@ -81,6 +81,12 @@ pub enum TuiGatewayEvent {
     /// Context was summarized
     #[allow(dead_code)]
     ContextSummarized { session_id: String, messages_summarized: usize, original_tokens: usize, summary_tokens: usize, compression_ratio: f32 },
+    /// Summarizer config loaded
+    SummarizerConfigLoaded { config: String },
+    /// Summarizer stats loaded
+    SummarizerStatsLoaded { stats: String },
+    /// Summarizer history loaded
+    SummarizerHistoryLoaded { history: String },
 }
 
 /// Session note info
@@ -370,6 +376,24 @@ impl TuiGatewayClient {
                         let _ = event_tx.send(TuiGatewayEvent::SessionInstructionsLoaded {
                             session_id,
                             instructions,
+                        });
+                    }
+                    // Check if this is a summarizer.config.get response
+                    if let Some(config) = result_obj.get("config") {
+                        let _ = event_tx.send(TuiGatewayEvent::SummarizerConfigLoaded {
+                            config: config.to_string(),
+                        });
+                    }
+                    // Check if this is a summarizer.stats response
+                    if let Some(stats) = result_obj.get("stats") {
+                        let _ = event_tx.send(TuiGatewayEvent::SummarizerStatsLoaded {
+                            stats: stats.to_string(),
+                        });
+                    }
+                    // Check if this is a summarizer.history.list response
+                    if let Some(history) = result_obj.get("history") {
+                        let _ = event_tx.send(TuiGatewayEvent::SummarizerHistoryLoaded {
+                            history: history.to_string(),
                         });
                     }
                 } else if resp.result.is_string() {
@@ -732,6 +756,62 @@ impl TuiGatewayClient {
     #[allow(dead_code)]
     pub fn is_connected(&self) -> bool {
         self.status == TuiGatewayStatus::Connected
+    }
+
+    /// Get summarizer configuration
+    pub async fn get_summarizer_config(&self) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some("tui-sum-config".to_string()),
+            method: methods::SUMMARIZER_CONFIG_GET.to_string(),
+            params: serde_json::json!({}),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get summarizer statistics
+    pub async fn get_summarizer_stats(&self) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some("tui-sum-stats".to_string()),
+            method: methods::SUMMARIZER_STATS.to_string(),
+            params: serde_json::json!({}),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get summarizer history
+    pub async fn get_summarizer_history(&self) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some("tui-sum-history".to_string()),
+            method: methods::SUMMARIZER_HISTORY_LIST.to_string(),
+            params: serde_json::json!({}),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Update summarizer configuration
+    pub async fn set_summarizer_config(&self, min_messages: Option<u32>, token_threshold: Option<u32>, enabled: Option<bool>) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some("tui-sum-config-set".to_string()),
+            method: methods::SUMMARIZER_CONFIG_SET.to_string(),
+            params: serde_json::json!({
+                "minMessages": min_messages,
+                "tokenThreshold": token_threshold,
+                "enabled": enabled
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
     }
 }
 

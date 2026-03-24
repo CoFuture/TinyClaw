@@ -424,12 +424,199 @@ pub fn draw_confirm_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw the summarizer panel (config, stats, and history viewer)
+pub fn draw_summarizer_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    use ratatui::style::{Color, Modifier, Style};
+    use ratatui::text::{Line, Span, Text};
+    use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+    
+    let title_text = " 📊 Summarizer ".to_string();
+    
+    let block = Block::default()
+        .title(title_text.as_str())
+        .title_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .style(Style::default().bg(Color::Rgb(20, 20, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    // Title
+    lines.push(Line::from(vec![
+        Span::styled("Context Summarizer", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+    
+    // Configuration section
+    lines.push(Line::from(vec![
+        Span::styled("Configuration:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+    
+    if let Some(ref config) = state.summarizer_config {
+        // Try to parse and display nicely
+        if let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config) {
+            let enabled = config_obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let min_messages = config_obj.get("minMessages").and_then(|v| v.as_u64()).unwrap_or(0);
+            let token_threshold = config_obj.get("tokenThreshold").and_then(|v| v.as_u64()).unwrap_or(0);
+            
+            lines.push(Line::from(vec![
+                Span::raw("  • Enabled: "),
+                Span::styled(if enabled { "Yes" } else { "No" }, 
+                    Style::default().fg(if enabled { Color::Green } else { Color::Red }).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • Min Messages: "),
+                Span::styled(format!("{}", min_messages), Style::default().fg(Color::White)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • Token Threshold: "),
+                Span::styled(format!("{}", token_threshold), Style::default().fg(Color::White)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(config, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  (loading...)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+    
+    lines.push(Line::from(""));
+    
+    // Statistics section
+    lines.push(Line::from(vec![
+        Span::styled("Statistics:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+    
+    if let Some(ref stats) = state.summarizer_stats {
+        if let Ok(stats_obj) = serde_json::from_str::<serde_json::Value>(stats) {
+            let total_summaries = stats_obj.get("totalSummaries").and_then(|v| v.as_u64()).unwrap_or(0);
+            let total_messages = stats_obj.get("totalMessagesSummarized").and_then(|v| v.as_u64()).unwrap_or(0);
+            let avg_compression = stats_obj.get("avgCompressionRatio").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let session_count = stats_obj.get("sessionCount").and_then(|v| v.as_u64()).unwrap_or(0);
+            
+            lines.push(Line::from(vec![
+                Span::raw("  • Total Summaries: "),
+                Span::styled(format!("{}", total_summaries), Style::default().fg(Color::White)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • Messages Summarized: "),
+                Span::styled(format!("{}", total_messages), Style::default().fg(Color::White)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • Avg Compression: "),
+                Span::styled(format!("{:.1}%", avg_compression * 100.0), Style::default().fg(Color::Yellow)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • Sessions: "),
+                Span::styled(format!("{}", session_count), Style::default().fg(Color::White)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(stats, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  (loading...)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+    
+    lines.push(Line::from(""));
+    
+    // History section (last 5 entries)
+    lines.push(Line::from(vec![
+        Span::styled("Recent History:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+    
+    // Try to parse and display history - extract owned data first to avoid borrow issues
+    let history_displayed = if let Some(ref history) = state.summarizer_history {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(history) {
+            // Extract entries and convert to owned data
+            let entries = val.get("entries").and_then(|v| v.as_array());
+            let owned_entries: Vec<(String, u64, f64, String)> = entries
+                .map(|arr| {
+                    arr.iter().map(|entry| {
+                        let session = entry.get("sessionId").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+                        let msgs = entry.get("messagesSummarized").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let ratio = entry.get("compressionRatio").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let created = entry.get("createdAt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        (session, msgs, ratio, created)
+                    }).collect()
+                })
+                .unwrap_or_default();
+            
+            if owned_entries.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("  (no history)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                ]));
+            } else {
+                // Show last 5 entries
+                let start = if owned_entries.len() > 5 { owned_entries.len() - 5 } else { 0 };
+                for (session, msgs, ratio, created) in owned_entries.into_iter().skip(start) {
+                    let ratio_color = if ratio > 0.5 {
+                        Color::Green
+                    } else if ratio > 0.2 {
+                        Color::Yellow
+                    } else {
+                        Color::Red
+                    };
+                    
+                    lines.push(Line::from(vec![
+                        Span::raw("  • "),
+                        Span::styled(session, Style::default().fg(Color::White)),
+                        Span::raw(": "),
+                        Span::styled(format!("{} msgs", msgs), Style::default().fg(Color::DarkGray)),
+                        Span::raw(" → "),
+                        Span::styled(format!("{:.0}%", ratio * 100.0), Style::default().fg(ratio_color)),
+                        Span::raw(" "),
+                        Span::styled(created, Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    
+    if !history_displayed {
+        if state.summarizer_history.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("  (no history)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("  (loading...)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+        }
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc to close", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the input panel with enhanced features
 pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title = if state.confirm_mode {
         " Confirm "
     } else if state.instructions_mode {
         " Instructions "
+    } else if state.summarizer_mode {
+        " Summarizer "
     } else if state.input_buffer.starts_with(':') {
         " Command "
     } else {

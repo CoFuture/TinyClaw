@@ -547,6 +547,18 @@ impl TuiApp {
                 self.state.last_summary_info = Some(info.clone());
                 debug!("Context summarized for {}: {}", session_id, info);
             }
+            TuiGatewayEvent::SummarizerConfigLoaded { config } => {
+                debug!("Summarizer config loaded: {}", config);
+                self.state.summarizer_config = Some(config);
+            }
+            TuiGatewayEvent::SummarizerStatsLoaded { stats } => {
+                debug!("Summarizer stats loaded: {}", stats);
+                self.state.summarizer_stats = Some(stats);
+            }
+            TuiGatewayEvent::SummarizerHistoryLoaded { history } => {
+                debug!("Summarizer history loaded: {}", history);
+                self.state.summarizer_history = Some(history);
+            }
         }
     }
 
@@ -1121,6 +1133,117 @@ impl TuiApp {
                                     self.state.completion.reset();
                                 }
                             }
+                            KeyCode::Char('s') => {
+                                // Check for :sum (s-u-m) or :summary (s-u-m-m-a-r-y)
+                                // First check for 'u' after 's'
+                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                    if let Ok(crossterm::event::Event::Key(u_key)) = event::read() {
+                                        if let KeyCode::Char('u') = u_key.code {
+                                            // Got :su, check for :sum
+                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                if let Ok(crossterm::event::Event::Key(m_key)) = event::read() {
+                                                    if let KeyCode::Char('m') = m_key.code {
+                                                        // Got :sum - check if it's :summary (s-u-m-m-a-r-y)
+                                                        if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                            if let Ok(crossterm::event::Event::Key(m2_key)) = event::read() {
+                                                                if let KeyCode::Char('m') = m2_key.code {
+                                                                    // Got :summ, check for :summa
+                                                                    if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                        if let Ok(crossterm::event::Event::Key(a_key)) = event::read() {
+                                                                            if let KeyCode::Char('a') = a_key.code {
+                                                                                // Got :summa, check for :summar
+                                                                                if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                                    if let Ok(crossterm::event::Event::Key(r_key)) = event::read() {
+                                                                                        if let KeyCode::Char('r') = r_key.code {
+                                                                                            // Got :summar, check for :summar y
+                                                                                            if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                                                if let Ok(crossterm::event::Event::Key(y_key)) = event::read() {
+                                                                                                    if let KeyCode::Char('y') = y_key.code {
+                                                                                                        // Got :summary - toggle summarizer mode
+                                                                                                        self.state.summarizer_mode = !self.state.summarizer_mode;
+                                                                                                        if self.state.summarizer_mode {
+                                                                                                            self.state.input_buffer.clear();
+                                                                                                            // Request summarizer data
+                                                                                                            let client = self.gateway_client.clone();
+                                                                                                            tokio::spawn(async move {
+                                                                                                                let client = client.read().await;
+                                                                                                                if let Err(e) = client.get_summarizer_config().await {
+                                                                                                                    error!("Failed to load summarizer config: {}", e);
+                                                                                                                }
+                                                                                                                if let Err(e) = client.get_summarizer_stats().await {
+                                                                                                                    error!("Failed to load summarizer stats: {}", e);
+                                                                                                                }
+                                                                                                                if let Err(e) = client.get_summarizer_history().await {
+                                                                                                                    error!("Failed to load summarizer history: {}", e);
+                                                                                                                }
+                                                                                                            });
+                                                                                                        }
+                                                                                                        self.state.input_buffer = String::new();
+                                                                                                        return Ok(true);
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                            // Not :summary, add 'summa' to buffer
+                                                                                            if self.state.active_panel == 2 {
+                                                                                                self.state.input_buffer.push('s');
+                                                                                                self.state.input_buffer.push('u');
+                                                                                                self.state.input_buffer.push('m');
+                                                                                                self.state.input_buffer.push('m');
+                                                                                                self.state.input_buffer.push('a');
+                                                                                                self.state.completion.reset();
+                                                                                            }
+                                                                                            return Ok(true);
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                                // Not :summa, add 'summ' to buffer
+                                                                                if self.state.active_panel == 2 {
+                                                                                    self.state.input_buffer.push('s');
+                                                                                    self.state.input_buffer.push('u');
+                                                                                    self.state.input_buffer.push('m');
+                                                                                    self.state.input_buffer.push('m');
+                                                                                    self.state.completion.reset();
+                                                                                }
+                                                                                return Ok(true);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    // Not :summ, add 'sum' to buffer
+                                                                    if self.state.active_panel == 2 {
+                                                                        self.state.input_buffer.push('s');
+                                                                        self.state.input_buffer.push('u');
+                                                                        self.state.input_buffer.push('m');
+                                                                        self.state.completion.reset();
+                                                                    }
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                        }
+                                                        // Not :sum, add 'su' to buffer
+                                                        if self.state.active_panel == 2 {
+                                                            self.state.input_buffer.push('s');
+                                                            self.state.input_buffer.push('u');
+                                                            self.state.completion.reset();
+                                                        }
+                                                        return Ok(true);
+                                                    }
+                                                }
+                                            }
+                                            // Not :sum, add 's' to buffer
+                                            if self.state.active_panel == 2 {
+                                                self.state.input_buffer.push('s');
+                                                self.state.completion.reset();
+                                            }
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                                // Single 's' - just add to buffer
+                                if self.state.active_panel == 2 {
+                                    self.state.input_buffer.push('s');
+                                    self.state.completion.reset();
+                                }
+                            }
                             KeyCode::Char('d') => {
                                 // Delete current session (if not main)
                                 if let Some(ref session_id) = self.state.current_session_id {
@@ -1299,6 +1422,11 @@ impl TuiApp {
                         self.state.reset_input_history_navigation();
                     } else if self.state.search_mode {
                         self.state.exit_search_mode();
+                    } else if self.state.summarizer_mode {
+                        self.state.summarizer_mode = false;
+                        self.state.summarizer_config = None;
+                        self.state.summarizer_stats = None;
+                        self.state.summarizer_history = None;
                     } else if self.state.notes_mode {
                         self.state.notes_mode = false;
                         self.state.notes_content = None;
@@ -1378,6 +1506,8 @@ impl TuiApp {
             crate::tui::components::draw_confirm_panel(f, msg_chunks[0], &self.state);
         } else if self.state.instructions_mode {
             crate::tui::components::draw_instructions_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.summarizer_mode {
+            crate::tui::components::draw_summarizer_panel(f, msg_chunks[0], &self.state);
         } else if self.state.notes_mode {
             crate::tui::components::draw_notes_panel(f, msg_chunks[0], &self.state);
         } else {
