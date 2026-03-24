@@ -269,6 +269,28 @@ pub enum Event {
     ActionDenied {
         session_id: String,
     },
+    
+    /// Agent self-evaluation completed after a turn
+    #[serde(rename = "agent.self_evaluation")]
+    SelfEvaluation {
+        session_id: String,
+        turn_id: String,
+        overall_score: f64,
+        dimension_scores: Vec<DimensionScoreEvent>,
+        strengths: Vec<String>,
+        weaknesses: Vec<String>,
+    },
+}
+
+/// Dimension score for self-evaluation events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DimensionScoreEvent {
+    /// Dimension name
+    pub dimension: String,
+    /// Score from 0.0 to 1.0
+    pub score: f64,
+    /// Reason for this score
+    pub reason: String,
 }
 
 /// Event emitter for broadcasting events

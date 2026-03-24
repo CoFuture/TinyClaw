@@ -135,6 +135,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Turn history manager initialized");
     
+    // Create self-evaluation manager with persistence
+    let self_eval_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("self_evaluation");
+    let self_evaluation_manager = if let Err(e) = std::fs::create_dir_all(&self_eval_dir) {
+        tracing::warn!("Failed to create self-evaluation dir: {}, using in-memory", e);
+        Arc::new(agent::SelfEvaluationManager::new())
+    } else {
+        Arc::new(agent::SelfEvaluationManager::with_persistence(self_eval_dir))
+    };
+    info!("Self-evaluation manager initialized");
+    
     // Create conversation summary manager for tracking conversation state
     let conversation_summary_manager = Arc::new(parking_lot::RwLock::new(
         crate::agent::ConversationSummaryManager::new()
@@ -247,6 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         memory_manager: memory_manager.clone(),
         turn_history: turn_history.clone(),
         conversation_summary: conversation_summary_manager.clone(),
+        self_evaluation_manager: self_evaluation_manager.clone(),
     });
 
     // Spawn WebSocket server
@@ -271,6 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         memory_manager.clone(), // Memory manager for long-term fact storage
         turn_history.clone(), // Turn history manager
         conversation_summary_manager.clone(), // Conversation summary manager
+        self_evaluation_manager.clone(), // Self-evaluation manager
     );
     
     let ws_handle = tokio::spawn(async move {

@@ -51,6 +51,8 @@ pub struct HttpState {
     pub turn_history: Arc<TurnHistoryManager>,
     #[allow(dead_code)]
     pub conversation_summary: Arc<RwLock<crate::agent::ConversationSummaryManager>>,
+    #[allow(dead_code)]
+    pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
 }
 
 /// Health check response
@@ -694,6 +696,7 @@ async fn sse_events(
                                     // Action confirmation events - apply session filter
                                     Event::ActionPlanConfirm { session_id, .. } => session_id == filter,
                                     Event::ActionDenied { session_id, .. } => session_id == filter,
+                                    Event::SelfEvaluation { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -733,6 +736,7 @@ async fn sse_events(
                                     Event::SuggestionDismissed { .. } => "suggestion.dismissed",
                                     Event::ActionPlanConfirm { .. } => "action.plan_confirm",
                                     Event::ActionDenied { .. } => "action.denied",
+                                    Event::SelfEvaluation { .. } => "agent.self_evaluation",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",
@@ -849,6 +853,11 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/export", get(turns_export))
         // Tool performance statistics
         .route("/api/tools/stats", get(tool_stats))
+        // Self-evaluation API - agent performance self-assessment
+        .route("/api/evaluations/recent", get(evaluations_recent))
+        .route("/api/evaluations/stats", get(evaluations_stats))
+        .route("/api/evaluations/session/{session_id}", get(evaluations_for_session))
+        .route("/api/evaluations/turn/{turn_id}", get(evaluation_for_turn))
         // Conversation summary API - transient conversation state tracking
         .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
         // Summarizer config and history API
@@ -1802,6 +1811,66 @@ async fn tool_stats(
     Json(serde_json::json!({
         "stats": stats,
     }))
+}
+
+// ============================================================
+// Self-Evaluation API Endpoints
+// ============================================================
+
+/// Get recent self-evaluations
+async fn evaluations_recent(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let evaluations = state.self_evaluation_manager.get_recent(20);
+    let summaries: Vec<_> = evaluations.iter().map(|e| e.summary()).collect();
+    let stats = state.self_evaluation_manager.get_stats();
+    Json(serde_json::json!({
+        "evaluations": evaluations,
+        "summaries": summaries,
+        "stats": stats,
+    }))
+}
+
+/// Get overall self-evaluation statistics
+async fn evaluations_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.self_evaluation_manager.get_stats();
+    Json(serde_json::json!({
+        "stats": stats,
+    }))
+}
+
+/// Get evaluations for a specific session
+async fn evaluations_for_session(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let evaluations = state.self_evaluation_manager.get_by_session(&session_id);
+    let summaries: Vec<_> = evaluations.iter().map(|e| e.summary()).collect();
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "evaluations": evaluations,
+        "summaries": summaries,
+        "count": evaluations.len(),
+    }))
+}
+
+/// Get evaluation for a specific turn
+async fn evaluation_for_turn(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(turn_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.self_evaluation_manager.get_by_turn(&turn_id) {
+        Some(evaluation) => Json(serde_json::json!({
+            "success": true,
+            "evaluation": evaluation,
+        })),
+        None => Json(serde_json::json!({
+            "success": false,
+            "error": "Evaluation not found",
+        })),
+    }
 }
 
 // ============================================================

@@ -79,6 +79,8 @@ pub struct HandlerContext {
     pub turn_history: Arc<TurnHistoryManager>,
     /// Conversation summary manager for tracking conversation state
     pub conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
+    /// Self-evaluation manager for agent performance evaluation
+    pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
 }
 
 impl HandlerContext {
@@ -100,6 +102,7 @@ impl HandlerContext {
         memory_manager: Arc<MemoryManager>,
         turn_history: Arc<TurnHistoryManager>,
         conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
+        self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -118,6 +121,7 @@ impl HandlerContext {
             memory_manager,
             turn_history,
             conversation_summary,
+            self_evaluation_manager,
         }
     }
 
@@ -841,6 +845,24 @@ async fn handle_agent_turn(
         tool_executions,
         token_usage,
     );
+    
+    // Evaluate the turn and store the evaluation
+    let evaluation = ctx.self_evaluation_manager.evaluate_turn(&turn_record);
+    
+    // Emit self-evaluation event
+    ctx.event_emitter.emit(Event::SelfEvaluation {
+        session_id: session_key.to_string(),
+        turn_id: turn_record.id.clone(),
+        overall_score: evaluation.overall_score,
+        dimension_scores: evaluation.dimension_scores.iter().map(|ds| crate::gateway::events::DimensionScoreEvent {
+            dimension: ds.dimension.display_name().to_string(),
+            score: ds.score,
+            reason: ds.reason.clone(),
+        }).collect(),
+        strengths: evaluation.strengths.clone(),
+        weaknesses: evaluation.weaknesses.clone(),
+    });
+    
     ctx.turn_history.record(turn_record);
 
     // Auto-extract facts from conversation into long-term memory

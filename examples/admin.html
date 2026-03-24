@@ -1971,6 +1971,43 @@
             </div>
         </div>
 
+        <!-- Agent Self-Evaluation Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🎯 Agent 自我评估 <span class="tool-count-badge" id="evaluationsCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Agent 自主评估每轮执行表现：任务成功率、工具选择、效率、响应质量</p>
+            <div style="margin-bottom: 15px;">
+                <select id="evaluationsSession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-right: 10px;" onchange="loadEvaluationsForSession()">
+                    <option value="">全部会话</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadEvaluations()">🔄 刷新</button>
+            </div>
+
+            <!-- Evaluation Stats Cards -->
+            <div id="evalStatsCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">评估次数</div>
+                    <div style="color: #00d9ff; font-size: 24px; font-weight: bold;" id="evalStatTotal">-</div>
+                </div>
+                <div style="background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">平均得分</div>
+                    <div style="color: #00ff88; font-size: 24px; font-weight: bold;" id="evalStatAvgScore">-</div>
+                </div>
+                <div style="background: rgba(255,183,77,0.1); border: 1px solid rgba(255,183,77,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">优秀率</div>
+                    <div style="color: #ffb74d; font-size: 24px; font-weight: bold;" id="evalStatExcellentRate">-</div>
+                </div>
+                <div style="background: rgba(186,104,200,0.1); border: 1px solid rgba(186,104,200,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">会话数</div>
+                    <div style="color: #ba68c8; font-size: 24px; font-weight: bold;" id="evalStatSessionCount">-</div>
+                </div>
+            </div>
+
+            <!-- Evaluations List -->
+            <div id="evaluationsList" style="max-height: 500px; overflow-y: auto;">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+
         <!-- Conversation Summary Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>💬 会话摘要 <span class="tool-count-badge" id="conversationTurnCount">-</span></h2>
@@ -2257,6 +2294,13 @@
                     loadToolStats();
                 } catch (e) {
                     // Tool stats API might not be available
+                }
+                
+                // Fetch agent self-evaluations
+                try {
+                    loadEvaluations();
+                } catch (e) {
+                    // Evaluations API might not be available
                 }
                 
                 // Fetch conversation summary session list and load current summary
@@ -2857,6 +2901,203 @@
                 console.error('Failed to load tool stats:', e);
                 countBadge.textContent = '!';
                 tableContainer.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center; padding: 40px;">加载失败</div>';
+            }
+        }
+        
+        // Agent Self-Evaluation Functions
+        
+        async function loadEvaluations() {
+            const countBadge = document.getElementById('evaluationsCount');
+            const listContainer = document.getElementById('evaluationsList');
+            const sessionSelect = document.getElementById('evaluationsSession');
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/evaluations/recent`);
+                if (!res.ok) throw new Error('加载失败');
+                
+                const data = await res.json();
+                const stats = data.stats || {};
+                const evaluations = data.evaluations || [];
+                
+                // Update summary cards
+                document.getElementById('evalStatTotal').textContent = stats.total_evaluations || 0;
+                document.getElementById('evalStatAvgScore').textContent = stats.avg_overall_score 
+                    ? (stats.avg_overall_score * 100).toFixed(0) + '%' 
+                    : '-';
+                
+                const excellentCount = stats.score_distribution?.['excellent (90-100%)'] || 0;
+                const excellentRate = stats.total_evaluations > 0 
+                    ? ((excellentCount / stats.total_evaluations) * 100).toFixed(0) + '%' 
+                    : '-';
+                document.getElementById('evalStatExcellentRate').textContent = excellentRate;
+                document.getElementById('evalStatSessionCount').textContent = 
+                    Object.keys(stats.evaluations_by_session || {}).length;
+                
+                countBadge.textContent = evaluations.length || 0;
+                
+                // Update session dropdown
+                const sessions = Object.keys(stats.evaluations_by_session || {});
+                const currentValue = sessionSelect.value;
+                sessionSelect.innerHTML = '<option value="">全部会话</option>';
+                sessions.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s;
+                    opt.textContent = s;
+                    if (s === currentValue) opt.selected = true;
+                    sessionSelect.appendChild(opt);
+                });
+                
+                // Render evaluations list
+                if (evaluations.length === 0) {
+                    listContainer.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 40px;">暂无评估数据</div>';
+                    return;
+                }
+                
+                const html = evaluations.map(eval => {
+                    const score = eval.overall_score;
+                    const scoreClass = score >= 0.9 ? 'success-rate-high' : 
+                                      score >= 0.7 ? 'success-rate-medium' : 'success-rate-low';
+                    const scoreColor = score >= 0.9 ? '#00ff88' : 
+                                      score >= 0.7 ? '#ffb74d' : '#ff4757';
+                    
+                    const dimensionBars = (eval.dimension_scores || []).map(ds => {
+                        const width = Math.round(ds.score * 100);
+                        const color = ds.score >= 0.8 ? '#00ff88' : ds.score >= 0.5 ? '#ffb74d' : '#ff4757';
+                        return `
+                            <div style="margin-bottom: 4px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                                    <span style="color: #aaa;">${ds.dimension}</span>
+                                    <span style="color: ${color};">${(ds.score * 100).toFixed(0)}%</span>
+                                </div>
+                                <div class="duration-bar" style="height: 4px;">
+                                    <div class="duration-bar-fill" style="width: ${width}%; background: ${color};"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    const strengths = (eval.strengths || []).slice(0, 2).map(s => 
+                        `<span style="background: rgba(0,255,136,0.1); color: #00ff88; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">✓ ${s}</span>`
+                    ).join('');
+                    
+                    const weaknesses = (eval.weaknesses || []).slice(0, 2).map(w => 
+                        `<span style="background: rgba(255,71,87,0.1); color: #ff4757; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">⚠ ${w}</span>`
+                    ).join('');
+                    
+                    const time = new Date(eval.created_at).toLocaleTimeString();
+                    
+                    return `
+                        <div class="eval-card" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="background: ${scoreColor}20; color: ${scoreColor}; padding: 4px 10px; border-radius: 4px; font-weight: bold;">
+                                        ${(score * 100).toFixed(0)}%
+                                    </span>
+                                    <span style="color: #888; font-size: 12px;">${eval.session_id}</span>
+                                </div>
+                                <span style="color: #666; font-size: 11px;">${time}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                ${dimensionBars}
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                ${strengths}
+                                ${weaknesses}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                listContainer.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load evaluations:', e);
+                countBadge.textContent = '!';
+                listContainer.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center; padding: 40px;">加载失败</div>';
+            }
+        }
+        
+        async function loadEvaluationsForSession() {
+            const sessionSelect = document.getElementById('evaluationsSession');
+            const sessionId = sessionSelect.value;
+            const listContainer = document.getElementById('evaluationsList');
+            
+            if (!sessionId) {
+                loadEvaluations();
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/evaluations/session/${encodeURIComponent(sessionId)}`);
+                if (!res.ok) throw new Error('加载失败');
+                
+                const data = await res.json();
+                const evaluations = data.evaluations || [];
+                
+                document.getElementById('evaluationsCount').textContent = evaluations.length;
+                
+                // Re-render with the same format
+                if (evaluations.length === 0) {
+                    listContainer.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 40px;">该会话暂无评估数据</div>';
+                    return;
+                }
+                
+                // Use the same rendering logic
+                const html = evaluations.map(eval => {
+                    const score = eval.overall_score;
+                    const scoreColor = score >= 0.9 ? '#00ff88' : score >= 0.7 ? '#ffb74d' : '#ff4757';
+                    
+                    const dimensionBars = (eval.dimension_scores || []).map(ds => {
+                        const width = Math.round(ds.score * 100);
+                        const color = ds.score >= 0.8 ? '#00ff88' : ds.score >= 0.5 ? '#ffb74d' : '#ff4757';
+                        return `
+                            <div style="margin-bottom: 4px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                                    <span style="color: #aaa;">${ds.dimension}</span>
+                                    <span style="color: ${color};">${(ds.score * 100).toFixed(0)}%</span>
+                                </div>
+                                <div class="duration-bar" style="height: 4px;">
+                                    <div class="duration-bar-fill" style="width: ${width}%; background: ${color};"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    const strengths = (eval.strengths || []).slice(0, 2).map(s => 
+                        `<span style="background: rgba(0,255,136,0.1); color: #00ff88; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">✓ ${s}</span>`
+                    ).join('');
+                    
+                    const weaknesses = (eval.weaknesses || []).slice(0, 2).map(w => 
+                        `<span style="background: rgba(255,71,87,0.1); color: #ff4757; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">⚠ ${w}</span>`
+                    ).join('');
+                    
+                    const time = new Date(eval.created_at).toLocaleTimeString();
+                    
+                    return `
+                        <div class="eval-card" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="background: ${scoreColor}20; color: ${scoreColor}; padding: 4px 10px; border-radius: 4px; font-weight: bold;">
+                                        ${(score * 100).toFixed(0)}%
+                                    </span>
+                                    <span style="color: #888; font-size: 12px;">Turn: ${eval.turn_id.substring(0, 8)}...</span>
+                                </div>
+                                <span style="color: #666; font-size: 11px;">${time}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                ${dimensionBars}
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                ${strengths}
+                                ${weaknesses}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                listContainer.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load evaluations for session:', e);
+                listContainer.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center; padding: 40px;">加载失败</div>';
             }
         }
         
@@ -5585,6 +5826,7 @@
             else if (event.type === 'tool_result') cssClass += ' event-tool-result';
             else if (event.type === 'heartbeat') cssClass += ' event-heartbeat';
             else if (event.type === 'context.summarized') cssClass += ' event-turn-ended';
+            else if (event.type === 'agent.self_evaluation') cssClass += ' event-turn-ended';
             else if (event.type === 'system') cssClass += ' event-system';
             
             // Format content display
@@ -5615,6 +5857,11 @@
                     contentText = 'Token: 输入 ' + (event.content.input_tokens || 0) + ' / 输出 ' + (event.content.output_tokens || 0) + ' / 总计 ' + (event.content.total_tokens || 0);
                 } else if (event.type === 'context.summarized') {
                     contentText = '摘要: ' + (event.content.messages_summarized || 0) + ' msgs → ' + (event.content.summary_tokens || 0) + ' tokens (' + ((event.content.compression_ratio || 0) * 100).toFixed(0) + '%)';
+                } else if (event.type === 'agent.self_evaluation') {
+                    contentText = '自我评估: ' + ((event.content.overall_score || 0) * 100).toFixed(0) + '%';
+                    if (event.content.strengths && event.content.strengths.length > 0) {
+                        contentText += ' ✓ ' + event.content.strengths[0];
+                    }
                 } else if (event.type === 'heartbeat') {
                     contentText = '心跳';
                 } else {

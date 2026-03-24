@@ -12,6 +12,7 @@ pub mod retry;
 pub mod runtime;
 pub mod scheduled_task;
 pub mod scheduler;
+pub mod self_evaluation;
 pub mod session_notes;
 pub mod skill;
 pub mod skill_manager;
@@ -34,6 +35,8 @@ pub use scheduled_task::ScheduledTaskSummary;
 #[allow(unused_imports)]
 pub use scheduled_task::ScheduleType;
 pub use scheduler::Scheduler;
+#[allow(unused_imports)]
+pub use self_evaluation::{SelfEvaluation, SelfEvaluationEngine, SelfEvaluationManager, SelfEvaluationStats, SelfEvaluationSummary, DimensionScore, EvaluationDimension};
 pub use session_notes::{SessionNoteUpdate, SessionNotesManager};
 #[allow(unused_imports)]
 pub use session_notes::{SessionNote, SessionNoteSummary};

@@ -74,6 +74,41 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Self-Evaluation System** - Agent 自我评估系统
+  - **新增模块** `agent/self_evaluation.rs`：
+    - `SelfEvaluation` 结构：turn_id、session_id、overall_score、dimension_scores、strengths、weaknesses、improvement_suggestions
+    - `EvaluationDimension` 枚举：TaskSuccess、ToolSelection、Efficiency、ResponseQuality
+    - `SelfEvaluationEngine`：评估引擎，基于 turn 数据自动计算各维度得分
+    - `SelfEvaluationManager`：评估管理器，支持持久化到 `~/.config/tiny_claw/self_evaluation/`
+  - **评估维度**：
+    - TaskSuccess：任务是否成功完成（权重 35%）
+    - ToolSelection：工具选择是否合理（权重 25%）
+    - Efficiency：执行效率（耗时、token 使用）（权重 20%）
+    - ResponseQuality：响应质量（长度、内容）（权重 20%）
+  - **自动评估流程**：每轮 Agent Turn 结束后自动评估并存储
+  - **Gateway 集成**：`handle_agent_turn` 完成后自动触发评估
+  - **SSE 事件**：`agent.self_evaluation` 事件推送评估结果
+  - **HTTP API 端点**：
+    - `GET /api/evaluations/recent` - 获取最近评估
+    - `GET /api/evaluations/stats` - 获取评估统计
+    - `GET /api/evaluations/session/{session_id}` - 获取会话评估
+    - `GET /api/evaluations/turn/{turn_id}` - 获取特定 Turn 评估
+  - **WebUI 面板**：
+    - 统计卡片：评估次数、平均得分、优秀率、会话数
+    - 评估列表：显示得分、维度条形图、优势、弱点
+    - 会话过滤：支持按会话筛选评估记录
+    - SSE 实时更新：新评估自动显示在事件日志
+  - **11 个新测试**：覆盖评估引擎、得分计算、管理器功能
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 351 tests
+
+**下一步**: Session Quality Analysis、更多 Agent 能力增强
+
+---
+
 ### v10.5.0 (已完成 ✅)
 
 **完成事项**:
