@@ -53,6 +53,36 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v9.5.0 (已完成 ✅)
+
+**完成事项**:
+- **ContextSummarizer Runtime Integration** - 将 AI 摘要集成到 Agent 运行时
+  - `AgentRuntime` 新增 `summarizer: RwLock<Option<Arc<ContextSummarizer>>>` 字段
+  - 新增 `set_context_summarizer(agent: Arc<Agent>)` 方法启用 AI 摘要
+  - 新增 `has_summarizer()` 方法检查摘要是否启用
+  - 重构 `get_model_response()` 方法：
+    - 当上下文需要截断且摘要器可用时，使用 AI 摘要替代简单截断
+    - 保留最近 5 条消息作为上下文锚点
+    - 旧消息通过 AI 生成摘要，保留决策/偏好/关键信息
+    - 摘要失败时自动回退到传统截断策略
+  - 新增 `apply_fallback_truncation()` 辅助方法减少代码重复
+  - 修复 `await_holding_lock` clippy 警告：确保所有锁在 await 前释放
+- **工作流程**:
+  1. 检测上下文是否需要截断（同步）
+  2. 检查摘要器是否可用且应该使用（同步，克隆 Arc 后释放锁）
+  3. 如需摘要，异步调用 AI 生成摘要
+  4. 摘要成功：构建包含摘要消息的上下文
+  5. 摘要失败/不可用：回退到传统截断
+- **日志记录**:
+  - 摘要成功时记录压缩率、原始 token 数、摘要 token 数
+  - 摘要失败时记录警告并回退
+- cargo clippy 0 警告（除 pre-existing dead_code）
+- cargo test 337 tests
+
+**下一步**: WebUI/TUI 显示摘要状态、摘要配置化、持久化摘要历史
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:
@@ -838,6 +868,8 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v9.5.0 | ContextSummarizer Runtime Integration - AI 摘要集成到 Agent 运行时：AgentRuntime 新增 summarizer 字段和 set_context_summarizer() 方法；get_model_response() 重构：上下文截断时优先使用 AI 摘要（保留最近5条消息作为锚点、旧消息生成智能摘要、保留决策/偏好/关键信息）；摘要失败自动回退到传统截断；修复 await_holding_lock 警告；cargo clippy 0 警告；cargo test 337 tests |
+| v9.4.0 | AI-Powered Context Summarization - 新增 AI 驱动上下文摘要：context_summarizer.rs 模块（ContextSummary/ContextSummarizer/SummarizedContext 结构）；Agent::summarize_content() 方法支持 Anthropic/OpenAI/Ollama；修复 memory 测试竞态条件；cargo clippy 0 警告；cargo test 337 tests |
 | v9.3.0 | TUI Token Usage Display - 终端界面 Token 使用量显示：AppState 状态追踪（token_input_total/output_total、token_usage_by_session）；Gateway Client TurnUsage 事件处理；App handle_gateway_event 更新统计；draw_help_bar 显示 `📊 In: 1.2K | Out: 500`；格式化大数字（K/M 后缀）；cargo clippy 0 警告；cargo test 331 tests |
 | v9.2.0 | WebUI Chat Token Usage Display - 网页聊天界面 Token 使用量展示：CSS 样式增强（.token-stats、.token-badge）；JavaScript Token 追踪（全局统计、会话统计）；`turn.usage` SSE 事件处理；聊天工具栏显示实时统计（输入/输出/总计 tokens）；消息后 Token 徽章；事件日志集成；cargo clippy 0 警告；cargo test 331 tests |
 | v9.1.0 | TUI Markdown 渲染 - 终端界面支持 Markdown 格式化输出：新增 `src/tui/markdown.rs` 模块（**bold**、*italic*、`inline code`、```code blocks```、# headers、lists、> blockquotes、[links]）；`draw_messages_panel()` 智能检测 Markdown 类型并分级渲染；8个单元测试；cargo clippy 0 警告；cargo test 331 tests |

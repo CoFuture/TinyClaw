@@ -5,6 +5,7 @@
 use crate::agent::client::Agent;
 use crate::agent::context::{AgentContext, ExecutionState};
 use crate::agent::context_manager::{ContextManager, ContextOptions};
+use crate::agent::context_summarizer::{ContextSummarizer, SummarizerConfig};
 use crate::agent::tools::{ToolExecutor, ToolResult};
 use crate::agent::tool_result_formatter::ToolResultFormatter;
 use crate::agent::turn_log::{TurnLog, TurnLogEntry, TurnAction};
@@ -76,6 +77,7 @@ pub struct AgentRuntime {
     tool_executor: Arc<ToolExecutor>,
     event_emitter: Option<Arc<EventEmitter>>,
     context_manager: RwLock<ContextManager>,
+    summarizer: RwLock<Option<Arc<ContextSummarizer>>>,
 }
 
 #[allow(dead_code)]
@@ -89,6 +91,7 @@ impl AgentRuntime {
             tool_executor,
             event_emitter: None,
             context_manager: RwLock::new(context_manager),
+            summarizer: RwLock::new(None),
         }
     }
 
@@ -108,6 +111,22 @@ impl AgentRuntime {
     /// Get configuration
     pub fn get_config(&self) -> RuntimeConfig {
         self.config.read().clone()
+    }
+
+    /// Set the context summarizer for AI-powered context compression
+    /// When configured, the runtime will use AI summarization instead of simple
+    /// truncation when context exceeds token limits
+    pub fn set_context_summarizer(&self, agent: Arc<Agent>) {
+        let config = SummarizerConfig::default();
+        let summarizer = ContextSummarizer::with_agent(agent);
+        *self.summarizer.write() = Some(Arc::new(summarizer));
+        info!("Context summarizer enabled with config: min_msgs={}, threshold={} tokens",
+              config.min_messages, config.token_threshold);
+    }
+
+    /// Check if context summarizer is enabled
+    pub fn has_summarizer(&self) -> bool {
+        self.summarizer.read().is_some()
     }
 
     /// Execute a complete agent turn with tool calling loop
@@ -335,48 +354,98 @@ impl AgentRuntime {
         // Get conversation history (includes the current user message already added by run_turn)
         let history = context.get_history();
 
-        // Apply context management (truncation if needed)
-        let (truncated_history, current_message) = {
+        // Step 1: Do all synchronous checks first and collect what we need
+        // Check if truncation is needed
+        let needs_truncation = {
             let cm = self.context_manager.read();
-            if cm.needs_truncation(&history) {
-                let truncated = cm.truncate_to_fit(&history);
-                tracing::debug!(
-                    "Context truncated: {} messages -> {} messages",
-                    history.len(),
-                    truncated.len()
-                );
-                // Extract current message (last element) and previous history
-                let current = truncated.last().map(|m| m.content.clone()).unwrap_or_default();
-                let prev_history: Vec<_> = truncated.iter()
-                    .take(truncated.len().saturating_sub(1))
-                    .map(|m| {
-                        let role = match m.role {
-                            crate::types::Role::User => "user",
-                            crate::types::Role::Assistant => "assistant",
-                            crate::types::Role::System => "system",
-                            crate::types::Role::Tool => "tool",
-                        };
-                        (role.to_string(), m.content.clone())
-                    })
-                    .collect();
-                (prev_history, current)
+            cm.needs_truncation(&history)
+        }; // Lock dropped here
+
+        // Check if summarization is available and should be used
+        let summarizer_opt = if needs_truncation {
+            let summarizer_guard = self.summarizer.read();
+            if let Some(summarizer) = summarizer_guard.as_ref() {
+                let estimated_tokens = ContextManager::estimate_messages_tokens(&history);
+                if summarizer.should_summarize(&history, estimated_tokens) {
+                    Some(Arc::clone(summarizer))
+                } else {
+                    None
+                }
             } else {
-                let prev_history: Vec<_> = history.iter()
-                    .take(history.len().saturating_sub(1))
-                    .map(|m| {
-                        let role = match m.role {
-                            crate::types::Role::User => "user",
-                            crate::types::Role::Assistant => "assistant",
-                            crate::types::Role::System => "system",
-                            crate::types::Role::Tool => "tool",
-                        };
-                        (role.to_string(), m.content.clone())
-                    })
-                    .collect();
-                let current = history.last().map(|m| m.content.clone()).unwrap_or_default();
-                (prev_history, current)
+                None
             }
-        }; // Lock guard dropped here
+        } else {
+            None
+        }; // Lock dropped here
+
+        // Step 2: Apply context management (truncation or summarization)
+        let (truncated_history, current_message) = if !needs_truncation {
+            // No truncation needed, use history as-is
+            let prev_history: Vec<_> = history.iter()
+                .take(history.len().saturating_sub(1))
+                .map(|m| {
+                    let role = match m.role {
+                        crate::types::Role::User => "user",
+                        crate::types::Role::Assistant => "assistant",
+                        crate::types::Role::System => "system",
+                        crate::types::Role::Tool => "tool",
+                    };
+                    (role.to_string(), m.content.clone())
+                })
+                .collect();
+            let current = history.last().map(|m| m.content.clone()).unwrap_or_default();
+            (prev_history, current)
+        } else if let Some(summarizer) = summarizer_opt {
+            // Try AI summarization (no locks held at this point)
+            let keep_recent = 5;
+            match summarizer.summarize_messages(&history, keep_recent).await {
+                Ok(Some(summary)) => {
+                    info!(
+                        "Context summarized: {} messages -> summary ({} tokens vs {} original, {:.1}% compression)",
+                        summary.messages_summarized,
+                        summary.summary_tokens,
+                        summary.original_tokens,
+                        summary.compression_ratio() * 100.0
+                    );
+                    // Build history with summary message
+                    let summary_msg = ContextSummarizer::create_summary_message(&summary);
+                    let recent_msgs: Vec<_> = history.iter()
+                        .skip(history.len().saturating_sub(keep_recent))
+                        .cloned()
+                        .collect();
+                    
+                    // Format for response
+                    let mut all_msgs = vec![summary_msg];
+                    all_msgs.extend(recent_msgs);
+                    
+                    let current = all_msgs.last().map(|m| m.content.clone()).unwrap_or_default();
+                    let prev_history: Vec<_> = all_msgs.iter()
+                        .take(all_msgs.len().saturating_sub(1))
+                        .map(|m| {
+                            let role = match m.role {
+                                crate::types::Role::User => "user",
+                                crate::types::Role::Assistant => "assistant",
+                                crate::types::Role::System => "system",
+                                crate::types::Role::Tool => "tool",
+                            };
+                            (role.to_string(), m.content.clone())
+                        })
+                        .collect();
+                    (prev_history, current)
+                }
+                Ok(None) => {
+                    tracing::debug!("Summarization returned None, using fallback truncation");
+                    self.apply_fallback_truncation(&history)
+                }
+                Err(e) => {
+                    warn!("Context summarization failed: {}, falling back to truncation", e);
+                    self.apply_fallback_truncation(&history)
+                }
+            }
+        } else {
+            // No summarization available, use normal truncation
+            self.apply_fallback_truncation(&history)
+        };
 
         // Send to agent with conversation history
         let response_text = context.agent.send_message_with_history(
@@ -391,6 +460,31 @@ impl AgentRuntime {
             tool_calls: None,
             stop_reason: Some("end_turn".to_string()),
         })
+    }
+
+    /// Apply fallback truncation when summarization is not available or fails
+    fn apply_fallback_truncation(&self, history: &[crate::types::Message]) -> (Vec<(String, String)>, String) {
+        let cm = self.context_manager.read();
+        let truncated = cm.truncate_to_fit(history);
+        tracing::debug!(
+            "Context truncated: {} messages -> {} messages",
+            history.len(),
+            truncated.len()
+        );
+        let current = truncated.last().map(|m| m.content.clone()).unwrap_or_default();
+        let prev_history: Vec<_> = truncated.iter()
+            .take(truncated.len().saturating_sub(1))
+            .map(|m| {
+                let role = match m.role {
+                    crate::types::Role::User => "user",
+                    crate::types::Role::Assistant => "assistant",
+                    crate::types::Role::System => "system",
+                    crate::types::Role::Tool => "tool",
+                };
+                (role.to_string(), m.content.clone())
+            })
+            .collect();
+        (prev_history, current)
     }
 
     /// Execute a tool
