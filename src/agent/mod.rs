@@ -14,6 +14,7 @@ pub mod scheduled_task;
 pub mod scheduler;
 pub mod self_evaluation;
 pub mod session_notes;
+pub mod session_quality;
 pub mod skill;
 pub mod skill_manager;
 pub mod skill_registry;
@@ -37,6 +38,8 @@ pub use scheduled_task::ScheduleType;
 pub use scheduler::Scheduler;
 #[allow(unused_imports)]
 pub use self_evaluation::{SelfEvaluation, SelfEvaluationEngine, SelfEvaluationManager, SelfEvaluationStats, SelfEvaluationSummary, DimensionScore, EvaluationDimension};
+#[allow(unused_imports)]
+pub use session_quality::{DetectedIssue, QualityIssue, SessionQuality, SessionQualityAnalyzer, SessionQualityManager, SessionQualitySummary, QualityStats};
 pub use session_notes::{SessionNoteUpdate, SessionNotesManager};
 #[allow(unused_imports)]
 pub use session_notes::{SessionNote, SessionNoteSummary};

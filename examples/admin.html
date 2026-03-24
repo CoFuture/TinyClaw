@@ -2008,6 +2008,56 @@
             </div>
         </div>
 
+        <!-- Session Quality Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📊 会话质量分析 <span class="tool-count-badge" id="sessionQualityCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">分析会话整体质量：任务完成率、响应效率、工具成功率、问题检测</p>
+            <div style="margin-bottom: 15px;">
+                <select id="sessionQualitySession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-right: 10px;" onchange="loadSessionQuality()">
+                    <option value="">选择会话</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadSessionQualityList()">🔄 刷新</button>
+            </div>
+
+            <!-- Session Quality Stats Cards -->
+            <div id="sessionQualityCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">质量评分</div>
+                    <div style="color: #00d9ff; font-size: 24px; font-weight: bold;" id="sqScore">-</div>
+                </div>
+                <div style="background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">任务完成率</div>
+                    <div style="color: #00ff88; font-size: 24px; font-weight: bold;" id="sqTaskRate">-</div>
+                </div>
+                <div style="background: rgba(255,183,77,0.1); border: 1px solid rgba(255,183,77,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">工具成功率</div>
+                    <div style="color: #ffb74d; font-size: 24px; font-weight: bold;" id="sqToolRate">-</div>
+                </div>
+                <div style="background: rgba(186,104,200,0.1); border: 1px solid rgba(186,104,200,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">平均响应</div>
+                    <div style="color: #ba68c8; font-size: 24px; font-weight: bold;" id="sqAvgTime">-</div>
+                </div>
+            </div>
+
+            <!-- Rating -->
+            <div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <span style="color: #888; font-size: 12px; margin-right: 10px;">评分:</span>
+                <span id="sqRating" style="font-size: 18px;">-</span>
+            </div>
+
+            <!-- Issues -->
+            <div id="sessionQualityIssues" style="margin-bottom: 15px;">
+                <div style="color: #888; font-size: 12px; margin-bottom: 8px;">检测到的问题:</div>
+                <div id="sqIssuesList" style="color: #666; font-size: 13px;">加载中...</div>
+            </div>
+
+            <!-- Suggestions -->
+            <div id="sessionQualitySuggestions">
+                <div style="color: #888; font-size: 12px; margin-bottom: 8px;">改进建议:</div>
+                <div id="sqSuggestionsList" style="color: #00ff88; font-size: 13px;">加载中...</div>
+            </div>
+        </div>
+
         <!-- Conversation Summary Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>💬 会话摘要 <span class="tool-count-badge" id="conversationTurnCount">-</span></h2>
@@ -2301,6 +2351,13 @@
                     loadEvaluations();
                 } catch (e) {
                     // Evaluations API might not be available
+                }
+                
+                // Fetch session quality analysis
+                try {
+                    loadSessionQualityList();
+                } catch (e) {
+                    // Session quality API might not be available
                 }
                 
                 // Fetch conversation summary session list and load current summary
@@ -3098,6 +3155,101 @@
             } catch (e) {
                 console.error('Failed to load evaluations for session:', e);
                 listContainer.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center; padding: 40px;">加载失败</div>';
+            }
+        }
+        
+        // Session Quality Functions
+        
+        async function loadSessionQualityList() {
+            try {
+                const res = await fetch(`${API_BASE}/api/sessions/quality/list`);
+                if (!res.ok) throw new Error('加载失败');
+                
+                const data = await res.json();
+                const sessions = data.sessions || [];
+                
+                document.getElementById('sessionQualityCount').textContent = sessions.length;
+                
+                // Update session dropdown
+                const sessionSelect = document.getElementById('sessionQualitySession');
+                const currentValue = sessionSelect.value;
+                sessionSelect.innerHTML = '<option value="">选择会话</option>';
+                sessions.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.sessionId;
+                    opt.textContent = `${s.sessionId} (${(s.qualityScore * 100).toFixed(0)}%) - ${s.turnCount} turns`;
+                    if (s.sessionId === currentValue) opt.selected = true;
+                    sessionSelect.appendChild(opt);
+                });
+                
+                // Auto-select first session if none selected
+                if (!currentValue && sessions.length > 0) {
+                    sessionSelect.value = sessions[0].sessionId;
+                    loadSessionQuality();
+                }
+            } catch (e) {
+                console.error('Failed to load session quality list:', e);
+            }
+        }
+        
+        async function loadSessionQuality() {
+            const sessionSelect = document.getElementById('sessionQualitySession');
+            const sessionId = sessionSelect.value;
+            
+            if (!sessionId) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/quality`);
+                if (!res.ok) throw new Error('加载失败');
+                
+                const data = await res.json();
+                const quality = data.quality;
+                
+                if (!quality) {
+                    return;
+                }
+                
+                // Update stats cards
+                document.getElementById('sqScore').textContent = (quality.quality_score * 100).toFixed(0) + '%';
+                document.getElementById('sqTaskRate').textContent = (quality.task_completion_rate * 100).toFixed(0) + '%';
+                document.getElementById('sqToolRate').textContent = (quality.tool_success_rate * 100).toFixed(0) + '%';
+                document.getElementById('sqAvgTime').textContent = quality.avg_response_time_ms + 'ms';
+                
+                // Update rating
+                const rating = quality.rating || 0;
+                const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+                document.getElementById('sqRating').textContent = stars;
+                document.getElementById('sqRating').style.color = rating >= 4 ? '#00ff88' : rating >= 3 ? '#ffb74d' : '#ff4757';
+                
+                // Update issues
+                const issuesList = document.getElementById('sqIssuesList');
+                if (quality.issues && quality.issues.length > 0) {
+                    const severityColors = {1: '#4fc3f7', 2: '#ffb74d', 3: '#ff9800', 4: '#ff5722', 5: '#f44336'};
+                    issuesList.innerHTML = quality.issues.map(issue => {
+                        const color = severityColors[issue.severity] || '#ffb74d';
+                        return `<div style="margin-bottom: 6px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; border-left: 3px solid ${color};">
+                            <span style="color: ${color}; font-weight: bold;">${issue.issue_type}</span>
+                            <span style="color: #888; font-size: 11px; margin-left: 8px;">${issue.description}</span>
+                        </div>`;
+                    }).join('');
+                } else {
+                    issuesList.innerHTML = '<div style="color: #00ff88;">✓ 未检测到问题</div>';
+                }
+                
+                // Update suggestions
+                const suggestionsList = document.getElementById('sqSuggestionsList');
+                if (quality.suggestions && quality.suggestions.length > 0) {
+                    suggestionsList.innerHTML = quality.suggestions.map(s => 
+                        `<div style="margin-bottom: 4px;">• ${s}</div>`
+                    ).join('');
+                } else {
+                    suggestionsList.innerHTML = '<div style="color: #888;">暂无建议</div>';
+                }
+                
+            } catch (e) {
+                console.error('Failed to load session quality:', e);
             }
         }
         

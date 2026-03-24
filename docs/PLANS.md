@@ -74,6 +74,41 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.1.0 (已完成 ✅)
+
+**完成事项**:
+- **Session Quality Analysis** - 会话质量分析系统
+  - **新增模块** `agent/session_quality.rs`：
+    - `SessionQuality` 结构：会话整体质量数据
+    - `QualityIssue` 枚举：7 种问题类型（重复提问、工具错误、Token 过高、响应缓慢、成功率低、工具低效、用户不满）
+    - `SessionQualityAnalyzer`：分析引擎
+    - `SessionQualityManager`：管理器（支持缓存）
+  - **分析维度**：
+    - 任务完成率（权重 30%）
+    - 响应质量（权重 25%）
+    - 执行效率（权重 20%）
+    - 工具成功率（权重 25%）
+  - **问题检测**：7 种问题自动检测，按严重程度排序
+  - **质量评分**：0-100 分，转换为 1-5 星评级
+  - **HTTP API 端点**：
+    - `GET /api/sessions/{session_id}/quality` - 获取会话质量分析
+    - `GET /api/sessions/quality/list` - 获取所有会话质量列表
+  - **WebUI 面板**：
+    - 统计卡片：质量评分、任务完成率、工具成功率、平均响应时间
+    - 星级评分显示
+    - 检测到的问题列表（按严重程度排序）
+    - 改进建议列表
+  - **7 个新测试**：覆盖分析引擎、问题检测、评分计算
+- **turn_history.rs 新增方法**：
+  - `get_sessions_with_turns()` - 获取有历史记录的会话列表
+  - `get_turn_records()` - 获取完整的 TurnRecord 列表
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 358 tests
+
+**下一步**: 更多 Agent 能力增强、交互体验优化
+
+---
+
 ### v11.0.0 (已完成 ✅)
 
 **完成事项**:

@@ -858,6 +858,10 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/evaluations/stats", get(evaluations_stats))
         .route("/api/evaluations/session/{session_id}", get(evaluations_for_session))
         .route("/api/evaluations/turn/{turn_id}", get(evaluation_for_turn))
+        // Session quality API - session-level quality analysis
+        .route("/api/sessions/{session_id}/quality", get(session_quality_get))
+        .route("/api/sessions/{session_id}/quality", axum::routing::delete(session_quality_invalidate))
+        .route("/api/sessions/quality/list", get(session_quality_list))
         // Conversation summary API - transient conversation state tracking
         .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
         // Summarizer config and history API
@@ -1871,6 +1875,81 @@ async fn evaluation_for_turn(
             "error": "Evaluation not found",
         })),
     }
+}
+
+// ============================================================
+// Session Quality API Endpoints
+// ============================================================
+
+/// Get session quality analysis
+async fn session_quality_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    // Get turn history for this session
+    let turns = state.turn_history.get_turn_records(&session_id);
+    
+    // Get evaluations for this session
+    let evaluations = state.self_evaluation_manager.get_by_session(&session_id);
+    
+    // Analyze session quality
+    let quality = crate::agent::SessionQualityAnalyzer::analyze_session(&session_id, &turns, &evaluations);
+    
+    Json(serde_json::json!({
+        "success": true,
+        "quality": quality,
+    }))
+}
+
+/// Invalidate cached session quality
+async fn session_quality_invalidate(
+    State(_state): State<Arc<HttpState>>,
+    axum::extract::Path(_session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    // Currently no caching, so just return success
+    Json(serde_json::json!({
+        "success": true,
+        "message": "Session quality cache cleared (not implemented yet)",
+    }))
+}
+
+/// Get session quality summary list for all sessions
+async fn session_quality_list(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    // Get all sessions with turns
+    let sessions = state.turn_history.get_sessions_with_turns();
+    
+    let mut qualities = Vec::new();
+    
+    for session_id in sessions {
+        let turns = state.turn_history.get_turn_records(&session_id);
+        let evaluations = state.self_evaluation_manager.get_by_session(&session_id);
+        
+        let quality = crate::agent::SessionQualityAnalyzer::analyze_session(&session_id, &turns, &evaluations);
+        
+        qualities.push(serde_json::json!({
+            "sessionId": quality.session_id,
+            "qualityScore": quality.quality_score,
+            "turnCount": quality.turn_count,
+            "issueCount": quality.issues.len(),
+            "rating": quality.rating,
+            "lastActivity": quality.last_activity,
+        }));
+    }
+    
+    // Sort by quality score descending
+    qualities.sort_by(|a, b| {
+        let score_a = a.get("qualityScore").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let score_b = b.get("qualityScore").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    
+    Json(serde_json::json!({
+        "success": true,
+        "sessions": qualities,
+        "count": qualities.len(),
+    }))
 }
 
 // ============================================================

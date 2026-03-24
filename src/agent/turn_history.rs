@@ -455,12 +455,22 @@ impl TurnHistoryManager {
         );
     }
 
-    /// Get turns for a session
+    /// Get turns for a session (summaries)
     pub fn get_turns(&self, session_id: &str) -> Vec<TurnSummary> {
         let records = self.records.read();
         records
             .get(session_id)
             .map(|r| r.iter().map(|t| t.summary()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Get full turn records for a session (for analysis)
+    #[allow(dead_code)]
+    pub fn get_turn_records(&self, session_id: &str) -> Vec<TurnRecord> {
+        let records = self.records.read();
+        records
+            .get(session_id)
+            .cloned()
             .unwrap_or_default()
     }
 
@@ -495,6 +505,16 @@ impl TurnHistoryManager {
         records
             .iter()
             .map(|(session_id, turns)| (session_id.clone(), turns.clone()))
+            .collect()
+    }
+
+    /// Get list of session IDs that have turns
+    #[allow(dead_code)]
+    pub fn get_sessions_with_turns(&self) -> Vec<String> {
+        let records = self.records.read();
+        records
+            .keys()
+            .cloned()
             .collect()
     }
 
