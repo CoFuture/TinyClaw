@@ -847,6 +847,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/stats", get(turns_stats))
         .route("/api/turns/stats/period", get(turns_stats_period))
         .route("/api/turns/export", get(turns_export))
+        // Tool performance statistics
+        .route("/api/tools/stats", get(tool_stats))
         // Conversation summary API - transient conversation state tracking
         .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
         // Summarizer config and history API
@@ -1790,6 +1792,16 @@ async fn turns_export(
         .header(header::CONTENT_TYPE, "application/json")
         .body(axum::body::Body::from(json))
         .unwrap()
+}
+
+/// Get tool performance statistics
+async fn tool_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.turn_history.get_tool_stats();
+    Json(serde_json::json!({
+        "stats": stats,
+    }))
 }
 
 // ============================================================

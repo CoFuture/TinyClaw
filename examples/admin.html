@@ -1632,6 +1632,56 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
+        
+        /* Tool Performance Table */
+        .tool-performance-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .tool-performance-table th {
+            background: rgba(0,0,0,0.3);
+            color: #888;
+            font-size: 11px;
+            font-weight: normal;
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            position: sticky;
+            top: 0;
+        }
+        .tool-performance-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 12px;
+        }
+        .tool-performance-table tr:hover {
+            background: rgba(0,217,255,0.05);
+        }
+        .tool-name {
+            color: #00d9ff;
+            font-weight: 500;
+        }
+        .success-rate-high {
+            color: #00ff88;
+        }
+        .success-rate-medium {
+            color: #ffb74d;
+        }
+        .success-rate-low {
+            color: #ff4757;
+        }
+        .duration-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .duration-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -1883,6 +1933,40 @@
                 <button class="btn btn-secondary" onclick="exportTurnHistory()">📥 导出</button>
             </div>
             <div class="turn-history-panel" id="turnHistoryPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
+            </div>
+        </div>
+
+        <!-- Tool Performance Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🔧 工具性能分析 <span class="tool-count-badge" id="toolPerformanceCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">追踪工具执行成功率、平均耗时，识别问题工具</p>
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-secondary" onclick="loadToolStats()">🔄 刷新</button>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div id="toolStatsCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">总执行次数</div>
+                    <div style="color: #00d9ff; font-size: 24px; font-weight: bold;" id="toolStatTotalExec">-</div>
+                </div>
+                <div style="background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">整体成功率</div>
+                    <div style="color: #00ff88; font-size: 24px; font-weight: bold;" id="toolStatSuccessRate">-</div>
+                </div>
+                <div style="background: rgba(255,183,77,0.1); border: 1px solid rgba(255,183,77,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">平均耗时</div>
+                    <div style="color: #ffb74d; font-size: 24px; font-weight: bold;" id="toolStatAvgDuration">-</div>
+                </div>
+                <div style="background: rgba(186,104,200,0.1); border: 1px solid rgba(186,104,200,0.3); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 4px;">工具数量</div>
+                    <div style="color: #ba68c8; font-size: 24px; font-weight: bold;" id="toolStatToolCount">-</div>
+                </div>
+            </div>
+            
+            <!-- Tool Performance Table -->
+            <div id="toolPerformanceTable" style="max-height: 400px; overflow-y: auto;">
                 <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
             </div>
         </div>
@@ -2166,6 +2250,13 @@
                     loadTurnStats();
                 } catch (e) {
                     // Turn stats API might not be available
+                }
+                
+                // Fetch tool performance statistics
+                try {
+                    loadToolStats();
+                } catch (e) {
+                    // Tool stats API might not be available
                 }
                 
                 // Fetch conversation summary session list and load current summary
@@ -2680,6 +2771,92 @@
                 console.error('Failed to load turn stats:', e);
                 document.getElementById('statTotalTurns').textContent = '!';
                 document.getElementById('turnStatsChart').innerHTML = '<div style="color: #ff4757; text-align: center; width: 100%; font-size: 12px;">加载失败</div>';
+            }
+        }
+        
+        // Tool Performance Statistics
+        
+        async function loadToolStats() {
+            const countBadge = document.getElementById('toolPerformanceCount');
+            const tableContainer = document.getElementById('toolPerformanceTable');
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/tools/stats`);
+                if (!res.ok) throw new Error('加载失败');
+                
+                const data = await res.json();
+                const stats = data.stats;
+                
+                // Update summary cards
+                document.getElementById('toolStatTotalExec').textContent = stats.total_executions || 0;
+                document.getElementById('toolStatSuccessRate').textContent = stats.overall_success_rate 
+                    ? `${(stats.overall_success_rate * 100).toFixed(1)}%` 
+                    : '-';
+                document.getElementById('toolStatAvgDuration').textContent = stats.avg_execution_ms 
+                    ? `${Math.round(stats.avg_execution_ms)}ms` 
+                    : '-';
+                document.getElementById('toolStatToolCount').textContent = stats.tools?.length || 0;
+                
+                countBadge.textContent = stats.total_executions || 0;
+                
+                // Render tool performance table
+                const tools = stats.tools || [];
+                
+                if (tools.length === 0) {
+                    tableContainer.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 40px;">暂无工具执行数据</div>';
+                    return;
+                }
+                
+                // Find max duration for scaling the bar
+                const maxDuration = Math.max(...tools.map(t => t.avg_duration_ms), 1);
+                
+                const html = `
+                    <table class="tool-performance-table">
+                        <thead>
+                            <tr>
+                                <th>工具名称</th>
+                                <th>调用次数</th>
+                                <th>成功次数</th>
+                                <th>成功率</th>
+                                <th>平均耗时</th>
+                                <th>耗时范围</th>
+                                <th>耗时分布</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tools.map(tool => {
+                                const successRate = tool.success_rate || 0;
+                                const rateClass = successRate >= 0.8 ? 'success-rate-high' : 
+                                                 successRate >= 0.5 ? 'success-rate-medium' : 'success-rate-low';
+                                const rateColor = successRate >= 0.8 ? '#00ff88' : 
+                                                 successRate >= 0.5 ? '#ffb74d' : '#ff4757';
+                                const barWidth = Math.round((tool.avg_duration_ms / maxDuration) * 100);
+                                
+                                return `
+                                    <tr>
+                                        <td><span class="tool-name">${tool.tool_name}</span></td>
+                                        <td>${tool.total_calls}</td>
+                                        <td>${tool.successful_calls}</td>
+                                        <td><span class="${rateClass}">${(successRate * 100).toFixed(1)}%</span></td>
+                                        <td>${Math.round(tool.avg_duration_ms)}ms</td>
+                                        <td>${tool.min_duration_ms}ms - ${tool.max_duration_ms}ms</td>
+                                        <td style="width: 120px;">
+                                            <div class="duration-bar">
+                                                <div class="duration-bar-fill" style="width: ${barWidth}%; background: ${rateColor};"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                tableContainer.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load tool stats:', e);
+                countBadge.textContent = '!';
+                tableContainer.innerHTML = '<div style="color: #ff4757; font-size: 12px; text-align: center; padding: 40px;">加载失败</div>';
             }
         }
         

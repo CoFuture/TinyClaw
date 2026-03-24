@@ -175,6 +175,78 @@ pub struct TurnStats {
     pub period_stats: Vec<PeriodStat>,
 }
 
+/// Per-tool performance statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolStats {
+    /// Tool name
+    pub tool_name: String,
+    /// Total number of calls
+    pub total_calls: u64,
+    /// Number of successful calls
+    pub successful_calls: u64,
+    /// Success rate (0.0 - 1.0)
+    pub success_rate: f64,
+    /// Average execution duration in ms
+    pub avg_duration_ms: f64,
+    /// Minimum execution duration in ms
+    pub min_duration_ms: u64,
+    /// Maximum execution duration in ms
+    pub max_duration_ms: u64,
+    /// Total execution duration in ms (for calculating average)
+    total_duration_ms: u64,
+}
+
+impl ToolStats {
+    /// Create a new tool stats tracker for a tool
+    pub fn new(tool_name: String) -> Self {
+        Self {
+            tool_name,
+            total_calls: 0,
+            successful_calls: 0,
+            success_rate: 0.0,
+            avg_duration_ms: 0.0,
+            min_duration_ms: u64::MAX,
+            max_duration_ms: 0,
+            total_duration_ms: 0,
+        }
+    }
+
+    /// Record a tool execution
+    pub fn record_execution(&mut self, duration_ms: u64, success: bool) {
+        self.total_calls += 1;
+        if success {
+            self.successful_calls += 1;
+        }
+        self.total_duration_ms += duration_ms;
+        self.min_duration_ms = self.min_duration_ms.min(duration_ms);
+        self.max_duration_ms = self.max_duration_ms.max(duration_ms);
+        
+        // Calculate averages
+        if self.total_calls > 0 {
+            self.avg_duration_ms = self.total_duration_ms as f64 / self.total_calls as f64;
+            self.success_rate = self.successful_calls as f64 / self.total_calls as f64;
+        }
+        
+        // Handle edge case of min
+        if self.total_calls == 1 {
+            self.min_duration_ms = duration_ms;
+        }
+    }
+}
+
+/// All tool performance statistics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ToolPerformanceStats {
+    /// Per-tool statistics (sorted by total_calls descending)
+    pub tools: Vec<ToolStats>,
+    /// Total tool executions across all tools
+    pub total_executions: u64,
+    /// Overall success rate
+    pub overall_success_rate: f64,
+    /// Average execution time across all tools
+    pub avg_execution_ms: f64,
+}
+
 /// Statistics for a single time period
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeriodStat {
@@ -531,6 +603,56 @@ impl TurnHistoryManager {
         }
     }
 
+    /// Get per-tool performance statistics
+    pub fn get_tool_stats(&self) -> ToolPerformanceStats {
+        let records = self.records.read();
+        
+        // Aggregate tool stats by tool name
+        let mut tool_stats_map: HashMap<String, ToolStats> = HashMap::new();
+        let mut total_executions: u64 = 0;
+        let mut total_successful: u64 = 0;
+        let mut total_duration_ms: u64 = 0;
+        
+        for turn in records.values().flatten() {
+            for tool in &turn.tools {
+                total_executions += 1;
+                total_duration_ms += tool.duration_ms;
+                if tool.success {
+                    total_successful += 1;
+                }
+                
+                tool_stats_map
+                    .entry(tool.name.clone())
+                    .or_insert_with(|| ToolStats::new(tool.name.clone()))
+                    .record_execution(tool.duration_ms, tool.success);
+            }
+        }
+        
+        // Sort by total_calls descending
+        let mut tools: Vec<ToolStats> = tool_stats_map.into_values().collect();
+        tools.sort_by(|a, b| b.total_calls.cmp(&a.total_calls));
+        
+        // Calculate overall stats
+        let overall_success_rate = if total_executions > 0 {
+            total_successful as f64 / total_executions as f64
+        } else {
+            0.0
+        };
+        
+        let avg_execution_ms = if total_executions > 0 {
+            total_duration_ms as f64 / total_executions as f64
+        } else {
+            0.0
+        };
+        
+        ToolPerformanceStats {
+            tools,
+            total_executions,
+            overall_success_rate,
+            avg_execution_ms,
+        }
+    }
+
     /// Clear turns for a session
     #[allow(dead_code)]
     pub fn clear_session(&self, session_id: &str) {
@@ -669,5 +791,132 @@ mod tests {
         
         let turns = manager.get_turns("session-1");
         assert_eq!(turns.len(), 5);
+    }
+
+    #[test]
+    fn test_tool_stats_recording() {
+        let mut stats = ToolStats::new("read_file".to_string());
+        
+        // Record successful execution
+        stats.record_execution(50, true);
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.successful_calls, 1);
+        assert!((stats.success_rate - 1.0).abs() < 0.001);
+        assert!((stats.avg_duration_ms - 50.0).abs() < 0.001);
+        assert_eq!(stats.min_duration_ms, 50);
+        assert_eq!(stats.max_duration_ms, 50);
+        
+        // Record failed execution
+        stats.record_execution(100, false);
+        assert_eq!(stats.total_calls, 2);
+        assert_eq!(stats.successful_calls, 1);
+        assert!((stats.success_rate - 0.5).abs() < 0.001);
+        assert!((stats.avg_duration_ms - 75.0).abs() < 0.001);
+        assert_eq!(stats.min_duration_ms, 50);
+        assert_eq!(stats.max_duration_ms, 100);
+    }
+
+    #[test]
+    fn test_tool_stats_empty() {
+        let stats = ToolStats::new("nonexistent".to_string());
+        assert_eq!(stats.total_calls, 0);
+        assert!((stats.success_rate - 0.0).abs() < 0.001);
+        assert!((stats.avg_duration_ms - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_get_tool_stats() {
+        let manager = TurnHistoryManager::new();
+        
+        // Add turns with different tools
+        let mut turn1 = TurnRecord::new("session-1", "Read a file");
+        turn1.add_tool(ToolExecution {
+            name: "read_file".to_string(),
+            input: serde_json::json!({"path": "/tmp/test.txt"}),
+            output_preview: "file content".to_string(),
+            success: true,
+            duration_ms: 50,
+        });
+        turn1 = turn1.with_response("File content").with_duration(100);
+        manager.record(turn1);
+        
+        let mut turn2 = TurnRecord::new("session-1", "Write a file");
+        turn2.add_tool(ToolExecution {
+            name: "write_file".to_string(),
+            input: serde_json::json!({"path": "/tmp/out.txt", "content": "hello"}),
+            output_preview: "Written 5 bytes".to_string(),
+            success: true,
+            duration_ms: 30,
+        });
+        turn2.add_tool(ToolExecution {
+            name: "read_file".to_string(),
+            input: serde_json::json!({"path": "/tmp/out.txt"}),
+            output_preview: "hello".to_string(),
+            success: false,
+            duration_ms: 200, // Failed read
+        });
+        turn2 = turn2.with_response("Done").with_duration(300);
+        manager.record(turn2);
+        
+        let tool_stats = manager.get_tool_stats();
+        
+        // Should have 2 tools: read_file (2 calls) and write_file (1 call)
+        assert_eq!(tool_stats.total_executions, 3);
+        assert!((tool_stats.overall_success_rate - 0.666).abs() < 0.01); // 2/3 successful
+        
+        let read_file_stats = tool_stats.tools.iter().find(|t| t.tool_name == "read_file").unwrap();
+        assert_eq!(read_file_stats.total_calls, 2);
+        assert_eq!(read_file_stats.successful_calls, 1);
+        assert!((read_file_stats.success_rate - 0.5).abs() < 0.001);
+        assert!((read_file_stats.avg_duration_ms - 125.0).abs() < 0.001); // (50+200)/2
+        assert_eq!(read_file_stats.min_duration_ms, 50);
+        assert_eq!(read_file_stats.max_duration_ms, 200);
+        
+        let write_file_stats = tool_stats.tools.iter().find(|t| t.tool_name == "write_file").unwrap();
+        assert_eq!(write_file_stats.total_calls, 1);
+        assert_eq!(write_file_stats.successful_calls, 1);
+        assert!((write_file_stats.success_rate - 1.0).abs() < 0.001);
+        assert!((write_file_stats.avg_duration_ms - 30.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_tool_stats_sorted_by_usage() {
+        let manager = TurnHistoryManager::new();
+        
+        // Add multiple tools with different usage counts
+        for i in 0..5 {
+            let mut turn = TurnRecord::new("session-1", format!("Turn {}", i));
+            turn.add_tool(ToolExecution {
+                name: "grep".to_string(),
+                input: serde_json::json!({"pattern": "test"}),
+                output_preview: "found 3 matches".to_string(),
+                success: true,
+                duration_ms: 20,
+            });
+            turn = turn.with_response("Found").with_duration(50);
+            manager.record(turn);
+        }
+        
+        for i in 0..3 {
+            let mut turn = TurnRecord::new("session-1", format!("Turn2 {}", i));
+            turn.add_tool(ToolExecution {
+                name: "read_file".to_string(),
+                input: serde_json::json!({"path": "/tmp/test.txt"}),
+                output_preview: "content".to_string(),
+                success: true,
+                duration_ms: 30,
+            });
+            turn = turn.with_response("Read").with_duration(60);
+            manager.record(turn);
+        }
+        
+        let tool_stats = manager.get_tool_stats();
+        
+        // Should be sorted by total_calls descending
+        assert_eq!(tool_stats.tools.len(), 2);
+        assert_eq!(tool_stats.tools[0].tool_name, "grep"); // 5 calls
+        assert_eq!(tool_stats.tools[0].total_calls, 5);
+        assert_eq!(tool_stats.tools[1].tool_name, "read_file"); // 3 calls
+        assert_eq!(tool_stats.tools[1].total_calls, 3);
     }
 }
