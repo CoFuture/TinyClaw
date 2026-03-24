@@ -849,6 +849,12 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/export", get(turns_export))
         // Conversation summary API - transient conversation state tracking
         .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
+        // Summarizer config and history API
+        .route("/api/summarizer/config", get(summarizer_config_get))
+        .route("/api/summarizer/config", axum::routing::patch(summarizer_config_update))
+        .route("/api/summarizer/history", get(summarizer_history_list))
+        .route("/api/summarizer/stats", get(summarizer_stats))
+        .route("/api/summarizer/session/{session_id}", get(summarizer_history_session))
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -1889,5 +1895,106 @@ async fn suggestions_dismiss(
         "success": dismissed,
         "sessionId": session_id,
         "suggestionId": suggestion_id,
+    }))
+}
+
+// ============================================================================
+// Summarizer Configuration and History API
+// ============================================================================
+
+/// Get current summarizer configuration
+async fn summarizer_config_get(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let config = state.agent.get_summarizer_config();
+    Json(serde_json::json!({
+        "config": {
+            "minMessages": config.min_messages,
+            "tokenThreshold": config.token_threshold,
+            "enabled": config.enabled,
+        }
+    }))
+}
+
+/// Update summarizer configuration
+async fn summarizer_config_update(
+    State(state): State<Arc<HttpState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let min_messages = payload.get("minMessages").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let token_threshold = payload.get("tokenThreshold").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let enabled = payload.get("enabled").and_then(|v| v.as_bool());
+
+    let updated = state.agent.update_summarizer_config(min_messages, token_threshold, enabled);
+    Json(serde_json::json!({
+        "config": {
+            "minMessages": updated.min_messages,
+            "tokenThreshold": updated.token_threshold,
+            "enabled": updated.enabled,
+        }
+    }))
+}
+
+/// Get summary history statistics
+async fn summarizer_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.agent.get_summary_stats();
+    Json(serde_json::json!({
+        "stats": {
+            "totalSummaries": stats.total_summaries,
+            "totalMessagesSummarized": stats.total_messages_summarized,
+            "avgCompressionRatio": stats.avg_compression_ratio,
+            "sessionsCount": stats.sessions_count,
+        }
+    }))
+}
+
+/// Get recent summary history
+async fn summarizer_history_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let limit: usize = params.get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100);
+    
+    let history = state.agent.get_summary_history(limit);
+    let entries: Vec<_> = history.into_iter().map(|e| serde_json::json!({
+        "sessionId": e.session_id,
+        "messagesSummarized": e.messages_summarized,
+        "originalTokens": e.original_tokens,
+        "summaryTokens": e.summary_tokens,
+        "compressionRatio": e.compression_ratio,
+        "topics": e.topics,
+        "createdAt": e.created_at.to_rfc3339(),
+    })).collect();
+    
+    Json(serde_json::json!({
+        "entries": entries,
+        "count": entries.len(),
+    }))
+}
+
+/// Get summary history for a specific session
+async fn summarizer_history_session(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let history = state.agent.get_session_summary_history(&session_id);
+    let entries: Vec<_> = history.into_iter().map(|e| serde_json::json!({
+        "sessionId": e.session_id,
+        "messagesSummarized": e.messages_summarized,
+        "originalTokens": e.original_tokens,
+        "summaryTokens": e.summary_tokens,
+        "compressionRatio": e.compression_ratio,
+        "topics": e.topics,
+        "createdAt": e.created_at.to_rfc3339(),
+    })).collect();
+    
+    Json(serde_json::json!({
+        "sessionId": session_id,
+        "entries": entries,
+        "count": entries.len(),
     }))
 }

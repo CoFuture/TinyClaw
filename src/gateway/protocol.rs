@@ -305,6 +305,14 @@ pub mod methods {
     pub const SESSION_SUGGESTIONS_ACCEPT: &str = "session.suggestions.accept";
     /// Session suggestion dismiss
     pub const SESSION_SUGGESTIONS_DISMISS: &str = "session.suggestions.dismiss";
+    /// Summarizer config get
+    pub const SUMMARIZER_CONFIG_GET: &str = "summarizer.config.get";
+    /// Summarizer config set
+    pub const SUMMARIZER_CONFIG_SET: &str = "summarizer.config.set";
+    /// Summarizer history list
+    pub const SUMMARIZER_HISTORY_LIST: &str = "summarizer.history.list";
+    /// Summarizer stats get
+    pub const SUMMARIZER_STATS: &str = "summarizer.stats";
 }
 
 /// Event types for notifications

@@ -129,6 +129,22 @@ impl AgentRuntime {
         self.summarizer.read().is_some()
     }
 
+    /// Get the current summarizer configuration
+    pub fn get_summarizer_config(&self) -> Option<SummarizerConfig> {
+        self.summarizer.read().as_ref().map(|s| s.config())
+    }
+
+    /// Update the summarizer configuration
+    pub fn update_summarizer_config(&self, min_messages: Option<usize>, token_threshold: Option<usize>, enabled: Option<bool>) -> bool {
+        let guard = self.summarizer.read();
+        if let Some(summarizer) = guard.as_ref() {
+            summarizer.update_config(min_messages, token_threshold, enabled);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Execute a complete agent turn with tool calling loop
     pub async fn run_turn(
         &self,

@@ -189,6 +189,10 @@ pub async fn handle_request(
         methods::SESSION_SUGGESTIONS_LIST => handle_session_suggestions_list(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_SUGGESTIONS_ACCEPT => handle_session_suggestions_accept(ctx, jsonrpc_id.clone(), params).await,
         methods::SESSION_SUGGESTIONS_DISMISS => handle_session_suggestions_dismiss(ctx, jsonrpc_id.clone(), params).await,
+        methods::SUMMARIZER_CONFIG_GET => handle_summarizer_config_get(ctx, jsonrpc_id.clone(), params).await,
+        methods::SUMMARIZER_CONFIG_SET => handle_summarizer_config_set(ctx, jsonrpc_id.clone(), params).await,
+        methods::SUMMARIZER_HISTORY_LIST => handle_summarizer_history_list(ctx, jsonrpc_id.clone(), params).await,
+        methods::SUMMARIZER_STATS => handle_summarizer_stats(ctx, jsonrpc_id.clone(), params).await,
         
         _ => Err(Error::Protocol(format!("Unknown method: {}", method))),
     };
@@ -1640,6 +1644,92 @@ async fn handle_session_suggestions_dismiss(
         "success": dismissed,
         "sessionId": session_id,
         "suggestionId": suggestion_id,
+    }))
+}
+
+// ============================================================================
+// Summarizer Configuration and History Handlers
+// ============================================================================
+
+/// Handle summarizer.config.get - Get current summarizer configuration
+async fn handle_summarizer_config_get(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    _params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let config = ctx.agent.get_summarizer_config();
+    Ok(serde_json::json!({
+        "config": {
+            "minMessages": config.min_messages,
+            "tokenThreshold": config.token_threshold,
+            "enabled": config.enabled,
+        }
+    }))
+}
+
+/// Handle summarizer.config.set - Update summarizer configuration
+async fn handle_summarizer_config_set(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let min_messages = params.get("minMessages").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let token_threshold = params.get("tokenThreshold").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let enabled = params.get("enabled").and_then(|v| v.as_bool());
+
+    let updated = ctx.agent.update_summarizer_config(min_messages, token_threshold, enabled);
+    
+    Ok(serde_json::json!({
+        "config": {
+            "minMessages": updated.min_messages,
+            "tokenThreshold": updated.token_threshold,
+            "enabled": updated.enabled,
+        }
+    }))
+}
+
+/// Handle summarizer.history.list - Get recent summary history
+async fn handle_summarizer_history_list(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let limit: usize = params.get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(100);
+    
+    let history = ctx.agent.get_summary_history(limit);
+    let entries: Vec<_> = history.into_iter().map(|e| serde_json::json!({
+        "sessionId": e.session_id,
+        "messagesSummarized": e.messages_summarized,
+        "originalTokens": e.original_tokens,
+        "summaryTokens": e.summary_tokens,
+        "compressionRatio": e.compression_ratio,
+        "topics": e.topics,
+        "createdAt": e.created_at.to_rfc3339(),
+    })).collect();
+    
+    Ok(serde_json::json!({
+        "entries": entries,
+        "count": entries.len(),
+    }))
+}
+
+/// Handle summarizer.stats - Get summary statistics
+async fn handle_summarizer_stats(
+    ctx: &HandlerContext,
+    _id: Option<String>,
+    _params: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let stats = ctx.agent.get_summary_stats();
+    Ok(serde_json::json!({
+        "stats": {
+            "totalSummaries": stats.total_summaries,
+            "totalMessagesSummarized": stats.total_messages_summarized,
+            "avgCompressionRatio": stats.avg_compression_ratio,
+            "sessionsCount": stats.sessions_count,
+        }
     }))
 }
 

@@ -27,7 +27,7 @@ pub mod turn_log;
 
 pub use client::Agent;
 #[allow(unused_imports)]
-pub use context_summarizer::{ContextSummarizer, ContextSummary, SummarizerConfig};
+pub use context_summarizer::{ContextSummarizer, ContextSummary, SummarizerConfig, SummaryHistory, SummaryHistoryEntry, SummaryHistoryManager, SummaryHistoryStats};
 #[allow(unused_imports)]
 pub use memory::{FactCategory, MemoryFact, MemoryFactSummary, MemoryManager};
 pub use scheduled_task::ScheduledTaskSummary;

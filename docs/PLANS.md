@@ -132,6 +132,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v10.0.0 (已完成 ✅)
+
+**完成事项**:
+- **SummarizerConfig 增强** - 配置可序列化与运行时可更新
+  - `context_summarizer.rs` 中 `SummarizerConfig` 添加 Serialize/Deserialize derive
+  - 新增 getter 方法：`min_messages()`、`token_threshold()`、`is_enabled()`
+  - 新增 `update()` 方法支持运行时配置更新
+  - `ContextSummarizer` 使用内部 RwLock 实现配置可变性
+
+- **Summary History 持久化** - 持久化摘要历史记录
+  - 新增 `SummaryHistoryEntry` 结构：session_id、messages_summarized、original_tokens、summary_tokens、compression_ratio、topics、created_at
+  - 新增 `SummaryHistory` 结构：entries、total_summaries、total_messages_summarized、avg_compression_ratio
+  - 新增 `SummaryHistoryManager`：支持记录、查询、统计摘要历史
+  - 持久化到 `~/.config/tiny_claw/summary_history/history.json`
+
+- **Agent 客户端集成** - Agent 支持配置管理和历史追踪
+  - `Agent` 新增 `summarizer_config: RwLock<SummarizerConfig>` 字段
+  - 新增 `summary_history: Arc<SummaryHistoryManager>` 字段
+  - 新增方法：`get_summarizer_config()`、`update_summarizer_config()`、`record_summary()`、`get_summary_stats()`、`get_summary_history()`、`get_session_summary_history()`
+
+- **HTTP API 端点**
+  - `GET /api/summarizer/config` - 获取当前配置
+  - `PATCH /api/summarizer/config` - 更新配置（支持 minMessages、tokenThreshold、enabled）
+  - `GET /api/summarizer/history` - 获取历史摘要列表
+  - `GET /api/summarizer/stats` - 获取摘要统计
+  - `GET /api/summarizer/session/{session_id}` - 获取特定会话的摘要历史
+
+- **Gateway JSON-RPC 方法**
+  - `summarizer.config.get` - 获取配置
+  - `summarizer.config.set` - 设置配置
+  - `summarizer.history.list` - 获取历史列表
+  - `summarizer.stats` - 获取统计信息
+
+- **Runtime 增强**
+  - `AgentRuntime` 使用内部 mutability 的 ContextSummarizer
+  - 配置更新无需锁释放，直接调用 summarizer 方法
+
+- cargo clippy 0 警告（仅 dead_code 警告）
+- cargo test 336 tests
+
+**下一步**: WebUI 配置面板、TUI 命令支持、摘要历史可视化
+
+---
+
 ### v9.4.0 (已完成 ✅)
 
 **完成事项**:

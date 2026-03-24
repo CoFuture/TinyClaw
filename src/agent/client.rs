@@ -1,5 +1,6 @@
 //! AI Model client with multi-provider support
 
+use crate::agent::context_summarizer::{SummarizerConfig, SummaryHistoryEntry, SummaryHistoryManager, SummaryHistoryStats};
 use crate::agent::retry::{with_retry, CircuitBreaker, CircuitState, RetrySettings};
 use uuid::Uuid;
 use crate::agent::tools::{Tool, ToolExecutor, ToolResult};
@@ -167,6 +168,10 @@ pub struct Agent {
     token_usage: Arc<RwLock<Option<TokenUsage>>>,
     /// Pending action plan waiting for user confirmation (session_key -> plan)
     pending_action_plan: RwLock<Option<PendingActionPlan>>,
+    /// Summarizer configuration
+    summarizer_config: RwLock<SummarizerConfig>,
+    /// Summary history manager for tracking summarization events
+    summary_history: Arc<SummaryHistoryManager>,
 }
 
 /// History message for passing conversation context to API methods
@@ -238,6 +243,8 @@ impl Agent {
             tool_executions: Arc::new(RwLock::new(Vec::new())),
             token_usage: Arc::new(RwLock::new(None)),
             pending_action_plan: RwLock::new(None),
+            summarizer_config: RwLock::new(SummarizerConfig::default()),
+            summary_history: Arc::new(SummaryHistoryManager::new()),
         }
     }
 
@@ -256,7 +263,43 @@ impl Agent {
             tool_executions: Arc::new(RwLock::new(Vec::new())),
             token_usage: Arc::new(RwLock::new(None)),
             pending_action_plan: RwLock::new(None),
+            summarizer_config: RwLock::new(SummarizerConfig::default()),
+            summary_history: Arc::new(SummaryHistoryManager::new()),
         }
+    }
+
+    /// Get the current summarizer configuration
+    pub fn get_summarizer_config(&self) -> SummarizerConfig {
+        self.summarizer_config.read().clone()
+    }
+
+    /// Update the summarizer configuration
+    pub fn update_summarizer_config(&self, min_messages: Option<usize>, token_threshold: Option<usize>, enabled: Option<bool>) -> SummarizerConfig {
+        let mut config = self.summarizer_config.write();
+        config.update(min_messages, token_threshold, enabled);
+        info!("Summarizer config updated: min_msgs={}, threshold={}, enabled={}",
+              config.min_messages, config.token_threshold, config.enabled);
+        config.clone()
+    }
+
+    /// Record a summary event to history
+    pub fn record_summary(&self, session_id: &str, summary: &crate::agent::context_summarizer::ContextSummary) {
+        self.summary_history.record(session_id, summary);
+    }
+
+    /// Get summary history statistics
+    pub fn get_summary_stats(&self) -> SummaryHistoryStats {
+        self.summary_history.stats()
+    }
+
+    /// Get recent summary history entries
+    pub fn get_summary_history(&self, limit: usize) -> Vec<SummaryHistoryEntry> {
+        self.summary_history.recent(limit)
+    }
+
+    /// Get summary history for a specific session
+    pub fn get_session_summary_history(&self, session_id: &str) -> Vec<SummaryHistoryEntry> {
+        self.summary_history.for_session(session_id)
     }
 
     /// Set an action plan waiting for confirmation and return a receiver to wait on.

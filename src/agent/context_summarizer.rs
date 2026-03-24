@@ -7,16 +7,19 @@
 //! - Smart summarization that preserves key decisions, tool usage, and preferences
 //! - Automatic summarization trigger when context exceeds threshold
 //! - Integration with ContextManager for seamless context management
+//! - Configurable summarization settings via HTTP API and JSON-RPC
+//! - Persistent summary history across sessions
 
 use crate::agent::client::Agent;
 use crate::common::Result;
 use crate::types::{Message, Role};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, info};
 
 /// Configuration for context summarization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummarizerConfig {
     /// Minimum messages before considering summarization
     pub min_messages: usize,
@@ -34,6 +37,227 @@ impl Default for SummarizerConfig {
             enabled: true,
         }
     }
+}
+
+impl SummarizerConfig {
+    /// Get minimum messages
+    pub fn min_messages(&self) -> usize {
+        self.min_messages
+    }
+
+    /// Get token threshold
+    pub fn token_threshold(&self) -> usize {
+        self.token_threshold
+    }
+
+    /// Check if enabled
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Update configuration with new values
+    pub fn update(&mut self, min_messages: Option<usize>, token_threshold: Option<usize>, enabled: Option<bool>) {
+        if let Some(mm) = min_messages {
+            self.min_messages = mm;
+        }
+        if let Some(tt) = token_threshold {
+            self.token_threshold = tt;
+        }
+        if let Some(en) = enabled {
+            self.enabled = en;
+        }
+    }
+}
+
+/// Summary history entry for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummaryHistoryEntry {
+    /// Session ID this summary belongs to
+    pub session_id: String,
+    /// Number of messages summarized
+    pub messages_summarized: usize,
+    /// Original token count
+    pub original_tokens: usize,
+    /// Summary token count
+    pub summary_tokens: usize,
+    /// Compression ratio
+    pub compression_ratio: f32,
+    /// Topics extracted
+    pub topics: Vec<String>,
+    /// When the summary was created
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<&ContextSummary> for SummaryHistoryEntry {
+    fn from(summary: &ContextSummary) -> Self {
+        Self {
+            session_id: String::new(), // Will be set when recording
+            messages_summarized: summary.messages_summarized,
+            original_tokens: summary.original_tokens,
+            summary_tokens: summary.summary_tokens,
+            compression_ratio: summary.compression_ratio(),
+            topics: summary.topics.clone(),
+            created_at: summary.created_at,
+        }
+    }
+}
+
+/// Summary history for tracking summarization events across sessions
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SummaryHistory {
+    /// List of all summary events
+    pub entries: Vec<SummaryHistoryEntry>,
+    /// Total summaries created
+    pub total_summaries: usize,
+    /// Total messages summarized
+    pub total_messages_summarized: usize,
+    /// Average compression ratio
+    pub avg_compression_ratio: f32,
+}
+
+impl SummaryHistory {
+    /// Create a new empty summary history
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a summary entry
+    pub fn add_entry(&mut self, session_id: &str, summary: &ContextSummary) {
+        let mut entry = SummaryHistoryEntry::from(summary);
+        entry.session_id = session_id.to_string();
+        
+        self.entries.push(entry);
+        self.total_summaries += 1;
+        self.total_messages_summarized += summary.messages_summarized;
+        
+        // Update average compression ratio
+        let total_ratio: f32 = self.entries.iter()
+            .map(|e| e.compression_ratio)
+            .sum();
+        self.avg_compression_ratio = total_ratio / self.entries.len() as f32;
+        
+        // Keep only last 1000 entries
+        if self.entries.len() > 1000 {
+            self.entries.remove(0);
+        }
+    }
+
+    /// Get recent entries (last n)
+    pub fn recent_entries(&self, limit: usize) -> Vec<&SummaryHistoryEntry> {
+        self.entries.iter().rev().take(limit).collect()
+    }
+
+    /// Get entries for a specific session
+    pub fn for_session(&self, session_id: &str) -> Vec<&SummaryHistoryEntry> {
+        self.entries.iter().filter(|e| e.session_id == session_id).collect()
+    }
+}
+
+/// Manager for summary history with persistence
+pub struct SummaryHistoryManager {
+    base_path: PathBuf,
+    history: parking_lot::RwLock<SummaryHistory>,
+}
+
+impl SummaryHistoryManager {
+    /// Create a new manager with default path
+    pub fn new() -> Self {
+        let path = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("tiny_claw")
+            .join("summary_history");
+        
+        Self::with_path(path)
+    }
+
+    /// Create a manager with custom path
+    pub fn with_path<P: Into<PathBuf>>(path: P) -> Self {
+        let path = path.into();
+        let manager = Self {
+            base_path: path,
+            history: parking_lot::RwLock::new(SummaryHistory::new()),
+        };
+        manager.load();
+        manager
+    }
+
+    /// Load history from disk
+    fn load(&self) {
+        if !self.base_path.exists() {
+            return;
+        }
+
+        let path = self.base_path.join("history.json");
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(history) = serde_json::from_str::<SummaryHistory>(&content) {
+                    *self.history.write() = history;
+                    tracing::info!("Loaded summary history from {:?}", self.base_path);
+                }
+            }
+        }
+    }
+
+    /// Save history to disk
+    fn save(&self) {
+        if let Some(parent) = self.base_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::create_dir_all(&self.base_path);
+        
+        let path = self.base_path.join("history.json");
+        let history = self.history.read();
+        if let Ok(content) = serde_json::to_string_pretty(&*history) {
+            let _ = std::fs::write(&path, content);
+        }
+    }
+
+    /// Add a summary entry
+    pub fn record(&self, session_id: &str, summary: &ContextSummary) {
+        {
+            let mut history = self.history.write();
+            history.add_entry(session_id, summary);
+        }
+        self.save();
+    }
+
+    /// Get the history
+    pub fn history(&self) -> parking_lot::RwLockReadGuard<'_, SummaryHistory> {
+        self.history.read()
+    }
+
+    /// Get recent entries
+    pub fn recent(&self, limit: usize) -> Vec<SummaryHistoryEntry> {
+        self.history.read().recent_entries(limit).into_iter().cloned().collect()
+    }
+
+    /// Get entries for a session
+    pub fn for_session(&self, session_id: &str) -> Vec<SummaryHistoryEntry> {
+        self.history.read().for_session(session_id).into_iter().cloned().collect()
+    }
+
+    /// Get statistics
+    pub fn stats(&self) -> SummaryHistoryStats {
+        let history = self.history.read();
+        SummaryHistoryStats {
+            total_summaries: history.total_summaries,
+            total_messages_summarized: history.total_messages_summarized,
+            avg_compression_ratio: history.avg_compression_ratio,
+            sessions_count: history.entries.iter()
+                .map(|e| e.session_id.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+        }
+    }
+}
+
+/// Statistics about summary history
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummaryHistoryStats {
+    pub total_summaries: usize,
+    pub total_messages_summarized: usize,
+    pub avg_compression_ratio: f32,
+    pub sessions_count: usize,
 }
 
 /// A summarized section of conversation history
@@ -120,14 +344,14 @@ impl ContextSummary {
 
 /// AI-powered context summarizer
 pub struct ContextSummarizer {
-    config: SummarizerConfig,
+    config: parking_lot::RwLock<SummarizerConfig>,
     agent: Arc<Agent>,
 }
 
 impl ContextSummarizer {
     /// Create a new context summarizer
     pub fn new(config: SummarizerConfig, agent: Arc<Agent>) -> Self {
-        Self { config, agent }
+        Self { config: parking_lot::RwLock::new(config), agent }
     }
 
     /// Create with default config
@@ -135,17 +359,31 @@ impl ContextSummarizer {
         Self::new(SummarizerConfig::default(), agent)
     }
 
+    /// Get the current configuration
+    pub fn config(&self) -> SummarizerConfig {
+        self.config.read().clone()
+    }
+
+    /// Update the configuration
+    pub fn update_config(&self, min_messages: Option<usize>, token_threshold: Option<usize>, enabled: Option<bool>) {
+        let mut config = self.config.write();
+        config.update(min_messages, token_threshold, enabled);
+        info!("Summarizer config updated: min_msgs={}, threshold={}, enabled={}",
+              config.min_messages, config.token_threshold, config.enabled);
+    }
+
     /// Check if summarization should be triggered
     pub fn should_summarize(&self, messages: &[Message], estimated_tokens: usize) -> bool {
-        if !self.config.enabled {
+        let config = self.config.read();
+        if !config.enabled {
             return false;
         }
 
-        if messages.len() < self.config.min_messages {
+        if messages.len() < config.min_messages {
             return false;
         }
 
-        estimated_tokens >= self.config.token_threshold
+        estimated_tokens >= config.token_threshold
     }
 
     /// Summarize a portion of messages
