@@ -177,6 +177,18 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "Edit summarizer configuration",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":quality",
+        aliases: &["qly"],
+        description: "View session quality analysis",
+        category: CommandCategory::Session,
+    },
+    TuiCommandMeta {
+        full_name: ":eval",
+        aliases: &["evals"],
+        description: "View recent self-evaluations",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -295,6 +307,38 @@ pub struct AppState {
     pub summarizer_history: Option<String>,
     /// Whether we're in summarizer config editing mode
     pub sumcfg_mode: bool,
+    /// Whether we're in session quality viewing mode
+    pub quality_mode: bool,
+    /// Cached session quality data for display
+    pub quality_data: Option<SessionQualityDisplay>,
+    /// Whether we're in self-evaluation viewing mode
+    pub eval_mode: bool,
+    /// Cached self-evaluation data for display
+    pub eval_data: Option<Vec<SelfEvaluationDisplay>>,
+}
+
+/// Session quality data for TUI display
+#[derive(Debug, Clone)]
+pub struct SessionQualityDisplay {
+    pub session_id: String,
+    pub quality_score: f64,
+    pub turn_count: u32,
+    pub task_completion_rate: f64,
+    pub tool_success_rate: f64,
+    pub rating: u8,
+    pub issue_count: usize,
+    pub suggestions: Vec<String>,
+}
+
+/// Self-evaluation data for TUI display
+#[derive(Debug, Clone)]
+pub struct SelfEvaluationDisplay {
+    pub turn_id: String,
+    pub session_id: String,
+    pub overall_score: f64,
+    pub dimension_scores: Vec<(String, f64)>,
+    pub strengths: Vec<String>,
+    pub weaknesses: Vec<String>,
 }
 
 impl Default for AppState {
@@ -346,6 +390,10 @@ impl Default for AppState {
             summarizer_stats: None,
             summarizer_history: None,
             sumcfg_mode: false,
+            quality_mode: false,
+            quality_data: None,
+            eval_mode: false,
+            eval_data: None,
         }
     }
 }

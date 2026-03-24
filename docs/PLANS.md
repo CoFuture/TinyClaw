@@ -135,6 +135,33 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.3.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Quality & Evaluation Dashboard** - TUI 质量与评估面板
+  - **新增 TUI 命令**：
+    - `:quality` / `:qly` - 查看会话质量分析面板
+    - `:eval` / `:evals` - 查看最近自我评估列表
+  - **新增事件处理**：
+    - `TuiGatewayEvent::SessionQuality` - 实时接收会话质量事件
+    - `TuiGatewayEvent::SelfEvaluation` - 实时接收自我评估事件
+  - **新增数据结构**：
+    - `SessionQualityDisplay` - TUI 显示用的会话质量数据
+    - `SelfEvaluationDisplay` - TUI 显示用的自我评估数据
+  - **新增面板绘制函数**：
+    - `draw_quality_panel()` - 绘制会话质量分析面板（星级评分、指标、建议）
+    - `draw_eval_panel()` - 绘制自我评估列表面板（得分、维度、优势/弱点）
+  - **实时数据存储**：
+    - `AppState.quality_data` - 缓存最新会话质量数据
+    - `AppState.eval_data` - 缓存最近 20 条自我评估记录
+  - **Esc 键退出**：支持按 Esc 键退出质量/评估面板
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 358 tests
+
+**下一步**: 更多 Agent 能力增强、WebUI 实时质量面板
+
+---
+
 ### v11.0.0 (已完成 ✅)
 
 **完成事项**:

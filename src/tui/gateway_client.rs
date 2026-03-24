@@ -87,6 +87,10 @@ pub enum TuiGatewayEvent {
     SummarizerStatsLoaded { stats: String },
     /// Summarizer history loaded
     SummarizerHistoryLoaded { history: String },
+    /// Session quality analysis received
+    SessionQuality { session_id: String, quality_score: f64, turn_count: u32, task_completion_rate: f64, tool_success_rate: f64, rating: u8, issue_count: usize, suggestions: Vec<String> },
+    /// Self-evaluation received
+    SelfEvaluation { session_id: String, turn_id: String, overall_score: f64, dimension_scores: Vec<(String, f64)>, strengths: Vec<String>, weaknesses: Vec<String> },
 }
 
 /// Session note info
@@ -508,6 +512,52 @@ impl TuiGatewayClient {
                             let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                             let plan_id = params.get("plan_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                             let _ = event_tx.send(TuiGatewayEvent::ActionDenied { session_id, plan_id });
+                        }
+                    }
+                    "session.quality" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let quality_score = params.get("quality_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let turn_count = params.get("turn_count").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let task_completion_rate = params.get("task_completion_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let tool_success_rate = params.get("tool_success_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let rating = params.get("rating").and_then(|v| v.as_u64()).unwrap_or(3) as u8;
+                            let issue_count = params.get("issue_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let suggestions = params.get("suggestions")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::SessionQuality {
+                                session_id, quality_score, turn_count, task_completion_rate, tool_success_rate, rating, issue_count, suggestions
+                            });
+                        }
+                    }
+                    "agent.self_evaluation" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let turn_id = params.get("turn_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let overall_score = params.get("overall_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let dimension_scores = params.get("dimension_scores")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|ds| {
+                                        let dim = ds.get("dimension").and_then(|d| d.as_str())?;
+                                        let score = ds.get("score").and_then(|s| s.as_f64())?;
+                                        Some((dim.to_string(), score))
+                                    }).collect()
+                                })
+                                .unwrap_or_default();
+                            let strengths = params.get("strengths")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                .unwrap_or_default();
+                            let weaknesses = params.get("weaknesses")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::SelfEvaluation {
+                                session_id, turn_id, overall_score, dimension_scores, strengths, weaknesses
+                            });
                         }
                     }
                     _ => {

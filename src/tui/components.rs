@@ -720,6 +720,10 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
         " Confirm "
     } else if state.instructions_mode {
         " Instructions "
+    } else if state.quality_mode {
+        " Quality "
+    } else if state.eval_mode {
+        " Evaluations "
     } else if state.summarizer_mode {
         " Summarizer "
     } else if state.sumcfg_mode {
@@ -838,6 +842,192 @@ pub fn draw_help_bar(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
+
+    f.render_widget(paragraph, area);
+}
+
+/// Draw the session quality panel overlay
+pub fn draw_quality_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📊 Session Quality Analysis ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .style(Style::default().bg(Color::Rgb(25, 15, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref q) = state.quality_data {
+        // Rating display
+        let stars = "★".repeat(q.rating as usize) + &"☆".repeat(5 - q.rating as usize);
+        lines.push(Line::from(vec![
+            Span::styled("Session: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&q.session_id, Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Rating: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(stars, Style::default().fg(Color::Yellow)),
+            Span::styled(format!(" ({:.0}%)", q.quality_score * 100.0), Style::default().fg(Color::Yellow)),
+        ]));
+        lines.push(Line::from(""));
+        
+        // Metrics
+        lines.push(Line::from(vec![
+            Span::styled("Metrics:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Turn Count:        "),
+            Span::styled(format!("{}", q.turn_count), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Task Completion:   "),
+            Span::styled(format!("{:.0}%", q.task_completion_rate * 100.0), 
+                if q.task_completion_rate >= 0.8 { Color::Green } 
+                else if q.task_completion_rate >= 0.5 { Color::Yellow } 
+                else { Color::Red }),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Tool Success:      "),
+            Span::styled(format!("{:.0}%", q.tool_success_rate * 100.0),
+                if q.tool_success_rate >= 0.8 { Color::Green } 
+                else if q.tool_success_rate >= 0.5 { Color::Yellow } 
+                else { Color::Red }),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Issues Detected:   "),
+            Span::styled(format!("{}", q.issue_count),
+                if q.issue_count == 0 { Color::Green } 
+                else if q.issue_count <= 2 { Color::Yellow } 
+                else { Color::Red }),
+        ]));
+        
+        // Suggestions
+        if !q.suggestions.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Suggestions:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            for s in q.suggestions.iter().take(5) {
+                lines.push(Line::from(vec![
+                    Span::styled("  • ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(s.clone()),
+                ]));
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No quality data available yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Quality data will appear after agent turns."));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Press :quality or :qly again to exit."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :quality to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
+/// Draw the self-evaluation panel overlay
+pub fn draw_eval_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📈 Agent Self-Evaluations ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(15, 25, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref evals) = state.eval_data {
+        if evals.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No evaluations available yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Evaluations will appear after agent turns."));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} recent evaluations", evals.len()), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(""));
+            
+            for (idx, e) in evals.iter().take(10).enumerate() {
+                // Overall score
+                let score_color = if e.overall_score >= 0.7 { Color::Green } 
+                    else if e.overall_score >= 0.4 { Color::Yellow } 
+                    else { Color::Red };
+                
+                lines.push(Line::from(vec![
+                    Span::styled(format!("#{} ", idx + 1), Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!("Score: {:.0}%", e.overall_score * 100.0), Style::default().fg(score_color).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!(" (turn: {})", &e.turn_id[..8]), Style::default().fg(Color::DarkGray)),
+                ]));
+                
+                // Dimension scores
+                for (dim, score) in e.dimension_scores.iter().take(4) {
+                    let dim_score_color = if *score >= 0.7 { Color::Green } 
+                        else if *score >= 0.4 { Color::Yellow } 
+                        else { Color::Red };
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(dim.clone(), Style::default().fg(Color::DarkGray)),
+                        Span::raw(": "),
+                        Span::styled(format!("{:.0}%", score * 100.0), Style::default().fg(dim_score_color)),
+                    ]));
+                }
+                
+                // Strengths (show first)
+                if let Some(s) = e.strengths.first() {
+                    lines.push(Line::from(vec![
+                        Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+                        Span::styled(s.clone(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+                
+                // Weaknesses (show first)
+                if let Some(w) = e.weaknesses.first() {
+                    lines.push(Line::from(vec![
+                        Span::styled("  ✗ ", Style::default().fg(Color::Red)),
+                        Span::styled(w.clone(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+                
+                lines.push(Line::from(""));
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No evaluation data available yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Evaluations will appear after agent turns."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :eval to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
 
     f.render_widget(paragraph, area);
 }

@@ -559,6 +559,38 @@ impl TuiApp {
                 debug!("Summarizer history loaded: {}", history);
                 self.state.summarizer_history = Some(history);
             }
+            TuiGatewayEvent::SessionQuality { session_id, quality_score, turn_count, task_completion_rate, tool_success_rate, rating, issue_count, suggestions } => {
+                debug!("Session quality received for {}: score={}", session_id, quality_score);
+                self.state.quality_data = Some(crate::tui::state::SessionQualityDisplay {
+                    session_id,
+                    quality_score,
+                    turn_count,
+                    task_completion_rate,
+                    tool_success_rate,
+                    rating,
+                    issue_count,
+                    suggestions,
+                });
+            }
+            TuiGatewayEvent::SelfEvaluation { session_id, turn_id, overall_score, dimension_scores, strengths, weaknesses } => {
+                debug!("Self-evaluation received for session {}: score={}", session_id, overall_score);
+                let eval = crate::tui::state::SelfEvaluationDisplay {
+                    turn_id,
+                    session_id,
+                    overall_score,
+                    dimension_scores,
+                    strengths,
+                    weaknesses,
+                };
+                // Prepend to eval_data (most recent first)
+                self.state.eval_data.get_or_insert_with(Vec::new).insert(0, eval);
+                // Keep only last 20 evaluations
+                if let Some(ref mut data) = self.state.eval_data {
+                    if data.len() > 20 {
+                        data.truncate(20);
+                    }
+                }
+            }
         }
     }
 
@@ -812,6 +844,26 @@ impl TuiApp {
                         self.state.confirm_session_id = None;
                         self.state.confirm_plan_id = None;
                         self.state.confirm_tools.clear();
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :quality and :qly commands - toggle quality viewing mode
+                    if input_lower.starts_with(":quality") || input_lower == ":qly" {
+                        self.state.quality_mode = !self.state.quality_mode;
+                        if self.state.quality_mode {
+                            self.state.eval_mode = false; // Mutually exclusive
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :eval and :evals commands - toggle evaluation viewing mode
+                    if input_lower.starts_with(":eval") {
+                        self.state.eval_mode = !self.state.eval_mode;
+                        if self.state.eval_mode {
+                            self.state.quality_mode = false; // Mutually exclusive
+                        }
                         self.state.input_buffer.clear();
                         return Ok(true);
                     }
@@ -1543,6 +1595,12 @@ impl TuiApp {
                     } else if self.state.notes_mode {
                         self.state.notes_mode = false;
                         self.state.notes_content = None;
+                    } else if self.state.quality_mode {
+                        self.state.quality_mode = false;
+                        self.state.quality_data = None;
+                    } else if self.state.eval_mode {
+                        self.state.eval_mode = false;
+                        self.state.eval_data = None;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -1625,6 +1683,10 @@ impl TuiApp {
             crate::tui::components::draw_summarizer_panel(f, msg_chunks[0], &self.state);
         } else if self.state.notes_mode {
             crate::tui::components::draw_notes_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.quality_mode {
+            crate::tui::components::draw_quality_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.eval_mode {
+            crate::tui::components::draw_eval_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }
