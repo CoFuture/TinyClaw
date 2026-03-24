@@ -7,7 +7,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -609,6 +609,111 @@ pub fn draw_summarizer_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw the summarizer config editing panel
+pub fn draw_sumcfg_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let block = Block::default()
+        .title(" ⚙ Summarizer Config ")
+        .title_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .style(Style::default().bg(Color::Rgb(20, 20, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Title
+    lines.push(Line::from(vec![
+        Span::styled("Edit Summarizer Configuration", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+
+    // Current config display
+    lines.push(Line::from(vec![
+        Span::styled("Current Settings:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+
+    if let Some(ref config) = state.summarizer_config {
+        if let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config) {
+            let enabled = config_obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let min_messages = config_obj.get("minMessages").and_then(|v| v.as_u64()).unwrap_or(0);
+            let token_threshold = config_obj.get("tokenThreshold").and_then(|v| v.as_u64()).unwrap_or(0);
+
+            lines.push(Line::from(vec![
+                Span::raw("  • enabled: "),
+                Span::styled(if enabled { "true" } else { "false" },
+                    Style::default().fg(if enabled { Color::Green } else { Color::Red }).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • minMessages: "),
+                Span::styled(format!("{}", min_messages), Style::default().fg(Color::White)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  • tokenThreshold: "),
+                Span::styled(format!("{}", token_threshold), Style::default().fg(Color::White)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(config, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  (loading...)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+
+    // Format hint
+    lines.push(Line::from(vec![
+        Span::styled("Input Format:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("minMessages=N", Style::default().fg(Color::Yellow)),
+        Span::raw(", "),
+        Span::styled("tokenThreshold=N", Style::default().fg(Color::Yellow)),
+        Span::raw(", "),
+        Span::styled("enabled=true|false", Style::default().fg(Color::Yellow)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  All fields optional — only specified fields are updated.", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // Examples
+    lines.push(Line::from(vec![
+        Span::styled("Examples:", Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("minMessages=20", Style::default().fg(Color::DarkGray)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("enabled=false", Style::default().fg(Color::DarkGray)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("minMessages=15,enabled=true", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Type config below and press Enter to save.", Style::default().fg(Color::DarkGray)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc to cancel.", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the input panel with enhanced features
 pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title = if state.confirm_mode {
@@ -617,6 +722,8 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
         " Instructions "
     } else if state.summarizer_mode {
         " Summarizer "
+    } else if state.sumcfg_mode {
+        " sumcfg "
     } else if state.input_buffer.starts_with(':') {
         " Command "
     } else {
@@ -638,6 +745,14 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
             format!(" New name: {}", state.input_buffer)
         };
         hint = Some("Press Enter to rename, Esc to cancel".to_string());
+    } else if state.sumcfg_mode {
+        // Summarizer config editing mode
+        display_text = if state.input_buffer.is_empty() {
+            " minMessages=N,tokenThreshold=N,enabled=true|false ".to_string()
+        } else {
+            state.input_buffer.clone()
+        };
+        hint = Some("Press Enter to save, Esc to cancel".to_string());
     } else if state.current_session_id.is_none() {
         display_text = " (select a session first) ".to_string();
         hint = None;

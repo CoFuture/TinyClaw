@@ -171,6 +171,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View summarizer config & stats",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":sumcfg",
+        aliases: &[],
+        description: "Edit summarizer configuration",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -287,6 +293,8 @@ pub struct AppState {
     pub summarizer_stats: Option<String>,
     /// Cached summarizer history for display (JSON string)
     pub summarizer_history: Option<String>,
+    /// Whether we're in summarizer config editing mode
+    pub sumcfg_mode: bool,
 }
 
 impl Default for AppState {
@@ -337,6 +345,7 @@ impl Default for AppState {
             summarizer_config: None,
             summarizer_stats: None,
             summarizer_history: None,
+            sumcfg_mode: false,
         }
     }
 }

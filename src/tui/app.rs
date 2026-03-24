@@ -689,6 +689,53 @@ impl TuiApp {
                         return Ok(true);
                     }
                     
+                    // Handle summarizer config editing mode
+                    if self.state.sumcfg_mode {
+                        // Parse input format: minMessages=N,tokenThreshold=N,enabled=true/false
+                        let input = self.state.input_buffer.trim();
+                        let mut min_messages: Option<u32> = None;
+                        let mut token_threshold: Option<u32> = None;
+                        let mut enabled: Option<bool> = None;
+                        
+                        for part in input.split(',') {
+                            let part = part.trim();
+                            if let Some(value) = part.strip_prefix("minMessages=") {
+                                if let Ok(v) = value.parse::<u32>() {
+                                    min_messages = Some(v);
+                                }
+                            } else if let Some(value) = part.strip_prefix("tokenThreshold=") {
+                                if let Ok(v) = value.parse::<u32>() {
+                                    token_threshold = Some(v);
+                                }
+                            } else if let Some(value) = part.strip_prefix("enabled=") {
+                                enabled = match value.to_lowercase().as_str() {
+                                    "true" | "yes" | "1" => Some(true),
+                                    "false" | "no" | "0" => Some(false),
+                                    _ => None,
+                                };
+                            }
+                        }
+                        
+                        // Only update if at least one field was parsed
+                        if min_messages.is_some() || token_threshold.is_some() || enabled.is_some() {
+                            let client = self.gateway_client.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Err(e) = client.set_summarizer_config(
+                                    min_messages,
+                                    token_threshold,
+                                    enabled,
+                                ).await {
+                                    error!("Failed to set summarizer config: {}", e);
+                                }
+                            });
+                        }
+                        
+                        self.state.sumcfg_mode = false;
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
                     // Handle action confirmation mode (Enter confirms, Esc denies)
                     if self.state.confirm_mode {
                         if let (Some(ref session_id), Some(ref plan_id)) = 
@@ -1219,14 +1266,77 @@ impl TuiApp {
                                                                 }
                                                             }
                                                         }
-                                                        // Not :sum, add 'su' to buffer
+                                                    } else if let KeyCode::Char('c') = m_key.code {
+                                                        // Got :sumc, check for :sumcfg
+                                                        if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                            if let Ok(crossterm::event::Event::Key(f_key)) = event::read() {
+                                                                if let KeyCode::Char('f') = f_key.code {
+                                                                    // Got :sumcf, check for :sumcfg
+                                                                    if event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                                                                        if let Ok(crossterm::event::Event::Key(g_key)) = event::read() {
+                                                                            if let KeyCode::Char('g') = g_key.code {
+                                                                                // Got :sumcfg - toggle summarizer config editing mode
+                                                                                self.state.sumcfg_mode = !self.state.sumcfg_mode;
+                                                                                if self.state.sumcfg_mode {
+                                                                                    self.state.input_buffer.clear();
+                                                                                    // Load current config into input buffer as template
+                                                                                    if let Some(ref config) = self.state.summarizer_config {
+                                                                                        if let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config) {
+                                                                                            let enabled = config_obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                                                                                            let min_msgs = config_obj.get("minMessages").and_then(|v| v.as_u64()).unwrap_or(10);
+                                                                                            let threshold = config_obj.get("tokenThreshold").and_then(|v| v.as_u64()).unwrap_or(100000);
+                                                                                            self.state.input_buffer = format!(
+                                                                                                "minMessages={},tokenThreshold={},enabled={}",
+                                                                                                min_msgs, threshold, enabled
+                                                                                            );
+                                                                                        }
+                                                                                    }
+                                                                                    // Request summarizer config if not loaded
+                                                                                    if self.state.summarizer_config.is_none() {
+                                                                                        let client = self.gateway_client.clone();
+                                                                                        tokio::spawn(async move {
+                                                                                            let client = client.read().await;
+                                                                                            if let Err(e) = client.get_summarizer_config().await {
+                                                                                                error!("Failed to load summarizer config: {}", e);
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                                self.state.input_buffer = String::new();
+                                                                                return Ok(true);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    // Not :sumcfg, add 'sumcf' to buffer
+                                                                    if self.state.active_panel == 2 {
+                                                                        self.state.input_buffer.push('s');
+                                                                        self.state.input_buffer.push('u');
+                                                                        self.state.input_buffer.push('m');
+                                                                        self.state.input_buffer.push('c');
+                                                                        self.state.input_buffer.push('f');
+                                                                        self.state.completion.reset();
+                                                                    }
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                        }
+                                                        // Not :sumcf, add 'sumc' to buffer
                                                         if self.state.active_panel == 2 {
                                                             self.state.input_buffer.push('s');
                                                             self.state.input_buffer.push('u');
+                                                            self.state.input_buffer.push('m');
+                                                            self.state.input_buffer.push('c');
                                                             self.state.completion.reset();
                                                         }
                                                         return Ok(true);
                                                     }
+                                                    // Not :sum or :sumcfg, add 'su' to buffer
+                                                    if self.state.active_panel == 2 {
+                                                        self.state.input_buffer.push('s');
+                                                        self.state.input_buffer.push('u');
+                                                        self.state.completion.reset();
+                                                    }
+                                                    return Ok(true);
                                                 }
                                             }
                                             // Not :sum, add 's' to buffer
@@ -1422,6 +1532,9 @@ impl TuiApp {
                         self.state.reset_input_history_navigation();
                     } else if self.state.search_mode {
                         self.state.exit_search_mode();
+                    } else if self.state.sumcfg_mode {
+                        self.state.sumcfg_mode = false;
+                        self.state.input_buffer.clear();
                     } else if self.state.summarizer_mode {
                         self.state.summarizer_mode = false;
                         self.state.summarizer_config = None;
@@ -1506,6 +1619,8 @@ impl TuiApp {
             crate::tui::components::draw_confirm_panel(f, msg_chunks[0], &self.state);
         } else if self.state.instructions_mode {
             crate::tui::components::draw_instructions_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.sumcfg_mode {
+            crate::tui::components::draw_sumcfg_panel(f, msg_chunks[0], &self.state);
         } else if self.state.summarizer_mode {
             crate::tui::components::draw_summarizer_panel(f, msg_chunks[0], &self.state);
         } else if self.state.notes_mode {
