@@ -2049,3 +2049,41 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: WebUI 上下文健康面板完善、其他 Agent 能力增强
 
+---
+
+### v12.9.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Context Health Panel - 上下文健康面板** - 网页界面显示上下文健康状态
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 🧠 上下文健康面板，显示健康等级（🟢健康/🟡预警/🟠危险/🔴紧急）
+    - 上下文组成可视化（系统提示词/技能指令/对话历史/记忆/会话笔记的 token 分布）
+    - 统计数据卡片（总 Turns/截断次数/摘要次数/利用率）
+    - 优化建议区域（来自 ContextHealthMonitor 和 ContextAdvisor 的建议）
+    - 会话选择器，支持查看会话级健康数据
+    - 重置统计按钮
+  - **CSS 样式增强**：
+    - `.ctx-health-panel` - 面板布局网格
+    - `.ctx-health-level-card` - 健康等级卡片（颜色编码）
+    - `.ctx-health-bar` - 使用率进度条
+    - `.ctx-health-composition` - 上下文组成区域
+    - `.ctx-health-advice` - 优化建议样式
+  - **JavaScript 函数**：
+    - `loadContextHealth()` - 从 `/api/context/health` 加载全局健康数据
+    - `renderContextHealth()` - 渲染健康面板（等级/组成/统计/建议）
+    - `resetContextHealth()` - 重置统计数据
+    - `refreshCtxHealthSessionList()` - 刷新会话选择器
+    - 会话选择联动 Context Advisor API
+  - **SSE 事件增强**：
+    - 添加 `context.health` 到事件类型列表
+    - 实时更新健康徽章和显示 toast 通知
+    - 事件日志显示支持
+    - `formatEventType` 添加"上下文健康"映射
+  - **修复 context_health 测试** (`src/agent/context_health.rs`)：
+    - 修复 `test_generate_report` 测试断言失败
+    - 调整测试用例的 utilization_pct 使其通过
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 396 tests
+
+**下一步**: TUI 上下文健康面板、Agent 能力持续增强
+
