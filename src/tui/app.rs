@@ -1734,6 +1734,9 @@ impl TuiApp {
                         self.state.safety_state = None;
                         self.state.last_safety_warning = None;
                         self.state.safety_halted = false;
+                    } else if self.state.perf_mode {
+                        self.state.perf_mode = false;
+                        self.state.perf_data = None;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -1824,6 +1827,8 @@ impl TuiApp {
             crate::tui::components::draw_recommendations_panel(f, msg_chunks[0], &self.state);
         } else if self.state.safety_mode {
             crate::tui::components::draw_safety_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.perf_mode {
+            crate::tui::components::draw_perf_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }

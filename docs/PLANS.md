@@ -185,6 +185,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v12.6.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Performance Insights Panel** - 终端界面性能洞察面板
+  - **新增 `draw_perf_panel()` 函数** (`tui/components.rs`)：
+    - 显示 Turns Analyzed 和 Avg Tools/Turn 统计数据
+    - 显示 Quality Trend 趋势方向（↑ improving / ↓ declining / → stable）
+    - 显示工具效率摘要（最高效工具、最不高效工具、问题工具）
+    - 显示 Insights 列表，每条洞察显示 severity icon、category、title、description、suggestion
+    - 严重程度颜色编码：🔴 high（红）、🟡 medium（黄）、🟢 low（绿）
+    - 无数据时显示友好提示信息
+  - **渲染循环集成** (`tui/app.rs`)：
+    - 在 `safety_mode` 之后添加 `perf_mode` 条件分支
+    - `perf_mode` 为 true 时绘制 `draw_perf_panel`
+  - **Esc 键处理集成** (`tui/app.rs`)：
+    - 在 `safety_mode` Esc 处理后添加 `perf_mode` 处理
+    - Esc 时清空 `perf_mode` 和 `perf_data` 状态
+  - 修复了 v12.5.0 遗留问题：`:perf` 命令可以获取数据但无面板显示
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 383 tests
+
+**下一步**: WebUI 性能洞察面板、Agent 能力持续增强
+
+---
+
 ### v12.1.0 (已完成 ✅)
 
 **完成事项**:

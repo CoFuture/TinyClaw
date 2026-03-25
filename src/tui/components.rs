@@ -1231,3 +1231,126 @@ pub fn draw_safety_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     f.render_widget(paragraph, area);
 }
+
+/// Draw the performance insights panel
+pub fn draw_perf_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📈 Performance Insights ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref perf) = state.perf_data {
+        // Summary stats
+        lines.push(Line::from(vec![
+            Span::styled("Turns Analyzed: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", perf.turns_analyzed), Style::default().fg(Color::Cyan)),
+            Span::raw("  |  "),
+            Span::styled("Avg Tools/Turn: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.1}", perf.avg_tools_per_turn), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(""));
+        
+        // Trend
+        let trend_arrow = if perf.trend_direction == "improving" { "↑" }
+            else if perf.trend_direction == "declining" { "↓" }
+            else { "→" };
+        let trend_color = if perf.trend_direction == "improving" { Color::Green }
+            else if perf.trend_direction == "declining" { Color::Red }
+            else { Color::Yellow };
+        lines.push(Line::from(vec![
+            Span::styled("Quality Trend: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{} {}", trend_arrow, perf.trend_direction), Style::default().fg(trend_color)),
+            Span::raw("  "),
+            Span::styled(format!("({:.1}% change)", perf.trend_magnitude), Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+        
+        // Tool efficiency
+        lines.push(Line::from(vec![
+            Span::styled("Tool Efficiency:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]));
+        
+        if let Some(ref most) = perf.most_efficient_tool {
+            lines.push(Line::from(vec![
+                Span::styled("  🟢 Most Efficient: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(most, Style::default().fg(Color::Green)),
+            ]));
+        }
+        if let Some(ref least) = perf.least_efficient_tool {
+            lines.push(Line::from(vec![
+                Span::styled("  🔴 Least Efficient: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(least, Style::default().fg(Color::Red)),
+            ]));
+        }
+        if !perf.problematic_tools.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("  ⚠️ Problematic: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(perf.problematic_tools.join(", "), Style::default().fg(Color::Yellow)),
+            ]));
+        }
+        
+        // Insights
+        if !perf.insights.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Insights:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            
+            for insight in perf.insights.iter().take(6) {
+                let severity_color = match insight.severity.as_str() {
+                    "high" => Color::Red,
+                    "medium" => Color::Yellow,
+                    "low" => Color::Green,
+                    _ => Color::DarkGray,
+                };
+                let severity_icon = match insight.severity.as_str() {
+                    "high" => "🔴",
+                    "medium" => "🟡",
+                    "low" => "🟢",
+                    _ => "⚪",
+                };
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {} ", severity_icon), Style::default().fg(severity_color)),
+                    Span::styled(format!("[{}] ", insight.category), Style::default().fg(Color::DarkGray)),
+                    Span::styled(&insight.title, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(&insight.description, Style::default().fg(Color::DarkGray)),
+                ]));
+                if !insight.suggestions.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled("    💡 ", Style::default().fg(Color::Cyan)),
+                        Span::styled(&insight.suggestions[0], Style::default().fg(Color::Cyan)),
+                    ]));
+                }
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No performance data available yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Performance data will appear after agent turns."));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Press :perf or :performance again to exit."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :perf to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
