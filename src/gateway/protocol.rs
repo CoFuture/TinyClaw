@@ -305,6 +305,10 @@ pub mod methods {
     pub const SESSION_SUGGESTIONS_ACCEPT: &str = "session.suggestions.accept";
     /// Session suggestion dismiss
     pub const SESSION_SUGGESTIONS_DISMISS: &str = "session.suggestions.dismiss";
+    /// Session skills enable (put)
+    pub const SESSION_SKILLS_PUT: &str = "session.skills.put";
+    /// Session skills disable (delete)
+    pub const SESSION_SKILLS_DELETE: &str = "session.skills.delete";
     /// Summarizer config get
     pub const SUMMARIZER_CONFIG_GET: &str = "summarizer.config.get";
     /// Summarizer config set

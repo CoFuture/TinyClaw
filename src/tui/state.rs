@@ -189,6 +189,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View recent self-evaluations",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":rec",
+        aliases: &["recommendations"],
+        description: "View skill recommendations",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -315,6 +321,12 @@ pub struct AppState {
     pub eval_mode: bool,
     /// Cached self-evaluation data for display
     pub eval_data: Option<Vec<SelfEvaluationDisplay>>,
+    /// Whether we're in skill recommendations viewing mode
+    pub recommendations_mode: bool,
+    /// Session ID for current recommendations view
+    pub recommendations_session_id: Option<String>,
+    /// Cached skill recommendations for display
+    pub recommendations_data: Option<Vec<SkillRecommendationDisplay>>,
 }
 
 /// Session quality data for TUI display
@@ -339,6 +351,18 @@ pub struct SelfEvaluationDisplay {
     pub dimension_scores: Vec<(String, f64)>,
     pub strengths: Vec<String>,
     pub weaknesses: Vec<String>,
+}
+
+/// Skill recommendation data for TUI display
+#[derive(Debug, Clone)]
+pub struct SkillRecommendationDisplay {
+    pub id: String,
+    pub skill_name: String,
+    pub description: String,
+    pub confidence: f32,
+    pub reasons: Vec<String>,
+    pub triggered_keywords: Vec<String>,
+    pub already_enabled: bool,
 }
 
 impl Default for AppState {
@@ -394,6 +418,9 @@ impl Default for AppState {
             quality_data: None,
             eval_mode: false,
             eval_data: None,
+            recommendations_mode: false,
+            recommendations_session_id: None,
+            recommendations_data: None,
         }
     }
 }

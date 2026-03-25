@@ -591,6 +591,29 @@ impl TuiApp {
                     }
                 }
             }
+            TuiGatewayEvent::SkillRecommendations { session_id, recommendations } => {
+                debug!("Skill recommendations received for session {}: {} recommendations", session_id, recommendations.len());
+                // Convert from gateway_client type to state type
+                let converted: Vec<crate::tui::state::SkillRecommendationDisplay> = recommendations
+                    .into_iter()
+                    .map(|r| crate::tui::state::SkillRecommendationDisplay {
+                        id: r.id,
+                        skill_name: r.skill_name,
+                        description: r.description,
+                        confidence: r.confidence,
+                        reasons: r.reasons,
+                        triggered_keywords: r.triggered_keywords,
+                        already_enabled: r.already_enabled,
+                    })
+                    .collect();
+                // Store recommendations in state
+                self.state.recommendations_data = Some(converted);
+                self.state.recommendations_session_id = Some(session_id);
+                // If currently in recommendations mode, trigger a redraw
+                if self.state.recommendations_mode {
+                    // The terminal redraw will pick up the new data
+                }
+            }
         }
     }
 
@@ -863,6 +886,33 @@ impl TuiApp {
                         self.state.eval_mode = !self.state.eval_mode;
                         if self.state.eval_mode {
                             self.state.quality_mode = false; // Mutually exclusive
+                            self.state.recommendations_mode = false; // Mutually exclusive
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :rec and :recommendations commands - toggle skill recommendations viewing mode
+                    if input_lower.starts_with(":rec") || input_lower.starts_with(":recommendations") {
+                        self.state.recommendations_mode = !self.state.recommendations_mode;
+                        if self.state.recommendations_mode {
+                            self.state.quality_mode = false; // Mutually exclusive
+                            self.state.eval_mode = false; // Mutually exclusive
+                            // Set the current session for recommendations
+                            self.state.recommendations_session_id = self.state.current_session_id.clone();
+                            // Trigger fetch of recommendations if not already cached
+                            if self.state.recommendations_data.is_none() {
+                                if let Some(ref session_id) = self.state.current_session_id {
+                                    let client = self.gateway_client.clone();
+                                    let sid = session_id.clone();
+                                    tokio::spawn(async move {
+                                        let client = client.read().await;
+                                        if let Ok(recommendations) = client.get_skill_recommendations_http("http://127.0.0.1:8080", &sid).await {
+                                            debug!("Fetched skill recommendations: {:?}", recommendations);
+                                        }
+                                    });
+                                }
+                            }
                         }
                         self.state.input_buffer.clear();
                         return Ok(true);
@@ -1601,6 +1651,10 @@ impl TuiApp {
                     } else if self.state.eval_mode {
                         self.state.eval_mode = false;
                         self.state.eval_data = None;
+                    } else if self.state.recommendations_mode {
+                        self.state.recommendations_mode = false;
+                        self.state.recommendations_data = None;
+                        self.state.recommendations_session_id = None;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -1687,6 +1741,8 @@ impl TuiApp {
             crate::tui::components::draw_quality_panel(f, msg_chunks[0], &self.state);
         } else if self.state.eval_mode {
             crate::tui::components::draw_eval_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.recommendations_mode {
+            crate::tui::components::draw_recommendations_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }

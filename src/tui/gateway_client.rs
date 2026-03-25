@@ -91,6 +91,20 @@ pub enum TuiGatewayEvent {
     SessionQuality { session_id: String, quality_score: f64, turn_count: u32, task_completion_rate: f64, tool_success_rate: f64, rating: u8, issue_count: usize, suggestions: Vec<String> },
     /// Self-evaluation received
     SelfEvaluation { session_id: String, turn_id: String, overall_score: f64, dimension_scores: Vec<(String, f64)>, strengths: Vec<String>, weaknesses: Vec<String> },
+    /// Skill recommendations received
+    SkillRecommendations { session_id: String, recommendations: Vec<SkillRecommendationDisplay> },
+}
+
+/// Skill recommendation for TUI display
+#[derive(Debug, Clone)]
+pub struct SkillRecommendationDisplay {
+    pub id: String,
+    pub skill_name: String,
+    pub description: String,
+    pub confidence: f32,
+    pub reasons: Vec<String>,
+    pub triggered_keywords: Vec<String>,
+    pub already_enabled: bool,
 }
 
 /// Session note info
@@ -560,6 +574,34 @@ impl TuiGatewayClient {
                             });
                         }
                     }
+                    "skill.recommended" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let recommendations: Vec<SkillRecommendationDisplay> = params.get("recommendations")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|r| {
+                                        Some(SkillRecommendationDisplay {
+                                            id: r.get("id")?.as_str()?.to_string(),
+                                            skill_name: r.get("skill_name")?.as_str()?.to_string(),
+                                            description: r.get("description")?.as_str()?.to_string(),
+                                            confidence: r.get("confidence")?.as_f64().unwrap_or(0.0) as f32,
+                                            reasons: r.get("reasons")
+                                                .and_then(|v| v.as_array())
+                                                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                                .unwrap_or_default(),
+                                            triggered_keywords: r.get("triggered_keywords")
+                                                .and_then(|v| v.as_array())
+                                                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                                .unwrap_or_default(),
+                                            already_enabled: r.get("already_enabled")?.as_bool().unwrap_or(false),
+                                        })
+                                    }).collect()
+                                })
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::SkillRecommendations { session_id, recommendations });
+                        }
+                    }
                     _ => {
                         debug!("Unknown notification method: {}", resp.method);
                     }
@@ -862,6 +904,43 @@ impl TuiGatewayClient {
         let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
         self.send_tx.send(json).await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// List skill recommendations for a session (via HTTP API)
+    pub async fn list_skill_recommendations(&self, session_id: &str) -> Result<(), String> {
+        // This method is provided for future HTTP integration
+        // For now, skill recommendations come via SSE events
+        let _ = session_id;
+        Ok(())
+    }
+
+    /// Enable a skill for a session via gateway JSON-RPC
+    pub async fn enable_session_skill(&self, session_id: &str, skill_name: &str) -> Result<(), String> {
+        let request = Request::Standard(RequestStandard {
+            id: Some(format!("tui-skill-enable-{}-{}", session_id, skill_name)),
+            method: methods::SESSION_SKILLS_PUT.to_string(),
+            params: serde_json::json!({
+                "sessionKey": session_id,
+                "skillName": skill_name
+            }),
+        });
+
+        let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+        self.send_tx.send(json).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Get skill recommendations for a session (HTTP fallback for TUI)
+    pub async fn get_skill_recommendations_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/sessions/{}/skill-recommendations", base_url, session_id);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 

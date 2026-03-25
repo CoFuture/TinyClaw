@@ -186,7 +186,42 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告（仅 dead_code）
 - cargo test 366 tests
 
-**下一步**: 更多 Agent 能力增强、WebUI 技能推荐面板
+**下一步**: Agent 能力进一步增强、更多交互优化
+
+---
+
+### v11.6.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Skill Recommendations Panel** - Web 界面技能推荐管理面板
+  - **新增 HTML 面板**：`💡 技能推荐` 面板，支持会话选择、推荐列表展示
+  - **推荐卡片显示**：技能名称、置信度（颜色编码）、描述、推荐原因、触发关键词
+  - **操作按钮**：「启用技能」按钮直接启用推荐技能
+  - **已启用标记**：已启用的技能显示绿色徽章
+  - **SSE 实时更新**：收到 `skill.recommended` 事件时自动更新面板
+  - **会话选择器**：支持切换会话查看不同会话的推荐
+- **TUI Skill Recommendations Support** - 终端界面技能推荐支持
+  - **新增 TUI 命令**：`:rec` / `:recommendations` 查看技能推荐
+  - **新增 TuiGatewayEvent 变体**：`SkillRecommendations` 事件
+  - **新增 TUI 组件**：`draw_recommendations_panel()` 绘制推荐面板
+  - **AppState 新增字段**：`recommendations_mode`、`recommendations_session_id`、`recommendations_data`
+  - **新增 SkillRecommendationDisplay 结构**：用于 TUI 显示推荐数据
+  - **Gateway Client 增强**：
+    - 解析 `skill.recommended` SSE 事件
+    - 新增 `get_skill_recommendations_http()` 方法通过 HTTP API 获取推荐
+    - 新增 `enable_session_skill()` 方法通过网关启用技能
+  - **协议扩展**：`protocol.rs` 新增 `SESSION_SKILLS_PUT` 方法常量
+- **CSS 样式**：
+  - `.skill-recs-panel` - 推荐面板容器
+  - `.skill-rec-item` - 推荐卡片（紫色左边框）
+  - `.skill-rec-confidence.high/medium/low` - 置信度颜色编码
+  - `.skill-rec-reason` - 推荐原因样式
+  - `.skill-rec-keywords` - 触发关键词样式
+  - `.skill-rec-enabled-badge` - 已启用徽章样式
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 366 tests
+
+**下一步**: Agent 能力进一步增强、更多交互优化
 
 ---
 

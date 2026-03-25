@@ -557,6 +557,89 @@
             margin-top: 8px;
         }
         
+        /* Skill Recommendations Panel */
+        .skill-recs-panel {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .skill-rec-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #d580ff;
+        }
+        .skill-rec-item.already-enabled {
+            border-left-color: #00ff88;
+            background: rgba(0,255,136,0.05);
+        }
+        .skill-rec-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .skill-rec-name {
+            color: #d580ff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .skill-rec-name.already-enabled {
+            color: #00ff88;
+        }
+        .skill-rec-confidence {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .skill-rec-confidence.high {
+            background: rgba(0,255,136,0.15);
+            color: #00ff88;
+        }
+        .skill-rec-confidence.medium {
+            background: rgba(255,165,2,0.15);
+            color: #ffa502;
+        }
+        .skill-rec-confidence.low {
+            background: rgba(255,255,255,0.1);
+            color: #888;
+        }
+        .skill-rec-description {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        .skill-rec-reasons {
+            margin-bottom: 8px;
+        }
+        .skill-rec-reason {
+            color: #aaa;
+            font-size: 12px;
+            line-height: 1.5;
+            padding-left: 10px;
+            border-left: 2px solid #d580ff;
+            margin-bottom: 4px;
+        }
+        .skill-rec-keywords {
+            color: #666;
+            font-size: 11px;
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+        .skill-rec-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .skill-rec-enabled-badge {
+            color: #00ff88;
+            font-size: 11px;
+            background: rgba(0,255,136,0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
         /* Modal */
         .modal-overlay {
             display: none;
@@ -1828,6 +1911,22 @@
             </div>
         </div>
         
+        <!-- Skill Recommendations Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>💡 技能推荐 <span class="tool-count-badge" id="recsCount">-</span></h2>
+            <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                <label style="color: #888; font-size: 13px;">会话:
+                    <select id="recsSessionSelect" onchange="loadSkillRecommendations(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; margin-left: 5px;">
+                        <option value="">-- 选择会话 --</option>
+                    </select>
+                </label>
+                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="refreshRecsSessionList()">🔄 刷新会话列表</button>
+            </div>
+            <div class="skill-recs-panel" id="recsPanel">
+                <div style="color: #888; padding: 20px; text-align: center;">选择会话查看推荐技能</div>
+            </div>
+        </div>
+        
         <!-- Agent Tools Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>🛠️ 可用工具 <span class="tool-count-badge" id="toolCount">-</span></h2>
@@ -2299,6 +2398,13 @@
                     refreshNotesSessionList();
                 } catch (e) {
                     // Notes API might not be available
+                }
+                
+                // Populate skill recommendations session selector
+                try {
+                    refreshRecsSessionList();
+                } catch (e) {
+                    // Recommendations API might not be available
                 }
                 
                 // Fetch tools list
@@ -3641,6 +3747,140 @@
                         });
                     }
                     if (currentValue) select.value = currentValue;
+                }
+            } catch (e) {
+                console.error('Failed to refresh session list:', e);
+            }
+        }
+        
+        // ============================================================
+        // Skill Recommendations Functions
+        // ============================================================
+        
+        /// Global skill recommendations data
+        let currentSkillRecommendations = [];
+        
+        async function loadSkillRecommendations(sessionId) {
+            if (!sessionId) {
+                document.getElementById('recsPanel').innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">选择会话查看推荐技能</div>';
+                document.getElementById('recsCount').textContent = '-';
+                return;
+            }
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/skill-recommendations');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    currentSkillRecommendations = data.recommendations || [];
+                    renderSkillRecommendations(currentSkillRecommendations);
+                    document.getElementById('recsCount').textContent = currentSkillRecommendations.length;
+                } else {
+                    document.getElementById('recsPanel').innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">加载推荐失败</div>';
+                    document.getElementById('recsCount').textContent = '-';
+                }
+            } catch (e) {
+                console.error('Failed to load skill recommendations:', e);
+                document.getElementById('recsPanel').innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        
+        function renderSkillRecommendations(recommendations) {
+            const panel = document.getElementById('recsPanel');
+            
+            if (!recommendations || recommendations.length === 0) {
+                panel.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无推荐技能<br><span style="font-size: 12px;">推荐技能会根据对话上下文自动生成</span></div>';
+                return;
+            }
+            
+            let html = '';
+            recommendations.forEach((rec, idx) => {
+                const confClass = rec.confidence >= 0.7 ? 'high' : rec.confidence >= 0.4 ? 'medium' : 'low';
+                const confPercent = Math.round(rec.confidence * 100);
+                const enabledClass = rec.already_enabled ? 'already-enabled' : '';
+                
+                html += '<div class="skill-rec-item ' + (rec.already_enabled ? 'already-enabled' : '') + '">';
+                html += '<div class="skill-rec-header">';
+                html += '<span class="skill-rec-name ' + enabledClass + '">' + escapeHtml(rec.skill_name) + '</span>';
+                html += '<span class="skill-rec-confidence ' + confClass + '">' + confPercent + '%</span>';
+                html += '</div>';
+                
+                if (rec.description && rec.description !== rec.skill_name) {
+                    html += '<div class="skill-rec-description">' + escapeHtml(rec.description) + '</div>';
+                }
+                
+                if (rec.reasons && rec.reasons.length > 0) {
+                    html += '<div class="skill-rec-reasons">';
+                    rec.reasons.slice(0, 3).forEach(reason => {
+                        html += '<div class="skill-rec-reason">→ ' + escapeHtml(reason) + '</div>';
+                    });
+                    html += '</div>';
+                }
+                
+                if (rec.triggered_keywords && rec.triggered_keywords.length > 0) {
+                    html += '<div class="skill-rec-keywords">关键词: ' + escapeHtml(rec.triggered_keywords.slice(0, 5).join(', ')) + '</div>';
+                }
+                
+                html += '<div class="skill-rec-actions">';
+                if (rec.already_enabled) {
+                    html += '<span class="skill-rec-enabled-badge">✓ 已启用</span>';
+                } else {
+                    html += '<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="applySkillRecommendation(\'' + escapeHtml(rec.skill_name) + '\')">➕ 启用技能</button>';
+                }
+                html += '</div>';
+                html += '</div>';
+            });
+            
+            panel.innerHTML = html;
+        }
+        
+        async function applySkillRecommendation(skillName) {
+            const sessionId = document.getElementById('recsSessionSelect').value;
+            if (!sessionId) {
+                alert('请先选择一个会话');
+                return;
+            }
+            
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions/' + sessionId + '/skills/' + skillName, {
+                    method: 'PUT'
+                });
+                
+                if (resp.ok) {
+                    showToast('✓ 已启用技能: ' + skillName, 'success');
+                    // Reload recommendations to update the UI
+                    loadSkillRecommendations(sessionId);
+                    // Also refresh skills panel
+                    loadSkills();
+                } else {
+                    const err = await resp.json();
+                    showToast('启用技能失败: ' + (err.error || err.message || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showToast('启用技能失败: ' + e.message, 'error');
+            }
+        }
+        
+        async function refreshRecsSessionList() {
+            try {
+                const resp = await fetch(API_BASE + '/api/sessions');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const select = document.getElementById('recsSessionSelect');
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">-- 选择会话 --</option>';
+                    if (data.sessions && data.sessions.length > 0) {
+                        data.sessions.forEach(s => {
+                            const option = document.createElement('option');
+                            option.value = s.id;
+                            option.textContent = (s.label || s.id) + ' (' + (s.messageCount || 0) + ' 条消息)';
+                            select.appendChild(option);
+                        });
+                    }
+                    if (currentValue) select.value = currentValue;
+                    // Auto-load if a session was previously selected
+                    if (currentValue) {
+                        loadSkillRecommendations(currentValue);
+                    }
                 }
             } catch (e) {
                 console.error('Failed to refresh session list:', e);
@@ -5519,6 +5759,13 @@
                 // Skill recommendation event - show toast with recommended skills
                 const recNames = data.recommendations.map(r => r.skill_name).join(', ');
                 showToast('💡 推荐技能: ' + recNames, 'info');
+                // Update recommendations panel if the session matches
+                const recsSessionSelect = document.getElementById('recsSessionSelect');
+                if (recsSessionSelect && recsSessionSelect.value === data.session_id) {
+                    currentSkillRecommendations = data.recommendations;
+                    renderSkillRecommendations(currentSkillRecommendations);
+                    document.getElementById('recsCount').textContent = currentSkillRecommendations.length;
+                }
             }
         }
         

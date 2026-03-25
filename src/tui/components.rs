@@ -1031,3 +1031,108 @@ pub fn draw_eval_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     f.render_widget(paragraph, area);
 }
+
+/// Draw skill recommendations panel
+pub fn draw_recommendations_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 💡 Skill Recommendations ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .style(Style::default().bg(Color::Rgb(15, 25, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref recommendations) = state.recommendations_data {
+        if recommendations.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No skill recommendations available yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Recommendations appear based on conversation context."));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} recommended skills", recommendations.len()), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(""));
+            
+            for (idx, rec) in recommendations.iter().enumerate() {
+                // Confidence color
+                let conf_color = if rec.confidence >= 0.7 { Color::Green }
+                    else if rec.confidence >= 0.4 { Color::Yellow }
+                    else { Color::DarkGray };
+                
+                // Already enabled badge
+                let enabled_badge = if rec.already_enabled {
+                    Span::styled(" [enabled]", Style::default().fg(Color::Green))
+                } else {
+                    Span::raw("")
+                };
+                
+                lines.push(Line::from(vec![
+                    Span::styled(format!("#{} ", idx + 1), Style::default().fg(Color::DarkGray)),
+                    Span::styled(rec.skill_name.clone(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::raw(" "),
+                    Span::styled(format!("{:.0}%", rec.confidence * 100.0), Style::default().fg(conf_color)),
+                    enabled_badge,
+                ]));
+                
+                // Description
+                if !rec.description.is_empty() && rec.description != rec.skill_name {
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(rec.description.clone(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+                
+                // Reasons (show first 2)
+                for (i, reason) in rec.reasons.iter().take(2).enumerate() {
+                    let bullet = if i == 0 { "→" } else { " " };
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(bullet, Style::default().fg(Color::Magenta)),
+                        Span::styled(" ", Style::default()),
+                        Span::styled(reason.clone(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+                
+                // Triggered keywords (show first 3)
+                if !rec.triggered_keywords.is_empty() {
+                    let keywords: Vec<String> = rec.triggered_keywords.iter().take(3).map(|k| k.clone()).collect();
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled("keywords: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(keywords.join(", "), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                    ]));
+                }
+                
+                lines.push(Line::from(""));
+            }
+            
+            lines.push(Line::from(vec![
+                Span::styled("Use WebUI or API to enable recommended skills", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Loading recommendations...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Recommendations will appear based on conversation context."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :rec to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
