@@ -86,7 +86,35 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告（仅 pre-existing dead_code）
 - cargo test 381 tests
 
-**下一步**: WebUI 安全状态面板、配置更新 API
+**下一步**: WebUI Safety Panel（已完成 ✅ v12.3.0）、配置更新 API（已完成 ✅ v12.3.0）
+
+---
+
+### v12.3.0 (已完成 ✅)
+
+**完成事项**:
+- **WebUI Safety Panel** - 网页界面执行安全状态面板
+  - **HTTP API 新增端点**：
+    - `GET /api/safety/config` - 获取执行安全配置
+    - `PATCH /api/safety/config` - 更新执行安全配置
+  - **Agent 客户端新增方法** (`client.rs`)：
+    - `get_safety_config()` - 获取当前安全配置
+    - `update_safety_config()` - 更新安全配置（支持 maxConsecutiveTurns、warningThresholdPct、safetyAction、enabled）
+  - **admin.html 新增面板**：
+    - 🛡️ 执行安全面板：统计数据卡片（安全事件/警告次数/停止次数/监控中会话）
+    - 当前配置摘要显示（最大连续调用数/警告阈值/安全动作/启用状态）
+    - 会话安全状态列表：显示每个会话的连续工具调用数、警告/停止状态
+    - ⚙️ 配置弹窗：启用/禁用监控、最大连续调用数、警告阈值百分比、安全动作选择
+    - 状态颜色编码：正常(绿)/警告(黄)/停止(红)
+  - **refreshData() 集成**：自动随页面刷新加载安全面板
+  - **CSS 样式**：`.safety-stats-grid`、`.safety-stat-card`、`.safety-session-item` 等完整样式
+- **HTTP 路由新增** (`routes.rs`)：
+  - `safety_config_get()` - 获取安全配置处理器
+  - `safety_config_update()` - 更新安全配置处理器（支持 PATCH）
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 381 tests
+
+**下一步**: Agent 能力持续增强、更多交互优化
 
 ---
 

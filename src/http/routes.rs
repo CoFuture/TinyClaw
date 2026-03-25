@@ -887,6 +887,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // Execution safety API
         .route("/api/safety/stats", get(safety_stats))
         .route("/api/safety/session/{session_id}", get(safety_session_state))
+        .route("/api/safety/config", get(safety_config_get))
+        .route("/api/safety/config", axum::routing::patch(safety_config_update))
         
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
@@ -2247,4 +2249,48 @@ async fn safety_session_state(
             "message": "No safety state recorded for this session",
         }))
     }
+}
+
+/// Get current execution safety configuration
+async fn safety_config_get(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let config = state.agent.get_safety_config();
+    Json(serde_json::json!({
+        "config": config,
+        "enabled": state.agent.has_safety_manager(),
+    }))
+}
+
+/// Update execution safety configuration
+async fn safety_config_update(
+    State(state): State<Arc<HttpState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let max_consecutive_turns = payload.get("maxConsecutiveTurns")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
+    let warning_threshold_pct = payload.get("warningThresholdPct")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u8);
+    let enabled = payload.get("enabled").and_then(|v| v.as_bool());
+
+    // Parse safety action from string
+    let safety_action = payload.get("safetyAction").and_then(|v| v.as_str()).map(|s| {
+        match s {
+            "warn" => crate::agent::SafetyAction::Warn,
+            "summarize" => crate::agent::SafetyAction::Summarize,
+            "halt" => crate::agent::SafetyAction::Halt,
+            "stop" => crate::agent::SafetyAction::Stop,
+            _ => crate::agent::SafetyAction::Warn,
+        }
+    });
+
+    let result = state.agent.update_safety_config(
+        max_consecutive_turns,
+        warning_threshold_pct,
+        safety_action,
+        enabled,
+    );
+    Json(result)
 }

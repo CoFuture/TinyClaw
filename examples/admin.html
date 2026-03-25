@@ -639,6 +639,81 @@
             padding: 2px 6px;
             border-radius: 3px;
         }
+
+        /* Execution Safety Panel */
+        .safety-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .safety-stat-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .safety-stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #f59e0b;
+            margin-bottom: 5px;
+        }
+        .safety-stat-label {
+            color: #888;
+            font-size: 12px;
+        }
+        .safety-session-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #f59e0b;
+        }
+        .safety-session-item.halted {
+            border-left-color: #ef4444;
+            background: rgba(239,68,68,0.1);
+        }
+        .safety-session-item.warning {
+            border-left-color: #eab308;
+            background: rgba(234,179,8,0.05);
+        }
+        .safety-session-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .safety-session-name {
+            color: #e2e8f0;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .safety-session-detail {
+            color: #666;
+            font-size: 11px;
+        }
+        .safety-session-status {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .safety-status-normal {
+            background: rgba(34,197,94,0.2);
+            color: #22c55e;
+        }
+        .safety-status-warning {
+            background: rgba(234,179,8,0.2);
+            color: #eab308;
+        }
+        .safety-status-halted {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+        }
         
         /* Modal */
         .modal-overlay {
@@ -1926,6 +2001,42 @@
                 <div style="color: #888; padding: 20px; text-align: center;">选择会话查看推荐技能</div>
             </div>
         </div>
+
+        <!-- Execution Safety Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🛡️ 执行安全 <span id="safetyEnabledBadge" class="tool-count-badge" style="background: #22c55e;">已启用</span></h2>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <button class="btn" onclick="loadSafetyPanel()">🔄 刷新</button>
+                <button class="btn btn-secondary" onclick="showSafetyConfigModal()">⚙️ 配置</button>
+            </div>
+            <div class="safety-stats-grid" id="safetyStatsGrid">
+                <div class="safety-stat-card">
+                    <div class="safety-stat-value" id="safetyTotalEvents">-</div>
+                    <div class="safety-stat-label">安全事件</div>
+                </div>
+                <div class="safety-stat-card">
+                    <div class="safety-stat-value" id="safetyTotalWarnings">-</div>
+                    <div class="safety-stat-label">警告次数</div>
+                </div>
+                <div class="safety-stat-card">
+                    <div class="safety-stat-value" id="safetyTotalHalts">-</div>
+                    <div class="safety-stat-label">停止次数</div>
+                </div>
+                <div class="safety-stat-card">
+                    <div class="safety-stat-value" id="safetyActiveSessions">-</div>
+                    <div class="safety-stat-label">监控中会话</div>
+                </div>
+            </div>
+            <div style="margin-top: 15px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="color: #888; font-size: 13px;">当前配置:</span>
+                    <span id="safetyConfigSummary" style="color: #e2e8f0; font-size: 13px;">加载中...</span>
+                </div>
+                <div id="safetySessionsList" style="max-height: 200px; overflow-y: auto;">
+                    <div style="color: #888; padding: 10px; text-align: center;">选择会话查看安全状态</div>
+                </div>
+            </div>
+        </div>
         
         <!-- Agent Tools Panel -->
         <div class="card full-width" style="margin-top: 20px;">
@@ -2405,6 +2516,13 @@
                     refreshRecsSessionList();
                 } catch (e) {
                     // Recommendations API might not be available
+                }
+
+                // Fetch execution safety panel
+                try {
+                    loadSafetyPanel();
+                } catch (e) {
+                    // Safety API might not be available
                 }
                 
                 // Fetch tools list
@@ -3884,6 +4002,195 @@
                 }
             } catch (e) {
                 console.error('Failed to refresh session list:', e);
+            }
+        }
+
+        // ============================================================
+        // Execution Safety Functions
+        // ============================================================
+
+        async function loadSafetyPanel() {
+            try {
+                // Load stats and config in parallel
+                const [statsResp, configResp] = await Promise.all([
+                    fetch(API_BASE + '/api/safety/stats'),
+                    fetch(API_BASE + '/api/safety/config'),
+                ]);
+
+                if (!statsResp.ok || !configResp.ok) {
+                    document.getElementById('safetyStatsGrid').innerHTML =
+                        '<div style="color: #ef4444; padding: 20px; text-align: center;">安全系统未启用</div>';
+                    return;
+                }
+
+                const statsData = await statsResp.json();
+                const configData = await configResp.json();
+
+                // Update enabled badge
+                const enabledBadge = document.getElementById('safetyEnabledBadge');
+                const isEnabled = configData.enabled && configData.config && configData.config.enabled !== false;
+                enabledBadge.textContent = isEnabled ? '已启用' : '已禁用';
+                enabledBadge.style.background = isEnabled ? '#22c55e' : '#6b7280';
+
+                // Update stats
+                const stats = statsData.stats || {};
+                document.getElementById('safetyTotalEvents').textContent = stats.total_safety_events ?? 0;
+                document.getElementById('safetyTotalWarnings').textContent = stats.total_warnings ?? 0;
+                document.getElementById('safetyTotalHalts').textContent = stats.total_halts ?? 0;
+                document.getElementById('safetyActiveSessions').textContent = stats.active_sessions ?? 0;
+
+                // Update config summary
+                const config = configData.config || {};
+                const actionLabel = config.safetyAction?.label || '警告 (Warn)';
+                document.getElementById('safetyConfigSummary').textContent =
+                    '最大连续工具调用: ' + (config.maxConsecutiveTurns || 20) +
+                    ' | 警告阈值: ' + (config.warningThresholdPct || 75) + '%' +
+                    ' | 动作: ' + actionLabel +
+                    ' | ' + (isEnabled ? '🟢 已启用' : '⚪ 已禁用');
+
+                // Load session states for all sessions
+                const sessionsResp = await fetch(API_BASE + '/api/sessions');
+                const sessionsListEl = document.getElementById('safetySessionsList');
+                if (sessionsResp.ok) {
+                    const sessionsData = await sessionsResp.json();
+                    if (sessionsData.sessions && sessionsData.sessions.length > 0) {
+                        const statePromises = sessionsData.sessions.slice(0, 10).map(async (s) => {
+                            try {
+                                const stateResp = await fetch(API_BASE + '/api/safety/session/' + encodeURIComponent(s.id));
+                                if (stateResp.ok) {
+                                    return { session: s, state: await stateResp.json() };
+                                }
+                            } catch (e) { /* skip */ }
+                            return null;
+                        });
+                        const results = (await Promise.all(statePromises)).filter(r => r !== null);
+                        if (results.length > 0) {
+                            let html = '';
+                            results.forEach(({ session, state }) => {
+                                if (state.state === 'no_data') return;
+                                const isHalted = state.isHalted;
+                                const hasWarning = state.warningIssued;
+                                const statusClass = isHalted ? 'halted' : hasWarning ? 'warning' : '';
+                                const statusLabel = isHalted ? '已停止' : hasWarning ? '⚠️ 警告' : '正常';
+                                const statusBadgeClass = isHalted ? 'safety-status-halted' : hasWarning ? 'safety-status-warning' : 'safety-status-normal';
+                                const turns = state.consecutiveToolTurns || 0;
+                                const total = state.totalToolTurns || 0;
+                                html += '<div class="safety-session-item ' + statusClass + '">';
+                                html += '<div class="safety-session-info">';
+                                html += '<div class="safety-session-name">' + escapeHtml(session.label || session.id) + '</div>';
+                                html += '<div class="safety-session-detail">连续工具调用: ' + turns + ' | 总计: ' + total + '</div>';
+                                html += '</div>';
+                                html += '<span class="safety-session-status ' + statusBadgeClass + '">' + statusLabel + '</span>';
+                                html += '</div>';
+                            });
+                            sessionsListEl.innerHTML = html || '<div style="color: #888; padding: 10px; text-align: center;">暂无会话安全数据</div>';
+                        } else {
+                            sessionsListEl.innerHTML = '<div style="color: #888; padding: 10px; text-align: center;">暂无会话安全数据</div>';
+                        }
+                    } else {
+                        sessionsListEl.innerHTML = '<div style="color: #888; padding: 10px; text-align: center;">暂无会话</div>';
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load safety panel:', e);
+                document.getElementById('safetyStatsGrid').innerHTML =
+                    '<div style="color: #ef4444; padding: 20px; text-align: center;">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function showSafetyConfigModal() {
+            fetch(API_BASE + '/api/safety/config')
+                .then(r => r.json())
+                .then(data => {
+                    const config = data.config || {};
+                    const modal = document.createElement('div');
+                    modal.className = 'modal-overlay';
+                    modal.id = 'safetyConfigModal';
+                    modal.innerHTML = `
+                        <div class="modal-dialog" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h3>🛡️ 执行安全配置</h3>
+                                <button class="modal-close" onclick="closeSafetyConfigModal()">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div style="margin-bottom: 15px;">
+                                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                        <input type="checkbox" id="safetyEnabledInput" ${config.enabled !== false ? 'checked' : ''}>
+                                        <span>启用执行安全监控</span>
+                                    </label>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <label style="display: block; margin-bottom: 5px; color: #888;">最大连续工具调用次数</label>
+                                    <input type="number" id="safetyMaxTurnsInput" value="${config.maxConsecutiveTurns || 20}" min="5" max="100" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 8px; border-radius: 4px; box-sizing: border-box;">
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <label style="display: block; margin-bottom: 5px; color: #888;">警告阈值 (%)</label>
+                                    <input type="number" id="safetyWarningPctInput" value="${config.warningThresholdPct || 75}" min="10" max="99" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 8px; border-radius: 4px; box-sizing: border-box;">
+                                    <small style="color: #666;">触发警告的阈值百分比 (默认 75%)</small>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <label style="display: block; margin-bottom: 5px; color: #888;">安全动作</label>
+                                    <select id="safetyActionInput" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 8px; border-radius: 4px; box-sizing: border-box;">
+                                        <option value="warn" ${(config.safetyAction?.value || 'warn') === 'warn' ? 'selected' : ''}>警告 (Warn) - 仅发送警告，继续执行</option>
+                                        <option value="summarize" ${config.safetyAction?.value === 'summarize' ? 'selected' : ''}>摘要 (Summarize) - 触发上下文摘要</option>
+                                        <option value="halt" ${config.safetyAction?.value === 'halt' ? 'selected' : ''}>停止 (Halt) - 暂停执行等待确认</option>
+                                        <option value="stop" ${config.safetyAction?.value === 'stop' ? 'selected' : ''}>终止 (Stop) - 立即终止执行</option>
+                                    </select>
+                                </div>
+                                <div id="safetyConfigError" style="color: #ef4444; margin-top: 10px; display: none;"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" onclick="closeSafetyConfigModal()">取消</button>
+                                <button class="btn" onclick="saveSafetyConfig()">💾 保存</button>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    modal.style.display = 'flex';
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) closeSafetyConfigModal();
+                    });
+                })
+                .catch(e => {
+                    alert('加载配置失败: ' + e.message);
+                });
+        }
+
+        function closeSafetyConfigModal() {
+            const modal = document.getElementById('safetyConfigModal');
+            if (modal) modal.remove();
+        }
+
+        async function saveSafetyConfig() {
+            const payload = {
+                enabled: document.getElementById('safetyEnabledInput').checked,
+                maxConsecutiveTurns: parseInt(document.getElementById('safetyMaxTurnsInput').value, 10),
+                warningThresholdPct: parseInt(document.getElementById('safetyWarningPctInput').value, 10),
+                safetyAction: document.getElementById('safetyActionInput').value,
+            };
+            try {
+                const resp = await fetch(API_BASE + '/api/safety/config', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (data.success !== false) {
+                    closeSafetyConfigModal();
+                    loadSafetyPanel();
+                } else {
+                    const errEl = document.getElementById('safetyConfigError');
+                    if (errEl) {
+                        errEl.textContent = '保存失败: ' + (data.message || '未知错误');
+                        errEl.style.display = 'block';
+                    }
+                }
+            } catch (e) {
+                const errEl = document.getElementById('safetyConfigError');
+                if (errEl) {
+                    errEl.textContent = '保存失败: ' + e.message;
+                    errEl.style.display = 'block';
+                }
             }
         }
         

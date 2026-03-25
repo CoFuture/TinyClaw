@@ -540,6 +540,66 @@ CONVERSATION TO SUMMARIZE:
         }
     }
 
+    /// Get current execution safety configuration
+    pub fn get_safety_config(&self) -> serde_json::Value {
+        let guard = self.safety_manager.read();
+        if let Some(ref manager) = *guard {
+            let config = manager.get_config();
+            serde_json::json!({
+                "enabled": config.enabled,
+                "maxConsecutiveTurns": config.max_consecutive_turns,
+                "warningThresholdPct": config.warning_threshold_pct,
+                "safetyAction": serde_json::json!({
+                    "value": config.safety_action,
+                    "label": match config.safety_action {
+                        crate::agent::SafetyAction::Warn => "警告 (Warn)",
+                        crate::agent::SafetyAction::Summarize => "摘要 (Summarize)",
+                        crate::agent::SafetyAction::Halt => "停止 (Halt)",
+                        crate::agent::SafetyAction::Stop => "终止 (Stop)",
+                    }
+                }),
+                "warningTurnCount": config.warning_turn_count(),
+            })
+        } else {
+            serde_json::json!({
+                "enabled": false,
+                "message": "Safety manager not enabled"
+            })
+        }
+    }
+
+    /// Update execution safety configuration
+    pub fn update_safety_config(&self, max_consecutive_turns: Option<usize>, warning_threshold_pct: Option<u8>, safety_action: Option<crate::agent::SafetyAction>, enabled: Option<bool>) -> serde_json::Value {
+        let guard = self.safety_manager.read();
+        if let Some(ref manager) = *guard {
+            manager.update_config_fields(max_consecutive_turns, warning_threshold_pct, safety_action, enabled);
+            let config = manager.get_config();
+            serde_json::json!({
+                "success": true,
+                "config": {
+                    "enabled": config.enabled,
+                    "maxConsecutiveTurns": config.max_consecutive_turns,
+                    "warningThresholdPct": config.warning_threshold_pct,
+                    "safetyAction": serde_json::json!({
+                        "value": config.safety_action,
+                        "label": match config.safety_action {
+                            crate::agent::SafetyAction::Warn => "警告 (Warn)",
+                            crate::agent::SafetyAction::Summarize => "摘要 (Summarize)",
+                            crate::agent::SafetyAction::Halt => "停止 (Halt)",
+                            crate::agent::SafetyAction::Stop => "终止 (Stop)",
+                        }
+                    }),
+                    "warningTurnCount": config.warning_turn_count(),
+                }
+            })
+        } else {
+            serde_json::json!({
+                "success": false,
+                "message": "Safety manager not enabled"
+            })
+        }
+    }
+
     /// Set the current session key for tool event tracking
     fn set_session_key(&self, session_key: Option<&str>) {
         *self.current_session_key.write() = session_key.map(String::from);
