@@ -88,6 +88,9 @@ pub enum SuggestionType {
     /// Task creation suggestion
     #[serde(rename = "task")]
     Task,
+    /// Context management suggestion (compression, summarization, etc.)
+    #[serde(rename = "context")]
+    Context,
 }
 
 /// Suggestion engine - analyzes conversation and generates proactive suggestions

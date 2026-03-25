@@ -481,7 +481,6 @@ impl ContextHealthMonitor {
                 suggestion: "简化系统提示词，移除冗余的格式说明".to_string(),
                 potential_savings: Some(composition.system_prompt_tokens / 3),
             });
-            next_id += 1;
         }
 
         // Sort by priority

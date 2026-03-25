@@ -897,6 +897,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // Context health API
         .route("/api/context/health", get(context_health_get))
         .route("/api/context/health/reset", axum::routing::post(context_health_reset))
+        // Context advisor API
+        .route("/api/context/advisor/{session_id}", get(context_advisor_get))
+        .route("/api/context/advisor/{session_id}/reset", axum::routing::post(context_advisor_reset))
         
         // Execution safety API
         .route("/api/safety/stats", get(safety_stats))
@@ -2349,6 +2352,65 @@ async fn context_health_reset(
     Json(serde_json::json!({
         "success": true,
         "message": "Context health statistics reset",
+    }))
+}
+
+/// Get context advisor stats for a session
+async fn context_advisor_get(
+    State(_state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    // Access the global context advisors registry
+    let advisors = crate::gateway::messages::CONTEXT_ADVISORS.read();
+    if let Some(advisor) = advisors.get(&session_id) {
+        let stats = advisor.get_stats();
+        let advice = advisor.generate_advice();
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "stats": {
+                "turnCount": stats.turn_count,
+                "totalTokensProcessed": stats.total_tokens_processed,
+                "compressionCount": stats.compression_count,
+                "currentUtilization": stats.current_utilization,
+                "activePatterns": stats.active_patterns,
+                "adviceCount": stats.advice_count,
+                "patterns": stats.patterns,
+            },
+            "advice": advice.iter().map(|a| serde_json::json!({
+                "id": a.id,
+                "category": a.category,
+                "title": a.title,
+                "explanation": a.explanation,
+                "suggestion": a.suggestion,
+                "severity": a.severity,
+                "isUrgent": a.is_urgent,
+                "timestamp": a.timestamp.to_rfc3339(),
+                "triggerPattern": a.trigger_pattern,
+            })).collect::<Vec<_>>(),
+            "shouldSuggestNewSession": advisor.should_suggest_new_session(),
+        }))
+    } else {
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "stats": null,
+            "advice": [],
+            "shouldSuggestNewSession": false,
+        }))
+    }
+}
+
+/// Reset context advisor for a session
+async fn context_advisor_reset(
+    State(_state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let mut advisors = crate::gateway::messages::CONTEXT_ADVISORS.write();
+    if let Some(advisor) = advisors.get_mut(&session_id) {
+        advisor.reset_session_data();
+    }
+    Json(serde_json::json!({
+        "success": true,
+        "message": format!("Context advisor reset for session {}", session_id),
     }))
 }
 

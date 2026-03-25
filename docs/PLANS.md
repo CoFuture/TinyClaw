@@ -2010,3 +2010,42 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: WebUI 上下文健康面板、其他 Agent 能力增强
 
+
+---
+
+### v12.8.0 (已完成 ✅)
+
+**完成事项**:
+- **Context Advisor with Smart Recommendations - 上下文优化建议器** - 基于上下文管理模式的智能建议系统
+  - **新增 `agent/context_advisor.rs` 模块**：
+    - `PatternType` 枚举：FrequentTruncation、HighUtilization、LargeSystemPrompt、InefficientSummarization、ContextBloating、SessionTooLong 六种模式
+    - `DetectedPattern` 结构：检测到的模式（类型、计数、首次/最近出现时间）
+    - `ContextAdvice` 结构：单条建议（类别、标题、解释、建议、严重程度、是否紧急、触发模式）
+    - `ContextAdvisor` 管理器：模式检测与建议生成核心逻辑
+  - **建议生成逻辑**：
+    - 频繁截断建议（≥2次触发）
+    - 高使用率建议（≥80%预警 / ≥90%紧急）
+    - 上下文快速增长建议（短时间内利用率大幅增长）
+    - 会话过长建议（消息数>50）
+    - 大系统提示词建议（>8000 tokens）
+  - **`SuggestionType::Context` 变体** (`agent/suggestion.rs`)：
+    - 新增上下文管理建议类型
+  - **Turn 处理集成** (`gateway/messages.rs`)：
+    - 在 `handle_agent_turn` 中更新上下文建议器
+    - 基于上下文组成和健康数据生成建议
+    - 将建议作为 SuggestionGenerated 事件发出
+  - **全局建议器注册表** (`gateway/messages.rs`)：
+    - `CONTEXT_ADVISORS` lazy_static：按会话存储的建议器
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `GET /api/context/advisor/{session_id}` - 获取会话的建议器和统计
+    - `POST /api/context/advisor/{session_id}/reset` - 重置会话建议器
+    - 返回：活跃模式、建议列表、是否应开启新会话
+  - **TUI 命令**：
+    - 新增 `:advisor` / `:advice` / `:suggestions` 命令元数据
+  - **建议通过 SuggestionGenerated 事件实时推送到 WebUI 和 TUI**：
+    - 紧急建议（严重程度3或is_urgent）会在对话中实时显示
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 383 tests
+
+**下一步**: WebUI 上下文健康面板完善、其他 Agent 能力增强
+

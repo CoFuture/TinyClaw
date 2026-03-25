@@ -23,6 +23,8 @@ use tracing::{debug, error, info};
 
 lazy_static::lazy_static! {
     static ref TOOL_EXECUTOR: ToolExecutor = ToolExecutor::new();
+    /// Per-session context advisors
+    pub static ref CONTEXT_ADVISORS: parking_lot::RwLock<std::collections::HashMap<String, crate::agent::ContextAdvisor>> = parking_lot::RwLock::new(std::collections::HashMap::new());
 }
 
 /// A server-generated unique request ID for tracing
@@ -953,6 +955,37 @@ async fn handle_agent_turn(
         summarization_count: health_report.stats.summarization_count,
         recommendations_count: health_report.recommendations.len(),
     });
+
+    // Update context advisor with current turn data
+    {
+        let mut advisors = crate::gateway::messages::CONTEXT_ADVISORS.write();
+        let advisor = advisors.entry(session_key.to_string()).or_default();
+        advisor.set_session(session_key.to_string());
+        advisor.record_turn(health_report.composition.utilization_pct, health_report.composition.total_tokens);
+        
+        // Generate and emit context advice as suggestions
+        let advice_list = advisor.generate_advice();
+        if !advice_list.is_empty() {
+            let suggestions: Vec<_> = advice_list.iter().map(|a| crate::agent::Suggestion {
+                id: a.id.clone(),
+                suggestion_type: crate::agent::SuggestionType::Context,
+                title: format!("[{}] {}", a.category, a.title),
+                description: format!("{}\n\n建议: {}", a.explanation, a.suggestion),
+                action_label: "查看详情".to_string(),
+                action_data: None,
+                confidence: (a.severity as f32 / 3.0).clamp(0.3, 1.0),
+                created_at: a.timestamp,
+                triggered_by: Some(vec![a.trigger_pattern.clone()]),
+            }).collect();
+            
+            if !suggestions.is_empty() {
+                ctx.event_emitter.emit(Event::SuggestionGenerated {
+                    session_id: session_key.to_string(),
+                    suggestions,
+                });
+            }
+        }
+    }
 
     // Auto-extract facts from conversation into long-term memory
     // Combine user message and assistant response for analysis

@@ -207,6 +207,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View performance insights",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":advisor",
+        aliases: &["advice", "suggestions"],
+        description: "View context optimization advice",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",

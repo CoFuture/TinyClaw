@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod context;
+pub mod context_advisor;
 pub mod context_health;
 pub mod context_manager;
 pub mod context_summarizer;
@@ -70,3 +71,5 @@ pub use execution_safety::{SafetyAction, ExecutionSafetyConfig, ExecutionSafetyM
 pub use performance_insights::{InsightCategory, InsightSeverity, PerformanceInsight, PerformanceAnalysis, PerformanceInsightsEngine, ToolEfficiencySummary, QualityTrend, ToolPattern};
 #[allow(unused_imports)]
 pub use context_health::{ContextHealthLevel, ContextHealthMonitor, ContextHealthReport, ContextHealthStats, ContextComposition, CompressionEvent, CompressionEventType, HealthRecommendation};
+#[allow(unused_imports)]
+pub use context_advisor::{ContextAdvisor, ContextAdvice, ContextAdvisorStats, PatternType};
