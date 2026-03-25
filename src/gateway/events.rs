@@ -5,6 +5,7 @@ use tokio::sync::broadcast;
 use crate::agent::scheduled_task::ScheduledTaskSummary;
 use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 use crate::agent::task::TaskSummary;
+use crate::agent::skill_recommender::SkillRecommendation;
 use crate::agent::suggestion::Suggestion;
 
 /// Tool call info for action plan preview
@@ -243,6 +244,13 @@ pub enum Event {
     SuggestionDismissed {
         session_id: String,
         suggestion_id: String,
+    },
+    
+    /// Skill was recommended based on conversation context
+    #[serde(rename = "skill.recommended")]
+    SkillRecommended {
+        session_id: String,
+        recommendations: Vec<SkillRecommendation>,
     },
     
     /// Error occurred

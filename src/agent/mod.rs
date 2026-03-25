@@ -17,6 +17,7 @@ pub mod session_notes;
 pub mod session_quality;
 pub mod skill;
 pub mod skill_manager;
+pub mod skill_recommender;
 pub mod skill_registry;
 pub mod suggestion;
 pub mod suggestion_manager;
@@ -46,6 +47,8 @@ pub use session_notes::{SessionNote, SessionNoteSummary};
 pub use skill::Skill;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
+#[allow(unused_imports)]
+pub use skill_recommender::{SkillRecommendation, SkillRecommender, SkillRecommenderStats};
 #[allow(unused_imports)]
 pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, SuggestionType};
 #[allow(unused_imports)]

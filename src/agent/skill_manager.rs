@@ -97,6 +97,11 @@ impl SessionSkillManager {
             skills.remove(skill_name);
         }
     }
+
+    /// Get the skill registry reference
+    pub fn skill_registry(&self) -> Arc<SkillRegistry> {
+        Arc::clone(&self.skill_registry)
+    }
 }
 
 #[cfg(test)]

@@ -157,6 +157,39 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v11.5.0 (已完成 ✅)
+
+**完成事项**:
+- **Skill Auto-Recommendation System** - 技能自动推荐系统
+  - **新增模块** `agent/skill_recommender.rs`：
+    - `SkillRecommendation` 结构：skill_name、description、confidence、reasons、triggered_keywords
+    - `SkillRecommender` 引擎：分析对话上下文，推荐相关技能
+    - `SkillRecommenderStats`：推荐统计
+  - **推荐逻辑**：
+    - 关键词匹配：检测对话中的主题（file_ops、code_analysis、system_ops、web_search、diff_compare）
+    - 模式检测：识别多词模式如 "read the file"、"make an http request"
+    - 置信度评分：基于匹配强度计算推荐置信度
+    - 过滤已启用技能：不推荐已启用的技能
+  - **Gateway 集成**：
+    - 每次 Agent Turn 后自动分析对话上下文
+    - 发射 `skill.recommended` SSE 事件
+    - 推荐限制最多 3 个，按置信度排序
+  - **HTTP API 端点**：
+    - `GET /api/sessions/{session_id}/skill-recommendations` - 获取技能推荐
+  - **WebUI 支持**：
+    - SSE 事件监听：添加 `skill.recommended` 事件类型
+    - Toast 通知：收到推荐时显示通知
+    - 事件日志：显示推荐的技能列表
+  - **SessionSkillManager 增强**：
+    - 新增 `skill_registry()` getter 方法获取技能注册表
+  - **8 个新测试**：覆盖关键词匹配、多主题检测、已启用过滤、大小写不敏感等场景
+- cargo clippy 0 警告（仅 dead_code）
+- cargo test 366 tests
+
+**下一步**: 更多 Agent 能力增强、WebUI 技能推荐面板
+
+---
+
 ### v11.3.0 (已完成 ✅)
 
 **完成事项**:

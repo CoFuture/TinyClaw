@@ -5515,6 +5515,10 @@
             } else if (eventType === 'agent.self_evaluation' && data.session_id) {
                 // Self-evaluation event - show toast notification and log
                 showToast('📊 评估: ' + (data.overall_score * 100).toFixed(0) + '%', 'info');
+            } else if (eventType === 'skill.recommended' && data.session_id && data.recommendations) {
+                // Skill recommendation event - show toast with recommended skills
+                const recNames = data.recommendations.map(r => r.skill_name).join(', ');
+                showToast('💡 推荐技能: ' + recNames, 'info');
             }
         }
         
@@ -5951,7 +5955,7 @@
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
-                    'context.summarized', 'session.quality', 'agent.self_evaluation'
+                    'context.summarized', 'session.quality', 'agent.self_evaluation', 'skill.recommended'
                 ];
                 
                 eventTypes.forEach(type => {
@@ -6017,6 +6021,7 @@
             else if (event.type === 'context.summarized') cssClass += ' event-turn-ended';
             else if (event.type === 'session.quality') cssClass += ' event-turn-ended';
             else if (event.type === 'agent.self_evaluation') cssClass += ' event-turn-ended';
+            else if (event.type === 'skill.recommended') cssClass += ' event-tool';
             else if (event.type === 'system') cssClass += ' event-system';
             
             // Format content display
@@ -6057,6 +6062,9 @@
                         '任务: ' + ((event.content.task_completion_rate || 0) * 100).toFixed(0) + '% | ' +
                         '工具: ' + ((event.content.tool_success_rate || 0) * 100).toFixed(0) + '%' +
                         (event.content.issue_count > 0 ? ' | ⚠️ ' + event.content.issue_count + ' issues' : '');
+                } else if (event.type === 'skill.recommended') {
+                    const recs = event.content.recommendations || [];
+                    contentText = '推荐技能: ' + recs.map(r => r.skill_name + ' (' + (r.confidence * 100).toFixed(0) + '%)').join(', ');
                 } else if (event.type === 'heartbeat') {
                     contentText = '心跳';
                 } else {
@@ -6095,7 +6103,8 @@
                 'error': '错误',
                 'status': '状态',
                 'heartbeat': '心跳',
-                'system': '系统'
+                'system': '系统',
+                'skill.recommended': '技能推荐'
             };
             return names[type] || type;
         }

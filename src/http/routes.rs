@@ -699,6 +699,7 @@ async fn sse_events(
                                     Event::ActionDenied { session_id, .. } => session_id == filter,
                                     Event::SelfEvaluation { session_id, .. } => session_id == filter,
                                     Event::SessionQuality { session_id, .. } => session_id == filter,
+                                    Event::SkillRecommended { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -740,6 +741,7 @@ async fn sse_events(
                                     Event::ActionDenied { .. } => "action.denied",
                                     Event::SelfEvaluation { .. } => "agent.self_evaluation",
                                     Event::SessionQuality { .. } => "session.quality",
+                                    Event::SkillRecommended { .. } => "skill.recommended",
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",
@@ -813,6 +815,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/skills", axum::routing::post(session_skills_set))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::put(session_skills_enable))
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::delete(session_skills_disable))
+        // Skill recommendations API
+        .route("/api/sessions/{session_id}/skill-recommendations", get(skill_recommendations_get))
         // Scheduled task management API
         .route("/api/scheduled", get(scheduled_list))
         .route("/api/scheduled", post(scheduled_create))
@@ -1214,6 +1218,47 @@ async fn session_skills_set(
         "success": true,
         "session": session_id,
         "active_skills": skills
+    }))
+}
+
+/// Get skill recommendations for a session based on conversation history
+async fn skill_recommendations_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    use crate::agent::SkillRecommender;
+    
+    // Get conversation history for the session
+    let history_tuples: Vec<(String, String)> = state.history_manager
+        .get(&session_id)
+        .map(|h| {
+            h.read().get_messages()
+                .iter()
+                .map(|m| {
+                    let role = match m.role {
+                        crate::types::Role::User => "user",
+                        crate::types::Role::Assistant => "assistant",
+                        crate::types::Role::System => "system",
+                        crate::types::Role::Tool => "tool",
+                    };
+                    (role.to_string(), m.content.clone())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    
+    // Get currently enabled skills for context
+    let enabled_skills = state.skill_manager.get_active_skills(&session_id);
+    
+    // Create recommender and generate recommendations
+    let registry = state.skill_manager.skill_registry();
+    let recommender = SkillRecommender::new(registry);
+    let recommendations = recommender.recommend_skills(&history_tuples, &enabled_skills);
+    
+    Json(serde_json::json!({
+        "session_id": session_id,
+        "recommendations": recommendations,
+        "count": recommendations.len()
     }))
 }
 

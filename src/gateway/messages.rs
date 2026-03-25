@@ -932,6 +932,36 @@ async fn handle_agent_turn(
         });
     }
 
+    // Generate skill recommendations based on conversation context
+    let skill_recommendations = {
+        let registry = ctx.skill_manager.skill_registry();
+        let recommender = crate::agent::SkillRecommender::new(registry);
+        let history = ctx.history_manager.get(session_key)
+            .map(|h| h.read().get_messages().to_vec())
+            .unwrap_or_default();
+        let history_tuples: Vec<(String, String)> = history.iter()
+            .map(|m| {
+                let role = match m.role {
+                    crate::types::Role::User => "user",
+                    crate::types::Role::Assistant => "assistant",
+                    crate::types::Role::System => "system",
+                    crate::types::Role::Tool => "tool",
+                };
+                (role.to_string(), m.content.clone())
+            })
+            .collect();
+        let enabled_skills = ctx.skill_manager.get_active_skills(session_key);
+        recommender.recommend_skills(&history_tuples, &enabled_skills)
+    };
+
+    // Emit skill recommendations if any
+    if !skill_recommendations.is_empty() {
+        ctx.event_emitter.emit(Event::SkillRecommended {
+            session_id: session_key.to_string(),
+            recommendations: skill_recommendations,
+        });
+    }
+
     // Trigger background summarization for this session
     // This is non-blocking - runs in background and won't affect response time
     let agent_clone = ctx.agent.clone();
