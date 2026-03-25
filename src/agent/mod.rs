@@ -6,6 +6,7 @@ pub mod context_manager;
 pub mod context_summarizer;
 pub mod conversation_summary;
 pub mod error_recovery;
+pub mod execution_safety;
 pub mod memory;
 pub mod memory_extractor;
 pub mod retry;
@@ -61,3 +62,5 @@ pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, T
 pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};
 #[allow(unused_imports)]
 pub use conversation_summary::{ConversationSummary, ConversationSummaryManager};
+#[allow(unused_imports)]
+pub use execution_safety::{SafetyAction, ExecutionSafetyConfig, ExecutionSafetyManager, ExecutionSafetyState, ExecutionSafetyStats, SafetyCheckResult};

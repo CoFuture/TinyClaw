@@ -53,6 +53,43 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v12.1.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Execution Safety System** - 防止 Agent 工具调用失控循环
+  - **新增 `agent/execution_safety.rs` 模块**：
+    - `SafetyAction` 枚举：Warn、Summarize、Halt、Stop 四种安全动作
+    - `ExecutionSafetyConfig` 结构：配置最大连续工具调用次数、警告阈值、安全动作
+    - `ExecutionSafetyState` 结构：追踪每个会话的连续工具调用次数、是否暂停等状态
+    - `ExecutionSafetyStats` 结构：汇总统计数据
+    - `ExecutionSafetyManager` 管理器：状态追踪、安全检查、持久化到 JSON
+  - **Agent 集成** (`agent/client.rs`)：
+    - 新增 `safety_manager: RwLock<Option<Arc<ExecutionSafetyManager>>>` 字段
+    - 新增 `with_safety_manager()` builder 方法
+    - 新增 `check_execution_safety()` 辅助方法：工具执行后检查安全状态
+    - 在 Anthropic 和 OpenAI 工具执行循环中集成安全检查
+    - 安全限制达到时返回错误
+  - **Gateway 事件集成** (`gateway/events.rs`)：
+    - 新增 `ExecutionSafetyWarning` 事件：接近安全限制时发出警告
+    - 新增 `ExecutionSafetyHalted` 事件：安全限制达到时发出事件
+  - **HTTP SSE 事件过滤** (`http/routes.rs`)：
+    - 支持 `execution.warning` 和 `execution.halted` 事件过滤
+  - **HTTP REST API**：
+    - `GET /api/safety/stats` - 获取执行安全统计
+    - `GET /api/safety/session/{session_id}` - 获取特定会话的安全状态
+  - **main.rs 集成**：
+    - 创建 `ExecutionSafetyManager` 并持久化到 `~/.config/tiny_claw/execution_safety/`
+    - 将 safety_manager 设置到 Agent
+- **Agent Runtime 清理** (`agent/runtime.rs`)：
+  - 移除未使用的 runtime.rs 安全检查代码（AgentRuntime 未被使用）
+  - 保留 execution_safety.rs 作为独立模块
+- cargo clippy 0 错误（仅有 pre-existing dead_code 警告）
+- cargo test 381 tests
+
+**下一步**: WebUI 安全状态面板、TUI 安全命令、配置更新 API
+
+---
+
 ### v10.4.0 (已完成 ✅)
 
 **完成事项**:

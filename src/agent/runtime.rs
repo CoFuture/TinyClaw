@@ -78,6 +78,7 @@ pub struct AgentRuntime {
     event_emitter: Option<Arc<EventEmitter>>,
     context_manager: RwLock<ContextManager>,
     summarizer: RwLock<Option<Arc<ContextSummarizer>>>,
+    safety_manager: RwLock<Option<Arc<crate::agent::ExecutionSafetyManager>>>,
 }
 
 #[allow(dead_code)]
@@ -92,6 +93,7 @@ impl AgentRuntime {
             event_emitter: None,
             context_manager: RwLock::new(context_manager),
             summarizer: RwLock::new(None),
+            safety_manager: RwLock::new(None),
         }
     }
 
@@ -143,6 +145,18 @@ impl AgentRuntime {
         } else {
             false
         }
+    }
+
+    /// Set the execution safety manager for preventing runaway loops
+    /// When configured, the runtime will check safety limits after each tool call
+    pub fn set_execution_safety(&self, manager: Arc<crate::agent::ExecutionSafetyManager>) {
+        *self.safety_manager.write() = Some(manager);
+        info!("Execution safety manager enabled");
+    }
+
+    /// Check if execution safety is enabled
+    pub fn has_safety_manager(&self) -> bool {
+        self.safety_manager.read().is_some()
     }
 
     /// Execute a complete agent turn with tool calling loop
@@ -342,6 +356,75 @@ impl AgentRuntime {
                                 tool_call_id: tool_call.id.clone(),
                                 output: tool_result_str,
                             });
+                        }
+                    }
+                    
+                    // Check execution safety after tool execution
+                    let safety_manager = self.safety_manager.read().clone();
+                    if let Some(safety_mgr) = safety_manager {
+                        let safety_result = safety_mgr.record_tool_turn(&session_id);
+                        
+                        // Emit warning if approaching limit
+                        if matches!(safety_result, crate::agent::SafetyCheckResult::Warning) {
+                            if let Some(state) = safety_mgr.get_state(&session_id) {
+                                let config = safety_mgr.get_config();
+                                if emit_events {
+                                    if let Some(emitter) = &self.event_emitter {
+                                        emitter.emit(Event::ExecutionSafetyWarning {
+                                            session_id: session_id.clone(),
+                                            consecutive_turns: state.consecutive_tool_turns,
+                                            max_turns: config.max_consecutive_turns,
+                                            warning_threshold: config.warning_turn_count(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Handle safety event (halt/stop)
+                        if let crate::agent::SafetyCheckResult::SafetyEvent(action) = &safety_result {
+                            // Get consecutive turns from safety state
+                            let consecutive_turns = safety_mgr.get_state(&session_id)
+                                .map(|s| s.consecutive_tool_turns)
+                                .unwrap_or(0);
+                            
+                            if emit_events {
+                                if let Some(emitter) = &self.event_emitter {
+                                    emitter.emit(Event::ExecutionSafetyHalted {
+                                        session_id: session_id.clone(),
+                                        consecutive_turns,
+                                        action_taken: format!("{:?}", action),
+                                    });
+                                }
+                            }
+                            
+                            // Return appropriate message based on action
+                            let halt_message = match action {
+                                crate::agent::SafetyAction::Stop => {
+                                    "Execution stopped due to safety limit.".to_string()
+                                }
+                                crate::agent::SafetyAction::Halt => {
+                                    "Execution halted, awaiting user confirmation.".to_string()
+                                }
+                                crate::agent::SafetyAction::Summarize => {
+                                    "Context limit approaching, considering summarization...".to_string()
+                                }
+                                crate::agent::SafetyAction::Warn => {
+                                    // Shouldn't reach here but handle anyway
+                                    continue;
+                                }
+                            };
+                            
+                            context.set_state(ExecutionState::Finished);
+                            if emit_events {
+                                if let Some(emitter) = &self.event_emitter {
+                                    emitter.emit(Event::TurnLogCompleted {
+                                        session_id: session_id.clone(),
+                                        summary: turn_log.summary(),
+                                    });
+                                }
+                            }
+                            return Ok(halt_message);
                         }
                     }
                 }

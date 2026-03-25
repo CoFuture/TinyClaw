@@ -301,6 +301,23 @@ pub enum Event {
         issue_count: usize,
         suggestions: Vec<String>,
     },
+    
+    /// Execution safety warning - approaching limit
+    #[serde(rename = "execution.warning")]
+    ExecutionSafetyWarning {
+        session_id: String,
+        consecutive_turns: usize,
+        max_turns: usize,
+        warning_threshold: usize,
+    },
+    
+    /// Execution safety halted - limit reached
+    #[serde(rename = "execution.halted")]
+    ExecutionSafetyHalted {
+        session_id: String,
+        consecutive_turns: usize,
+        action_taken: String,
+    },
 }
 
 /// Dimension score for self-evaluation events

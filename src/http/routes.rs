@@ -700,6 +700,9 @@ async fn sse_events(
                                     Event::SelfEvaluation { session_id, .. } => session_id == filter,
                                     Event::SessionQuality { session_id, .. } => session_id == filter,
                                     Event::SkillRecommended { session_id, .. } => session_id == filter,
+                                    // Execution safety events - apply session filter
+                                    Event::ExecutionSafetyWarning { session_id, .. } => session_id == filter,
+                                    Event::ExecutionSafetyHalted { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -745,6 +748,9 @@ async fn sse_events(
                                     Event::Error { .. } => "error",
                                     Event::Status { .. } => "status",
                                     Event::Heartbeat { .. } => "heartbeat",
+                                    // Execution safety events
+                                    Event::ExecutionSafetyWarning { .. } => "execution.warning",
+                                    Event::ExecutionSafetyHalted { .. } => "execution.halted",
                                 };
                                 
                                 let event = SseEvent::default()
@@ -877,6 +883,11 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/summarizer/history", get(summarizer_history_list))
         .route("/api/summarizer/stats", get(summarizer_stats))
         .route("/api/summarizer/session/{session_id}", get(summarizer_history_session))
+        
+        // Execution safety API
+        .route("/api/safety/stats", get(safety_stats))
+        .route("/api/safety/session/{session_id}", get(safety_session_state))
+        
         // SSE event stream for real-time feedback
         .route("/api/events", get(sse_events))
         .fallback_service(ServeDir::new(static_dir))
@@ -2202,4 +2213,38 @@ async fn summarizer_history_session(
         "entries": entries,
         "count": entries.len(),
     }))
+}
+
+/// Get execution safety statistics
+async fn safety_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.agent.get_safety_stats();
+    Json(serde_json::json!({
+        "stats": stats,
+        "enabled": state.agent.has_safety_manager(),
+    }))
+}
+
+/// Get execution safety state for a specific session
+async fn safety_session_state(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    if let Some(state) = state.agent.get_safety_state(&session_id) {
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "consecutiveToolTurns": state.consecutive_tool_turns,
+            "totalToolTurns": state.total_tool_turns,
+            "isHalted": state.is_halted,
+            "warningIssued": state.warning_issued,
+            "lastResetAt": state.last_reset_at.to_rfc3339(),
+        }))
+    } else {
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "state": "no_data",
+            "message": "No safety state recorded for this session",
+        }))
+    }
 }

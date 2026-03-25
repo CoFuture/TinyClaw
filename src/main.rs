@@ -113,10 +113,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(HistoryManager::new())
     };
 
+    // Create execution safety manager for preventing runaway tool loops
+    let execution_safety_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("execution_safety");
+    let safety_manager = Arc::new(crate::agent::ExecutionSafetyManager::new(execution_safety_dir));
+    info!("Execution safety manager initialized");
+
     let event_emitter = Arc::new(EventEmitter::new());
     let agent = Arc::new(agent::Agent::new(Arc::new(RwLock::new(
         config.read().agent.clone(),
-    ))).with_event_emitter(event_emitter.clone()));
+    ))).with_event_emitter(event_emitter.clone()).with_safety_manager(safety_manager.clone()));
     
     // Create turn history manager with persistence
     let turn_history_dir = dirs::config_dir()

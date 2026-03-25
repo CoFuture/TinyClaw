@@ -172,6 +172,8 @@ pub struct Agent {
     summarizer_config: RwLock<SummarizerConfig>,
     /// Summary history manager for tracking summarization events
     summary_history: Arc<SummaryHistoryManager>,
+    /// Execution safety manager for preventing runaway tool loops
+    safety_manager: RwLock<Option<Arc<crate::agent::ExecutionSafetyManager>>>,
 }
 
 /// History message for passing conversation context to API methods
@@ -245,6 +247,7 @@ impl Agent {
             pending_action_plan: RwLock::new(None),
             summarizer_config: RwLock::new(SummarizerConfig::default()),
             summary_history: Arc::new(SummaryHistoryManager::new()),
+            safety_manager: RwLock::new(None),
         }
     }
 
@@ -265,6 +268,7 @@ impl Agent {
             pending_action_plan: RwLock::new(None),
             summarizer_config: RwLock::new(SummarizerConfig::default()),
             summary_history: Arc::new(SummaryHistoryManager::new()),
+            safety_manager: RwLock::new(None),
         }
     }
 
@@ -496,6 +500,46 @@ CONVERSATION TO SUMMARIZE:
         self
     }
 
+    /// Set the execution safety manager for preventing runaway tool loops
+    pub fn with_safety_manager(self, manager: Arc<crate::agent::ExecutionSafetyManager>) -> Self {
+        *self.safety_manager.write() = Some(manager);
+        self
+    }
+
+    /// Check if execution safety is enabled
+    pub fn has_safety_manager(&self) -> bool {
+        self.safety_manager.read().is_some()
+    }
+
+    /// Get execution safety statistics for all sessions
+    pub fn get_safety_stats(&self) -> serde_json::Value {
+        let guard = self.safety_manager.read();
+        if let Some(ref manager) = *guard {
+            serde_json::to_value(manager.get_stats()).unwrap_or_else(|_| {
+                serde_json::json!({
+                    "enabled": false,
+                    "message": "Failed to serialize stats"
+                })
+            })
+        } else {
+            serde_json::json!({
+                "enabled": false,
+                "total_sessions": 0,
+                "message": "Safety manager not enabled"
+            })
+        }
+    }
+
+    /// Get execution safety state for a specific session
+    pub fn get_safety_state(&self, session_id: &str) -> Option<crate::agent::ExecutionSafetyState> {
+        let guard = self.safety_manager.read();
+        if let Some(ref manager) = *guard {
+            manager.get_state(session_id)
+        } else {
+            None
+        }
+    }
+
     /// Set the current session key for tool event tracking
     fn set_session_key(&self, session_key: Option<&str>) {
         *self.current_session_key.write() = session_key.map(String::from);
@@ -598,6 +642,65 @@ CONVERSATION TO SUMMARIZE:
             }
         }
         false
+    }
+
+    /// Check execution safety after a tool turn.
+    /// Returns true if execution should continue, false if it should halt.
+    /// Emits appropriate events for warnings and halts.
+    fn check_execution_safety(&self, session_id: &str) -> bool {
+        let safety_manager = self.safety_manager.read();
+        if let Some(ref manager) = *safety_manager {
+            let result = manager.record_tool_turn(session_id);
+            
+            match result {
+                crate::agent::SafetyCheckResult::Proceed => true,
+                crate::agent::SafetyCheckResult::Warning => {
+                    // Emit warning event
+                    if let Some(ref emitter) = self.event_emitter {
+                        if let Some(state) = manager.get_state(session_id) {
+                            let config = manager.get_config();
+                            emitter.emit(crate::gateway::events::Event::ExecutionSafetyWarning {
+                                session_id: session_id.to_string(),
+                                consecutive_turns: state.consecutive_tool_turns,
+                                max_turns: config.max_consecutive_turns,
+                                warning_threshold: config.warning_turn_count(),
+                            });
+                        }
+                    }
+                    true // Continue execution after warning
+                }
+                crate::agent::SafetyCheckResult::Halted => {
+                    // Already halted, emit event
+                    if let Some(ref emitter) = self.event_emitter {
+                        let consecutive_turns = manager.get_state(session_id)
+                            .map(|s| s.consecutive_tool_turns)
+                            .unwrap_or(0);
+                        emitter.emit(crate::gateway::events::Event::ExecutionSafetyHalted {
+                            session_id: session_id.to_string(),
+                            consecutive_turns,
+                            action_taken: "halted".to_string(),
+                        });
+                    }
+                    false
+                }
+                crate::agent::SafetyCheckResult::SafetyEvent(action) => {
+                    // Safety limit reached, emit event
+                    if let Some(ref emitter) = self.event_emitter {
+                        let consecutive_turns = manager.get_state(session_id)
+                            .map(|s| s.consecutive_tool_turns)
+                            .unwrap_or(0);
+                        emitter.emit(crate::gateway::events::Event::ExecutionSafetyHalted {
+                            session_id: session_id.to_string(),
+                            consecutive_turns,
+                            action_taken: format!("{:?}", action),
+                        });
+                    }
+                    false
+                }
+            }
+        } else {
+            true // No safety manager, continue
+        }
     }
 
     /// Update retry settings
@@ -831,6 +934,13 @@ pub async fn send_message_with_history(
                                 "Tool execution completed"
                             );
                             
+                            // Check execution safety after tool execution
+                            let session_id = self.get_session_key().unwrap_or_default();
+                            if !session_id.is_empty() && !self.check_execution_safety(&session_id) {
+                                // Safety limit reached, halt execution
+                                return Err(crate::common::Error::Agent("Execution halted due to safety limit".to_string()));
+                            }
+                            
                             messages.push(serde_json::json!({
                                 "role": "tool",
                                 "content": content,
@@ -966,6 +1076,13 @@ pub async fn send_message_with_history(
                                 success = result.success,
                                 "Tool execution completed"
                             );
+                            
+                            // Check execution safety after tool execution
+                            let session_id = self.get_session_key().unwrap_or_default();
+                            if !session_id.is_empty() && !self.check_execution_safety(&session_id) {
+                                // Safety limit reached, halt execution
+                                return Err(crate::common::Error::Agent("Execution halted due to safety limit".to_string()));
+                            }
                             
                             messages.push(serde_json::json!({
                                 "role": "tool",
