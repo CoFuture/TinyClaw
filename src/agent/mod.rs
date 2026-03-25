@@ -9,6 +9,7 @@ pub mod error_recovery;
 pub mod execution_safety;
 pub mod memory;
 pub mod memory_extractor;
+pub mod performance_insights;
 pub mod retry;
 pub mod runtime;
 pub mod scheduled_task;
@@ -64,3 +65,5 @@ pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};
 pub use conversation_summary::{ConversationSummary, ConversationSummaryManager};
 #[allow(unused_imports)]
 pub use execution_safety::{SafetyAction, ExecutionSafetyConfig, ExecutionSafetyManager, ExecutionSafetyState, ExecutionSafetyStats, SafetyCheckResult};
+#[allow(unused_imports)]
+pub use performance_insights::{InsightCategory, InsightSeverity, PerformanceInsight, PerformanceAnalysis, PerformanceInsightsEngine, ToolEfficiencySummary, QualityTrend, ToolPattern};

@@ -201,6 +201,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View execution safety status",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":perf",
+        aliases: &["performance", "insights"],
+        description: "View performance insights",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -345,6 +351,10 @@ pub struct AppState {
     pub last_safety_warning: Option<String>,
     /// Whether execution is currently halted due to safety limit
     pub safety_halted: bool,
+    /// Whether we're in performance insights viewing mode
+    pub perf_mode: bool,
+    /// Cached performance insights data
+    pub perf_data: Option<crate::tui::gateway_client::PerformanceInsightsDisplay>,
 }
 
 /// Session quality data for TUI display
@@ -445,6 +455,8 @@ impl Default for AppState {
             safety_state: None,
             last_safety_warning: None,
             safety_halted: false,
+            perf_mode: false,
+            perf_data: None,
         }
     }
 }

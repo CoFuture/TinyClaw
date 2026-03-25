@@ -145,6 +145,46 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v12.5.0 (已完成 ✅)
+
+**完成事项**:
+- **Performance Insights Engine - 性能洞察引擎** - 生成可操作的 Agent 改进建议
+  - **新增 `agent/performance_insights.rs` 模块**：
+    - `PerformanceInsightsEngine` - 分析引擎，分析工具效率、质量趋势、工具使用模式
+    - `PerformanceInsight` - 单条洞察（category、severity、title、description、suggestions）
+    - `ToolEfficiencySummary` - 工具效率摘要（最高效/最低效工具、问题工具、平均工具数）
+    - `QualityTrend` - 质量趋势分析（当前/前一期分数、趋势方向、趋势幅度）
+    - `ToolPattern` - 检测到的工具使用模式（工具序列、出现次数、成功率、可靠性）
+    - `PerformanceAnalysis` - 完整分析结果
+  - **分析维度**：
+    - 工具效率（成功率、执行速度、问题工具识别）
+    - 质量趋势（基于自我评估的历史对比）
+    - 工具模式检测（识别可靠的工具组合）
+    - 可操作洞察生成（最多 8 条，按严重程度排序）
+  - **Gateway 事件集成** (`gateway/events.rs`)：
+    - 新增 `PerformanceInsights` 事件类型（session_id、insights、tool_efficiency、quality_trend、turns_analyzed）
+    - 新增相关数据结构：PerformanceInsightEvent、ToolEfficiencyEvent、QualityTrendEvent
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `GET /api/performance/insights` - 获取性能洞察数据
+    - 返回：insights、toolEfficiency、qualityTrend、toolPatterns、turnsAnalyzed
+  - **SSE 事件过滤** (`http/routes.rs`)：
+    - 新增 `agent.performance_insights` 事件支持
+    - 支持 session_id 过滤
+  - **TUI 支持** (`tui/`)：
+    - 新增 `:perf` / `:performance` 命令查看性能洞察
+    - `AppState` 新增 `perf_mode` 和 `perf_data` 字段
+    - `TuiGatewayClient` 新增 `PerformanceInsightsLoaded` 事件变体
+    - `TuiGatewayClient` 新增 `get_performance_insights_http()` 方法
+    - `TUI_COMMANDS` 新增 `:perf` 命令元数据
+    - App 事件处理集成 `PerformanceInsightsLoaded` 事件
+    - App 命令处理集成 `:perf` 命令（触发 HTTP 加载）
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 383 tests
+
+**下一步**: WebUI 性能洞察面板、实时洞察事件推送
+
+---
+
 ### v12.1.0 (已完成 ✅)
 
 **完成事项**:

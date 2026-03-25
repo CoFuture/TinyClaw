@@ -97,6 +97,8 @@ pub enum TuiGatewayEvent {
     ExecutionSafetyWarning { session_id: String, consecutive_turns: usize, max_turns: usize, warning_threshold: usize },
     /// Execution safety halted - limit reached, waiting for user
     ExecutionSafetyHalted { session_id: String, consecutive_turns: usize, action_taken: String },
+    /// Performance insights received
+    PerformanceInsightsLoaded { insights: PerformanceInsightsDisplay },
 }
 
 /// Skill recommendation for TUI display
@@ -109,6 +111,29 @@ pub struct SkillRecommendationDisplay {
     pub reasons: Vec<String>,
     pub triggered_keywords: Vec<String>,
     pub already_enabled: bool,
+}
+
+/// Performance insights for TUI display
+#[derive(Debug, Clone)]
+pub struct PerformanceInsightsDisplay {
+    pub insights: Vec<InsightDisplay>,
+    pub most_efficient_tool: Option<String>,
+    pub least_efficient_tool: Option<String>,
+    pub problematic_tools: Vec<String>,
+    pub avg_tools_per_turn: f64,
+    pub trend_direction: String,
+    pub trend_magnitude: f64,
+    pub turns_analyzed: u64,
+}
+
+/// Single insight for TUI display
+#[derive(Debug, Clone)]
+pub struct InsightDisplay {
+    pub category: String,
+    pub severity: String,
+    pub title: String,
+    pub description: String,
+    pub suggestions: Vec<String>,
 }
 
 /// Session note info
@@ -984,6 +1009,19 @@ impl TuiGatewayClient {
     /// Get execution safety state for a specific session (HTTP)
     pub async fn get_safety_session_state_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/safety/session/{}", base_url, session_id);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get performance insights (HTTP)
+    pub async fn get_performance_insights_http(&self, base_url: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/performance/insights", base_url);
         let client = reqwest::Client::new();
         client.get(&url)
             .send()

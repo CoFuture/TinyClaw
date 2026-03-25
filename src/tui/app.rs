@@ -634,6 +634,11 @@ impl TuiApp {
                 );
                 self.state.last_safety_warning = Some(halt_msg);
             }
+            TuiGatewayEvent::PerformanceInsightsLoaded { insights } => {
+                info!("Performance insights loaded: {} insights, {} turns analyzed", 
+                    insights.insights.len(), insights.turns_analyzed);
+                self.state.perf_data = Some(insights);
+            }
         }
     }
 
@@ -955,6 +960,29 @@ impl TuiApp {
                                 if let Ok(stats) = client.get_safety_stats_http("http://127.0.0.1:8080").await {
                                     debug!("Fetched safety stats: {:?}", stats);
                                     // Note: The stats will be received via SSE events, not HTTP response here
+                                }
+                            });
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :perf command - toggle performance insights viewing mode
+                    if input_lower.starts_with(":perf") || input_lower == ":performance" || input_lower == ":insights" {
+                        self.state.perf_mode = !self.state.perf_mode;
+                        if self.state.perf_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            // Fetch performance insights
+                            let client = self.gateway_client.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Ok(data) = client.get_performance_insights_http("http://127.0.0.1:8080").await {
+                                    debug!("Fetched performance insights: {:?}", data);
+                                    // The data will be processed and stored via the event
                                 }
                             });
                         }

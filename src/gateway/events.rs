@@ -318,6 +318,65 @@ pub enum Event {
         consecutive_turns: usize,
         action_taken: String,
     },
+    
+    /// Performance insights generated - actionable recommendations for agent improvement
+    #[serde(rename = "agent.performance_insights")]
+    PerformanceInsights {
+        session_id: String,
+        /// Generated insights
+        insights: Vec<PerformanceInsightEvent>,
+        /// Tool efficiency summary
+        tool_efficiency: ToolEfficiencyEvent,
+        /// Quality trend
+        quality_trend: QualityTrendEvent,
+        /// Turns analyzed
+        turns_analyzed: u64,
+    },
+}
+
+/// Performance insight for events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceInsightEvent {
+    /// Insight ID
+    pub id: String,
+    /// Category
+    pub category: String,
+    /// Severity
+    pub severity: String,
+    /// Title
+    pub title: String,
+    /// Description
+    pub description: String,
+    /// Suggestions
+    pub suggestions: Vec<String>,
+}
+
+/// Tool efficiency summary for events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolEfficiencyEvent {
+    /// Most efficient tool
+    pub most_efficient_tool: Option<String>,
+    /// Least efficient tool
+    pub least_efficient_tool: Option<String>,
+    /// Problematic tools (high failure rate)
+    pub problematic_tools: Vec<String>,
+    /// Average tools per turn
+    pub avg_tools_per_turn: f64,
+    /// Most used tool
+    pub most_used_tool: Option<String>,
+}
+
+/// Quality trend for events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityTrendEvent {
+    /// Current quality score (0-100)
+    pub current_score: f64,
+    /// Previous period score
+    pub previous_score: f64,
+    /// Trend direction (improving/declining/stable)
+    pub trend_direction: String,
+    /// Trend magnitude (percentage change)
+    pub trend_magnitude: f64,
 }
 
 /// Dimension score for self-evaluation events

@@ -703,6 +703,8 @@ async fn sse_events(
                                     // Execution safety events - apply session filter
                                     Event::ExecutionSafetyWarning { session_id, .. } => session_id == filter,
                                     Event::ExecutionSafetyHalted { session_id, .. } => session_id == filter,
+                                    // Performance insights - apply session filter
+                                    Event::PerformanceInsights { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -751,6 +753,8 @@ async fn sse_events(
                                     // Execution safety events
                                     Event::ExecutionSafetyWarning { .. } => "execution.warning",
                                     Event::ExecutionSafetyHalted { .. } => "execution.halted",
+                                    // Performance insights events
+                                    Event::PerformanceInsights { .. } => "agent.performance_insights",
                                 };
                                 
                                 let event = SseEvent::default()
@@ -875,6 +879,8 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/quality", get(session_quality_get))
         .route("/api/sessions/{session_id}/quality", axum::routing::delete(session_quality_invalidate))
         .route("/api/sessions/quality/list", get(session_quality_list))
+        // Performance insights API - actionable agent improvement recommendations
+        .route("/api/performance/insights", get(performance_insights))
         // Conversation summary API - transient conversation state tracking
         .route("/api/sessions/{session_id}/conversation-summary", get(conversation_summary_get))
         // Summarizer config and history API
@@ -2007,6 +2013,70 @@ async fn session_quality_list(
         "success": true,
         "sessions": qualities,
         "count": qualities.len(),
+    }))
+}
+
+// ============================================================
+// Performance Insights API Endpoints
+// ============================================================
+
+/// Get performance insights - actionable recommendations for agent improvement
+async fn performance_insights(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    use crate::agent::performance_insights::PerformanceInsightsEngine;
+    
+    let engine = PerformanceInsightsEngine::new();
+    let analysis = engine.analyze(
+        &state.turn_history,
+        &state.self_evaluation_manager,
+        // Note: session_quality_manager not currently used in analysis
+    );
+    
+    // Convert insights to JSON
+    let insights: Vec<serde_json::Value> = analysis.insights.iter().map(|i| {
+        serde_json::json!({
+            "id": i.id,
+            "category": i.category.display_name(),
+            "severity": i.severity.display_name(),
+            "title": i.title,
+            "description": i.description,
+            "suggestions": i.suggestions,
+            "data": i.data,
+            "createdAt": i.created_at.to_rfc3339(),
+        })
+    }).collect();
+    
+    // Convert tool patterns
+    let patterns: Vec<serde_json::Value> = analysis.tool_patterns.iter().map(|p| {
+        serde_json::json!({
+            "tools": p.tools,
+            "occurrences": p.occurrences,
+            "successRate": p.success_rate,
+            "isReliable": p.is_reliable,
+        })
+    }).collect();
+    
+    Json(serde_json::json!({
+        "success": true,
+        "insights": insights,
+        "insightCount": insights.len(),
+        "toolEfficiency": {
+            "mostEfficientTool": analysis.tool_efficiency.most_efficient_tool,
+            "leastEfficientTool": analysis.tool_efficiency.least_efficient_tool,
+            "problematicTools": analysis.tool_efficiency.problematic_tools,
+            "avgToolsPerTurn": analysis.tool_efficiency.avg_tools_per_turn,
+            "mostUsedTool": analysis.tool_efficiency.most_used_tool,
+        },
+        "qualityTrend": {
+            "currentScore": analysis.quality_trend.current_score,
+            "previousScore": analysis.quality_trend.previous_score,
+            "trendDirection": analysis.quality_trend.trend_direction,
+            "trendMagnitude": analysis.quality_trend.trend_magnitude,
+        },
+        "toolPatterns": patterns,
+        "turnsAnalyzed": analysis.turns_analyzed,
+        "analyzedAt": analysis.analyzed_at.to_rfc3339(),
     }))
 }
 
