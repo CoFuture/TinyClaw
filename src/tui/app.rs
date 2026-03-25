@@ -614,6 +614,26 @@ impl TuiApp {
                     // The terminal redraw will pick up the new data
                 }
             }
+            TuiGatewayEvent::ExecutionSafetyWarning { session_id, consecutive_turns, max_turns, warning_threshold } => {
+                info!("Execution safety warning for session {}: {}/{} turns (threshold: {})",
+                    session_id, consecutive_turns, max_turns, warning_threshold);
+                // Format warning message
+                let warning = format!(
+                    "⚠️ Safety: {} / {} turns",
+                    consecutive_turns, max_turns
+                );
+                self.state.last_safety_warning = Some(warning);
+            }
+            TuiGatewayEvent::ExecutionSafetyHalted { session_id, consecutive_turns, action_taken } => {
+                info!("Execution halted for session {}: {} turns, action={}", session_id, consecutive_turns, action_taken);
+                self.state.safety_halted = true;
+                // Format halt message
+                let halt_msg = format!(
+                    "🛑 Safety Halted: {} turns (action: {})",
+                    consecutive_turns, action_taken
+                );
+                self.state.last_safety_warning = Some(halt_msg);
+            }
         }
     }
 
@@ -913,6 +933,30 @@ impl TuiApp {
                                     });
                                 }
                             }
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :safety command - toggle safety viewing mode
+                    if input_lower.starts_with(":safety") || input_lower == ":safetystats" {
+                        self.state.safety_mode = !self.state.safety_mode;
+                        if self.state.safety_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            // Set the current session for safety view
+                            self.state.safety_session_id = self.state.current_session_id.clone();
+                            // Fetch safety stats
+                            let client = self.gateway_client.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Ok(stats) = client.get_safety_stats_http("http://127.0.0.1:8080").await {
+                                    debug!("Fetched safety stats: {:?}", stats);
+                                    // Note: The stats will be received via SSE events, not HTTP response here
+                                }
+                            });
                         }
                         self.state.input_buffer.clear();
                         return Ok(true);
@@ -1655,6 +1699,13 @@ impl TuiApp {
                         self.state.recommendations_mode = false;
                         self.state.recommendations_data = None;
                         self.state.recommendations_session_id = None;
+                    } else if self.state.safety_mode {
+                        self.state.safety_mode = false;
+                        self.state.safety_session_id = None;
+                        self.state.safety_stats = None;
+                        self.state.safety_state = None;
+                        self.state.last_safety_warning = None;
+                        self.state.safety_halted = false;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -1743,6 +1794,8 @@ impl TuiApp {
             crate::tui::components::draw_eval_panel(f, msg_chunks[0], &self.state);
         } else if self.state.recommendations_mode {
             crate::tui::components::draw_recommendations_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.safety_mode {
+            crate::tui::components::draw_safety_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }
@@ -1804,6 +1857,13 @@ impl TuiApp {
         if let Some(ref summary_info) = self.state.last_summary_info {
             spans.push(Span::raw(" | "));
             spans.push(Span::styled(summary_info.clone(), Style::default().fg(Color::Magenta)));
+        }
+        
+        // Add execution safety warning indicator if available
+        if let Some(ref safety_warning) = self.state.last_safety_warning {
+            spans.push(Span::raw(" | "));
+            let color = if self.state.safety_halted { Color::Red } else { Color::Yellow };
+            spans.push(Span::styled(safety_warning.clone(), Style::default().fg(color).add_modifier(Modifier::BOLD)));
         }
         
         let paragraph = Paragraph::new(Line::from(spans))

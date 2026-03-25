@@ -53,6 +53,43 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ## 迭代历史
 
+### v12.2.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Safety Commands & Panel** - 终端界面执行安全状态显示与命令
+  - **TuiGatewayEvent 新增变体**：
+    - `ExecutionSafetyWarning` - 安全警告事件（接近限制）
+    - `ExecutionSafetyHalted` - 安全停止事件（达到限制）
+  - **SSE 事件解析** (`gateway_client.rs`)：
+    - 新增 `execution.warning` 和 `execution.halted` 事件解析
+  - **HTTP API 方法** (`gateway_client.rs`)：
+    - `get_safety_stats_http()` - 获取执行安全统计
+    - `get_safety_session_state_http()` - 获取特定会话安全状态
+  - **AppState 新增字段**：
+    - `safety_mode` - 安全查看模式
+    - `safety_session_id` - 当前查看的会话
+    - `safety_stats` / `safety_state` - 缓存的安全数据
+    - `last_safety_warning` - 最近的安全警告信息
+    - `safety_halted` - 是否因安全限制停止
+  - **TUI 命令** (`:safety` / `:safetystats`)：
+    - 查看执行安全状态面板
+    - 显示 AI 断路器状态
+    - 显示安全警告/停止信息
+  - **Safety Panel** (`draw_safety_panel`)：
+    - 红色边框显示 halted 状态，黄色显示 warning 状态
+    - 显示 AI Circuit Breaker 状态（🟢/🟡/🔴）
+    - 显示最近的安全警告信息
+    - 显示 agent 执行状态说明
+  - **Title Bar 增强**：
+    - 显示 `⚠️ Safety: X/Y turns` 或 `🛑 Safety Halted` 警告
+  - **Esc 键退出** - 支持 Esc 键退出安全查看模式
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 381 tests
+
+**下一步**: WebUI 安全状态面板、配置更新 API
+
+---
+
 ### v12.1.0 (已完成 ✅)
 
 **完成事项**:

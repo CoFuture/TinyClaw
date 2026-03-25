@@ -93,6 +93,10 @@ pub enum TuiGatewayEvent {
     SelfEvaluation { session_id: String, turn_id: String, overall_score: f64, dimension_scores: Vec<(String, f64)>, strengths: Vec<String>, weaknesses: Vec<String> },
     /// Skill recommendations received
     SkillRecommendations { session_id: String, recommendations: Vec<SkillRecommendationDisplay> },
+    /// Execution safety warning - approaching safety limit
+    ExecutionSafetyWarning { session_id: String, consecutive_turns: usize, max_turns: usize, warning_threshold: usize },
+    /// Execution safety halted - limit reached, waiting for user
+    ExecutionSafetyHalted { session_id: String, consecutive_turns: usize, action_taken: String },
 }
 
 /// Skill recommendation for TUI display
@@ -602,6 +606,27 @@ impl TuiGatewayClient {
                             let _ = event_tx.send(TuiGatewayEvent::SkillRecommendations { session_id, recommendations });
                         }
                     }
+                    "execution.warning" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let consecutive_turns = params.get("consecutive_turns").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let max_turns = params.get("max_turns").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let warning_threshold = params.get("warning_threshold").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let _ = event_tx.send(TuiGatewayEvent::ExecutionSafetyWarning {
+                                session_id, consecutive_turns, max_turns, warning_threshold
+                            });
+                        }
+                    }
+                    "execution.halted" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let consecutive_turns = params.get("consecutive_turns").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let action_taken = params.get("action_taken").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                            let _ = event_tx.send(TuiGatewayEvent::ExecutionSafetyHalted {
+                                session_id, consecutive_turns, action_taken
+                            });
+                        }
+                    }
                     _ => {
                         debug!("Unknown notification method: {}", resp.method);
                     }
@@ -933,6 +958,32 @@ impl TuiGatewayClient {
     /// Get skill recommendations for a session (HTTP fallback for TUI)
     pub async fn get_skill_recommendations_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/sessions/{}/skill-recommendations", base_url, session_id);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get execution safety statistics (HTTP)
+    pub async fn get_safety_stats_http(&self, base_url: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/safety/stats", base_url);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get execution safety state for a specific session (HTTP)
+    pub async fn get_safety_session_state_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/safety/session/{}", base_url, session_id);
         let client = reqwest::Client::new();
         client.get(&url)
             .send()

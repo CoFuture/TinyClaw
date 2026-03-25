@@ -195,6 +195,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View skill recommendations",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":safety",
+        aliases: &["safetystats"],
+        description: "View execution safety status",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -327,6 +333,18 @@ pub struct AppState {
     pub recommendations_session_id: Option<String>,
     /// Cached skill recommendations for display
     pub recommendations_data: Option<Vec<SkillRecommendationDisplay>>,
+    /// Whether we're in execution safety viewing mode
+    pub safety_mode: bool,
+    /// Session ID for current safety view
+    pub safety_session_id: Option<String>,
+    /// Cached safety stats for display (JSON string)
+    pub safety_stats: Option<String>,
+    /// Cached safety state for display (JSON string)
+    pub safety_state: Option<String>,
+    /// Last safety warning info for display
+    pub last_safety_warning: Option<String>,
+    /// Whether execution is currently halted due to safety limit
+    pub safety_halted: bool,
 }
 
 /// Session quality data for TUI display
@@ -421,6 +439,12 @@ impl Default for AppState {
             recommendations_mode: false,
             recommendations_session_id: None,
             recommendations_data: None,
+            safety_mode: false,
+            safety_session_id: None,
+            safety_stats: None,
+            safety_state: None,
+            last_safety_warning: None,
+            safety_halted: false,
         }
     }
 }

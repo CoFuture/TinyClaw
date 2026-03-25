@@ -728,6 +728,8 @@ pub fn draw_input_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
         " Summarizer "
     } else if state.sumcfg_mode {
         " sumcfg "
+    } else if state.safety_mode {
+        " Safety "
     } else if state.input_buffer.starts_with(':') {
         " Command "
     } else {
@@ -1127,6 +1129,99 @@ pub fn draw_recommendations_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled("Press Esc or :rec to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
+/// Draw the execution safety panel
+pub fn draw_safety_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let border_color = if state.safety_halted { Color::Red } else { Color::Yellow };
+    let title_text = if state.safety_halted { " 🛑 Execution Safety - HALTED " } else { " ⚠️ Execution Safety " };
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(Color::Rgb(15, 25, 35)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    // Show last warning/halt message if available
+    if let Some(ref warning) = state.last_safety_warning {
+        let warning_color = if state.safety_halted { Color::Red } else { Color::Yellow };
+        lines.push(Line::from(vec![
+            Span::styled(warning.clone(), Style::default().fg(warning_color).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+    }
+    
+    // Safety stats info
+    lines.push(Line::from(vec![
+        Span::styled("Execution Safety System", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+    
+    // Circuit breaker status
+    lines.push(Line::from(vec![
+        Span::styled("AI Circuit Breaker: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            match state.circuit_breaker_state.as_str() {
+                "closed" => "🟢 Closed (healthy)",
+                "open" => "🔴 Open (failing)",
+                "half_open" => "🟡 Half-Open (testing)",
+                _ => "⚪ Unknown",
+            },
+            Style::default().fg(match state.circuit_breaker_state.as_str() {
+                "closed" => Color::Green,
+                "open" => Color::Red,
+                "half_open" => Color::Yellow,
+                _ => Color::DarkGray,
+            }),
+        ),
+    ]));
+    lines.push(Line::from(""));
+    
+    // Safety halted status
+    if state.safety_halted {
+        lines.push(Line::from(vec![
+            Span::styled("⚠️ ", Style::default().fg(Color::Red)),
+            Span::styled("Agent execution has been halted due to excessive tool calls.", Style::default().fg(Color::Red)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("The agent will wait for user confirmation before continuing.", Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Use :confirm or :y to allow, :deny or :n to stop.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("✓ ", Style::default().fg(Color::Green)),
+            Span::styled("Agent execution is within safe limits.", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("About Execution Safety:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Monitors consecutive tool-call turns to prevent runaway loops.", Style::default().fg(Color::DarkGray)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Warning at 75% of limit, halt at 100%.", Style::default().fg(Color::DarkGray)),
+    ]));
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :safety to exit", Style::default().fg(Color::DarkGray)),
     ]));
 
     let paragraph = Paragraph::new(Text::from(lines))
