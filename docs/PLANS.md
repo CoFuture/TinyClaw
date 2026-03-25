@@ -118,6 +118,33 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v12.4.0 (已完成 ✅)
+
+**完成事项**:
+- **Agent Context Enhancement - User Preferences Integration** - 将用户偏好集成到 Agent 上下文
+  - **`generate_context_prompt` 增强** (`gateway/messages.rs`)：
+    - 新增用户偏好（UserPreferences）到上下文提示词
+    - 包含：agent_persona（Agent 人设）、timezone（时区）、language（语言偏好）
+    - 使用 `PreferencesManager::get_system_prompt_addition()` 获取格式化偏好
+  - **上下文提示词结构优化**：
+    - 顺序调整：User Preferences → Active Skills → Session Notes → Memory → Conversation Summary → Session Instructions
+    - 用户偏好作为全局设置优先注入
+- **Relevance-based Memory Retrieval - 基于相关性的记忆检索** - 优化记忆检索策略
+  - **改用 `generate_context_prompt` 替代 `generate_session_prompt`**：
+    - 原方案：仅获取当前会话的最近记忆（不考虑消息内容）
+    - 新方案：根据当前用户消息内容进行相关性搜索
+    - 使用 `MemoryManager::generate_context_prompt(message, 5)` 获取相关记忆
+    - 帮助 Agent 回忆与当前对话相关的历史信息，即使来自其他会话
+  - **函数签名更新**：
+    - `generate_context_prompt(ctx, session_key)` → `generate_context_prompt(ctx, session_key, current_message)`
+    - 调用点更新：`handle_agent_turn` 中传入当前消息
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 381 tests
+
+**下一步**: Agent 能力持续增强、交互体验优化
+
+---
+
 ### v12.1.0 (已完成 ✅)
 
 **完成事项**:

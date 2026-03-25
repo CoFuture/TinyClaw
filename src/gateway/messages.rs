@@ -370,8 +370,15 @@ fn map_error_to_response(id: Option<String>, error: &Error) -> ResponseError {
 }
 
 /// Generate system prompt supplement from active skills and session notes for a session
-fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<String> {
+fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_message: &str) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
+
+    // 0. User preferences (global settings - included for context)
+    // This includes agent persona, timezone, language preferences
+    let preferences_prompt = ctx.preferences.get_system_prompt_addition();
+    if !preferences_prompt.is_empty() {
+        parts.push(preferences_prompt);
+    }
 
     // 1. Active skills
     let active_skills = ctx.skill_manager.get_active_skills(session_key);
@@ -397,9 +404,11 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str) -> Option<St
     }
 
     // 3. Memory - relevant facts from long-term memory
-    let memory_prompt = ctx.memory_manager.generate_session_prompt(session_key, 5);
-    if !memory_prompt.is_empty() {
-        parts.push(memory_prompt);
+    // Use message-relevant search to find facts related to the current conversation
+    // This helps the agent recall relevant information even from past sessions
+    let relevance_memory_prompt = ctx.memory_manager.generate_context_prompt(current_message, 5);
+    if !relevance_memory_prompt.is_empty() {
+        parts.push(relevance_memory_prompt);
     }
 
     // 3b. Conversation summary - for longer conversations to maintain context
@@ -754,7 +763,7 @@ async fn handle_agent_turn(
     );
 
     // Generate context prompt (skills + session notes) for this session
-    let skill_prompt = generate_context_prompt(ctx, session_key);
+    let skill_prompt = generate_context_prompt(ctx, session_key, message);
     
     // Emit thinking event
     ctx.event_emitter.emit(Event::TurnThinking {
