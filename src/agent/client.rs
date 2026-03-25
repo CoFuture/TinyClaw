@@ -793,10 +793,19 @@ pub async fn send_message_with_history(
                             // Emit tool use event
                             self.emit_tool_use(tool_name, tool_input.clone());
                             
-                            // Execute tool
+                            // Execute tool (with retry for transient errors)
                             let tool_start = Instant::now();
-                            let result = self.tool_executor.execute(tool_name, tool_input.clone()).await;
+                            let (result, retries) = self.tool_executor.execute_with_retry(tool_name, tool_input.clone()).await;
                             let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
+                            
+                            // Log if retries occurred
+                            if retries > 0 {
+                                debug!(
+                                    tool = %tool_name,
+                                    retries = retries,
+                                    "Tool execution succeeded after {} retries", retries
+                                );
+                            }
                             
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);
@@ -920,10 +929,19 @@ pub async fn send_message_with_history(
                             // Emit tool use event
                             self.emit_tool_use(tool_name, args.clone());
                             
-                            // Execute tool
+                            // Execute tool (with retry for transient errors)
                             let tool_start = Instant::now();
-                            let result = self.tool_executor.execute(tool_name, args.clone()).await;
+                            let (result, retries) = self.tool_executor.execute_with_retry(tool_name, args.clone()).await;
                             let tool_duration_ms = tool_start.elapsed().as_millis() as u64;
+                            
+                            // Log if retries occurred
+                            if retries > 0 {
+                                debug!(
+                                    tool = %tool_name,
+                                    retries = retries,
+                                    "Tool execution succeeded after {} retries", retries
+                                );
+                            }
                             
                             // Format tool result - use structured error report on failure
                             let content = format_tool_result_content(tool_name, &result);

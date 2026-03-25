@@ -1100,7 +1100,7 @@ pub fn draw_recommendations_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
                 
                 // Triggered keywords (show first 3)
                 if !rec.triggered_keywords.is_empty() {
-                    let keywords: Vec<String> = rec.triggered_keywords.iter().take(3).map(|k| k.clone()).collect();
+                    let keywords: Vec<String> = rec.triggered_keywords.iter().take(3).cloned().collect();
                     lines.push(Line::from(vec![
                         Span::raw("    "),
                         Span::styled("keywords: ", Style::default().fg(Color::DarkGray)),

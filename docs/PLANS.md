@@ -225,6 +225,38 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v12.0.0 (已完成 ✅)
+
+**完成事项**:
+- **Tool Execution Retry with Backoff** - 工具执行自动重试机制
+  - **新增 `execute_with_retry()` 方法**：ToolExecutor 支持自动重试瞬态错误
+    - 最大重试次数：3次
+    - 初始延迟：500ms
+    - 最大延迟：10秒
+    - 指数退避 + 随机抖动策略
+  - **瞬态错误检测**：`is_transient_error()` 辅助方法
+    - 网络错误：connection refused/reset/timeout、DNS failure
+    - 超时错误：timed out、deadline exceeded
+    - 资源繁忙：resource busy、file is busy
+  - **Client 集成**：`client.rs` 调用 `execute_with_retry()` 替代 `execute()`
+    - 工具执行时自动享受重试保护
+    - 重试成功时记录 debug 日志
+  - **6 个新测试**：
+    - `test_is_transient_error_network` - 网络错误检测
+    - `test_is_transient_error_timeout` - 超时错误检测
+    - `test_is_transient_error_resource_busy` - 资源繁忙检测
+    - `test_is_not_transient_error` - 非瞬态错误排除
+    - `test_execute_with_retry_success_first_try` - 首次成功无重试
+    - `test_execute_with_retry_non_transient_error` - 非瞬态错误不重试
+- **Clippy 警告修复**：
+  - 修复 `tui/components.rs` 中 `map_clone` 警告（使用 `.cloned()` 替代 `.map(|k| k.clone())`）
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 372 tests
+
+**下一步**: Agent 能力持续增强、更智能的错误处理
+
+---
+
 ### v11.3.0 (已完成 ✅)
 
 **完成事项**:
@@ -1306,6 +1338,9 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 | 版本 | 完成事项 |
 |------|----------|
+| v12.0.0 | Tool Execution Retry with Backoff - 工具执行自动重试机制：execute_with_retry() 方法支持最大3次重试+指数退避+随机抖动；is_transient_error() 检测网络/超时/资源繁忙等瞬态错误；client.rs 集成自动重试；6 个新测试；cargo clippy 0 警告；cargo test 372 tests |
+| v11.6.0 | WebUI Skill Recommendations Panel + TUI Support - Web 界面技能推荐管理面板：技能推荐面板、置信度颜色编码、启用技能按钮；TUI :rec 命令支持、TuiGatewayEvent::SkillRecommendations 事件、draw_recommendations_panel 组件；CSS 样式增强；cargo clippy 0 警告；cargo test 366 tests |
+| v11.5.0 | Skill Auto-Recommendation System - 技能自动推荐系统：新增 skill_recommender.rs 模块（SkillRecommendation/SkillRecommender 结构）；关键词匹配和模式检测；置信度评分；Gateway 集成自动发射 skill.recommended 事件；HTTP API 端点；WebUI/TUI 实时通知；8 个新测试；cargo clippy 0 警告；cargo test 366 tests |
 | v9.5.0 | ContextSummarizer Runtime Integration - AI 摘要集成到 Agent 运行时：AgentRuntime 新增 summarizer 字段和 set_context_summarizer() 方法；get_model_response() 重构：上下文截断时优先使用 AI 摘要（保留最近5条消息作为锚点、旧消息生成智能摘要、保留决策/偏好/关键信息）；摘要失败自动回退到传统截断；修复 await_holding_lock 警告；cargo clippy 0 警告；cargo test 337 tests |
 | v9.4.0 | AI-Powered Context Summarization - 新增 AI 驱动上下文摘要：context_summarizer.rs 模块（ContextSummary/ContextSummarizer/SummarizedContext 结构）；Agent::summarize_content() 方法支持 Anthropic/OpenAI/Ollama；修复 memory 测试竞态条件；cargo clippy 0 警告；cargo test 337 tests |
 | v9.3.0 | TUI Token Usage Display - 终端界面 Token 使用量显示：AppState 状态追踪（token_input_total/output_total、token_usage_by_session）；Gateway Client TurnUsage 事件处理；App handle_gateway_event 更新统计；draw_help_bar 显示 `📊 In: 1.2K | Out: 500`；格式化大数字（K/M 后缀）；cargo clippy 0 警告；cargo test 331 tests |

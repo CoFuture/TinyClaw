@@ -1,11 +1,13 @@
 //! Advanced tools module
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::fs;
 use tokio::time::timeout;
-use tracing::info;
+use tokio::time::sleep;
+use tracing::{debug, info};
 use chrono::{DateTime, Local};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -677,6 +679,91 @@ impl ToolExecutor {
                 output: String::new(),
                 error: Some(format!("Unknown tool: {}", name)),
             },
+        }
+    }
+
+    /// Check if an error message indicates a transient error that may succeed on retry
+    fn is_transient_error(error: &str) -> bool {
+        let msg_lower = error.to_lowercase();
+        // Network errors
+        if msg_lower.contains("connection refused")
+            || msg_lower.contains("connection reset")
+            || msg_lower.contains("connection timeout")
+            || msg_lower.contains("network error")
+            || msg_lower.contains("name or service not known")
+            || msg_lower.contains("no route to host")
+            || msg_lower.contains("temporary failure")
+            || msg_lower.contains("dns")
+        {
+            return true;
+        }
+        // Timeout errors
+        if msg_lower.contains("timed out")
+            || msg_lower.contains("timeout")
+            || msg_lower.contains("etimedout")
+            || msg_lower.contains("deadline exceeded")
+        {
+            return true;
+        }
+        // Resource busy errors
+        if msg_lower.contains("resource busy")
+            || msg_lower.contains("file is busy")
+            || msg_lower.contains("device or resource busy")
+            || msg_lower.contains("etext file busy")
+            || msg_lower.contains("ebusy")
+            || msg_lower.contains("text file busy")
+        {
+            return true;
+        }
+        false
+    }
+
+    /// Execute a tool with retry for transient errors
+    /// Returns the final result along with the number of retries performed
+    pub async fn execute_with_retry(&self, name: &str, input: serde_json::Value) -> (ToolResult, u32) {
+        let mut retries = 0u32;
+        let max_retries = 3u32;
+        let initial_delay_ms = 500u64;
+        let max_delay_ms = 10000u64;
+        let mut delay_ms = initial_delay_ms;
+
+        loop {
+            let result = self.execute(name, input.clone()).await;
+
+            if result.success {
+                return (result, retries);
+            }
+
+            // Check if error is transient
+            let is_transient = result.error
+                .as_ref()
+                .map(|e| Self::is_transient_error(e))
+                .unwrap_or(false);
+
+            if !is_transient || retries >= max_retries {
+                // Non-transient error or max retries reached
+                return (result, retries);
+            }
+
+            // Transient error - retry with backoff
+            retries += 1;
+
+            // Calculate delay with exponential backoff and jitter
+            let jitter = {
+                let mut rng = rand::thread_rng();
+                rng.gen_range(0..=delay_ms / 4)
+            };
+            let total_delay = delay_ms + jitter;
+
+            debug!(
+                "Tool '{}' failed with transient error, retrying in {}ms (attempt {}/{})",
+                name, total_delay, retries, max_retries
+            );
+
+            sleep(Duration::from_millis(total_delay)).await;
+
+            // Update delay for next retry (exponential backoff)
+            delay_ms = (delay_ms * 2).min(max_delay_ms);
         }
     }
 
@@ -3758,5 +3845,72 @@ mod tests {
         })).await;
 
         assert!(!result.success);
+    }
+
+    // ============ retry logic tests ============
+
+    #[test]
+    fn test_is_transient_error_network() {
+        assert!(ToolExecutor::is_transient_error("Connection refused"));
+        assert!(ToolExecutor::is_transient_error("connection reset by peer"));
+        assert!(ToolExecutor::is_transient_error("Connection timeout"));
+        assert!(ToolExecutor::is_transient_error("Network error: unreachable"));
+        assert!(ToolExecutor::is_transient_error("name or service not known"));
+        assert!(ToolExecutor::is_transient_error("no route to host"));
+        assert!(ToolExecutor::is_transient_error("Temporary failure in DNS resolution"));
+    }
+
+    #[test]
+    fn test_is_transient_error_timeout() {
+        assert!(ToolExecutor::is_transient_error("Operation timed out"));
+        assert!(ToolExecutor::is_transient_error("ETIMEDOUT"));
+        assert!(ToolExecutor::is_transient_error("Deadline exceeded"));
+    }
+
+    #[test]
+    fn test_is_transient_error_resource_busy() {
+        assert!(ToolExecutor::is_transient_error("Resource busy"));
+        assert!(ToolExecutor::is_transient_error("File is busy"));
+        assert!(ToolExecutor::is_transient_error("Device or resource busy"));
+        assert!(ToolExecutor::is_transient_error("Text file busy"));
+    }
+
+    #[test]
+    fn test_is_not_transient_error() {
+        // Non-transient errors should return false
+        assert!(!ToolExecutor::is_transient_error("Permission denied"));
+        assert!(!ToolExecutor::is_transient_error("No such file or directory"));
+        assert!(!ToolExecutor::is_transient_error("Invalid argument"));
+        assert!(!ToolExecutor::is_transient_error("Syntax error"));
+        assert!(!ToolExecutor::is_transient_error("Out of memory"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_retry_success_first_try() {
+        let executor = ToolExecutor::new();
+        let path = format!("/tmp/tiny_claw_retry_test_{}.txt", uuid::Uuid::new_v4());
+        tokio::fs::write(&path, "test content").await.unwrap();
+
+        let (result, retries) = executor.execute_with_retry("read_file", serde_json::json!({
+            "path": &path
+        })).await;
+
+        assert!(result.success);
+        assert_eq!(retries, 0); // No retries needed
+
+        tokio::fs::remove_file(&path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_retry_non_transient_error() {
+        let executor = ToolExecutor::new();
+        
+        // Non-existent file should fail without retries (not a transient error)
+        let (result, retries) = executor.execute_with_retry("read_file", serde_json::json!({
+            "path": "/tmp/nonexistent_tinyclaw_retry_test.txt"
+        })).await;
+
+        assert!(!result.success);
+        assert_eq!(retries, 0); // No retries for non-transient errors
     }
 }
