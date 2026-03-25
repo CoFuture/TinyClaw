@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod context;
+pub mod context_health;
 pub mod context_manager;
 pub mod context_summarizer;
 pub mod conversation_summary;
@@ -67,3 +68,5 @@ pub use conversation_summary::{ConversationSummary, ConversationSummaryManager};
 pub use execution_safety::{SafetyAction, ExecutionSafetyConfig, ExecutionSafetyManager, ExecutionSafetyState, ExecutionSafetyStats, SafetyCheckResult};
 #[allow(unused_imports)]
 pub use performance_insights::{InsightCategory, InsightSeverity, PerformanceInsight, PerformanceAnalysis, PerformanceInsightsEngine, ToolEfficiencySummary, QualityTrend, ToolPattern};
+#[allow(unused_imports)]
+pub use context_health::{ContextHealthLevel, ContextHealthMonitor, ContextHealthReport, ContextHealthStats, ContextComposition, CompressionEvent, CompressionEventType, HealthRecommendation};

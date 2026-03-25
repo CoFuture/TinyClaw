@@ -160,6 +160,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_quality_manager = Arc::new(agent::SessionQualityManager::new());
     info!("Session quality manager initialized");
     
+    // Create context health monitor for tracking context utilization and health
+    let context_health_monitor = Arc::new(agent::ContextHealthMonitor::default());
+    info!("Context health monitor initialized");
+    
     // Create conversation summary manager for tracking conversation state
     let conversation_summary_manager = Arc::new(parking_lot::RwLock::new(
         crate::agent::ConversationSummaryManager::new()
@@ -274,6 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conversation_summary: conversation_summary_manager.clone(),
         self_evaluation_manager: self_evaluation_manager.clone(),
         session_quality_manager: session_quality_manager.clone(),
+        context_health_monitor: context_health_monitor.clone(),
     });
 
     // Spawn WebSocket server
@@ -300,6 +305,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conversation_summary_manager.clone(), // Conversation summary manager
         self_evaluation_manager.clone(), // Self-evaluation manager
         session_quality_manager.clone(), // Session quality manager
+        context_health_monitor.clone(), // Context health monitor
     );
     
     let ws_handle = tokio::spawn(async move {

@@ -355,6 +355,25 @@ pub struct AppState {
     pub perf_mode: bool,
     /// Cached performance insights data
     pub perf_data: Option<crate::tui::gateway_client::PerformanceInsightsDisplay>,
+    /// Whether we're in context health viewing mode
+    pub context_health_mode: bool,
+    /// Cached context health data
+    pub context_health_data: Option<ContextHealthDisplay>,
+}
+
+/// Context health data for TUI display
+#[derive(Debug, Clone)]
+pub struct ContextHealthDisplay {
+    pub health_level: String,
+    pub health_score: u8,
+    pub utilization_pct: f32,
+    pub total_tokens: usize,
+    pub max_tokens: usize,
+    pub truncation_count: usize,
+    pub summarization_count: usize,
+    pub total_turns: usize,
+    pub peak_utilization_pct: f32,
+    pub recommendations_count: usize,
 }
 
 /// Session quality data for TUI display
@@ -457,6 +476,8 @@ impl Default for AppState {
             safety_halted: false,
             perf_mode: false,
             perf_data: None,
+            context_health_mode: false,
+            context_health_data: None,
         }
     }
 }

@@ -99,6 +99,8 @@ pub enum TuiGatewayEvent {
     ExecutionSafetyHalted { session_id: String, consecutive_turns: usize, action_taken: String },
     /// Performance insights received
     PerformanceInsightsLoaded { insights: PerformanceInsightsDisplay },
+    /// Context health data loaded
+    ContextHealthLoaded { health: crate::tui::state::ContextHealthDisplay },
 }
 
 /// Skill recommendation for TUI display
@@ -1022,6 +1024,19 @@ impl TuiGatewayClient {
     /// Get performance insights (HTTP)
     pub async fn get_performance_insights_http(&self, base_url: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/performance/insights", base_url);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+    
+    /// Get context health via HTTP API
+    pub async fn get_context_health_http(&self, base_url: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/context/health", base_url);
         let client = reqwest::Client::new();
         client.get(&url)
             .send()

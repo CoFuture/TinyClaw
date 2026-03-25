@@ -1967,3 +1967,46 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 ---
 
 ### v5.3.0 (已完成 ✅)
+
+---
+
+### v12.7.0 (已完成 ✅)
+
+**完成事项**:
+- **Context Health Monitor - 上下文健康监控** - 追踪并报告 Agent 上下文管理健康状态
+  - **新增 `agent/context_health.rs` 模块**：
+    - `ContextHealthLevel` 枚举：Healthy、Warning、Critical、Emergency 四个健康等级
+    - `ContextComposition` 结构：系统提示词、技能指令、对话历史、记忆、会话笔记的 token 分布
+    - `CompressionEvent` 结构：截断/摘要/刷新事件的详细信息
+    - `HealthRecommendation` 结构：可操作的改进建议
+    - `ContextHealthReport` 结构：完整健康报告
+    - `ContextHealthStats` 结构：统计摘要
+    - `ContextHealthMonitor` 管理器：健康监控核心逻辑，支持 update_composition、record_truncation、record_summarization、record_turn、generate_report
+  - **Gateway 事件集成** (`gateway/events.rs`)：
+    - 新增 `ContextHealth` 事件类型（session_id、health_level、health_score、utilization_pct、total_tokens、max_tokens、truncation_count、summarization_count、recommendations_count）
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `GET /api/context/health` - 获取上下文健康报告（健康等级、评分、组成、统计、建议、最近事件）
+    - `POST /api/context/health/reset` - 重置健康统计数据
+  - **SSE 事件过滤** (`http/routes.rs`)：
+    - 新增 `context.health` 事件支持
+    - 支持 session_id 过滤
+  - **main.rs 集成**：
+    - 创建 `ContextHealthMonitor` 实例并添加到 HttpState
+    - 创建 `ContextHealthMonitor` 实例并添加到 HandlerContext
+  - **消息处理集成** (`gateway/messages.rs`)：
+    - 在 `handle_agent_turn` 中计算上下文组成并更新健康监控器
+    - 在每个 turn 后生成并发送 `ContextHealth` 事件
+  - **TUI 支持** (`tui/`)：
+    - 新增 `:context` / `:ctx` / `:health` 命令查看上下文健康面板
+    - `AppState` 新增 `context_health_mode` 和 `context_health_data` 字段
+    - `ContextHealthDisplay` 结构用于 TUI 显示
+    - `TuiGatewayClient` 新增 `get_context_health_http()` 方法
+    - `TuiGatewayEvent` 新增 `ContextHealthLoaded` 变体（但 TUI 使用直接解析方式）
+    - `draw_context_health_panel()` 函数：显示健康等级、评分、上下文使用率、统计、建议
+  - **WebUI 支持** (admin.html)：
+    - 已在 SSE 事件过滤中支持 `context.health` 事件
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 383 tests
+
+**下一步**: WebUI 上下文健康面板、其他 Agent 能力增强
+

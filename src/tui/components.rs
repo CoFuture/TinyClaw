@@ -1354,3 +1354,101 @@ pub fn draw_perf_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     f.render_widget(paragraph, area);
 }
+
+/// Draw context health panel
+pub fn draw_context_health_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    use ratatui::{widgets::{Block, Borders, Paragraph}, text::{Text, Line, Span}, style::{Color, Modifier, Style}, layout::Alignment};
+    
+    let title_text = " 🧠 Context Health ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref health) = state.context_health_data {
+        let level_emoji = match health.health_level.as_str() {
+            "Healthy" => "🟢",
+            "Warning" => "🟡",
+            "Critical" => "🟠",
+            "Emergency" => "🔴",
+            _ => "⚪",
+        };
+        let level_color = match health.health_level.as_str() {
+            "Healthy" => Color::Green,
+            "Warning" => Color::Yellow,
+            "Critical" => Color::LightYellow,
+            "Emergency" => Color::Red,
+            _ => Color::Gray,
+        };
+        lines.push(Line::from(vec![
+            Span::styled("Health: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{} {}", level_emoji, health.health_level), Style::default().fg(level_color)),
+            Span::raw("  |  "),
+            Span::styled("Score: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}/100", health.health_score), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(""));
+        
+        let util_color = if health.utilization_pct >= 80.0 { Color::Red }
+            else if health.utilization_pct >= 60.0 { Color::Yellow }
+            else { Color::Green };
+        lines.push(Line::from(vec![
+            Span::styled("Context Usage: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.1}%", health.utilization_pct), Style::default().fg(util_color)),
+            Span::raw("  "),
+            Span::styled(format!("({} / {} tokens)", health.total_tokens, health.max_tokens), Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+        
+        lines.push(Line::from(vec![
+            Span::styled("Statistics:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Total Turns: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", health.total_turns), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Truncations: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", health.truncation_count), Style::default().fg(Color::Yellow)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Summarizations: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", health.summarization_count), Style::default().fg(Color::Yellow)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Peak Utilization: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.1}%", health.peak_utilization_pct), Style::default().fg(Color::Cyan)),
+        ]));
+        
+        if health.recommendations_count > 0 {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("⚠️ ", Style::default().fg(Color::Yellow)),
+                Span::styled(format!("{} recommendations", health.recommendations_count), Style::default().fg(Color::Yellow)),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No context health data yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Press :context or :ctx to view."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}

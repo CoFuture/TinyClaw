@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -54,6 +54,7 @@ pub struct HttpState {
     #[allow(dead_code)]
     pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
+    pub context_health_monitor: Arc<ContextHealthMonitor>,
 }
 
 /// Health check response
@@ -705,6 +706,8 @@ async fn sse_events(
                                     Event::ExecutionSafetyHalted { session_id, .. } => session_id == filter,
                                     // Performance insights - apply session filter
                                     Event::PerformanceInsights { session_id, .. } => session_id == filter,
+                                    // Context health - apply session filter
+                                    Event::ContextHealth { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -755,6 +758,8 @@ async fn sse_events(
                                     Event::ExecutionSafetyHalted { .. } => "execution.halted",
                                     // Performance insights events
                                     Event::PerformanceInsights { .. } => "agent.performance_insights",
+                                    // Context health events
+                                    Event::ContextHealth { .. } => "context.health",
                                 };
                                 
                                 let event = SseEvent::default()
@@ -889,6 +894,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/summarizer/history", get(summarizer_history_list))
         .route("/api/summarizer/stats", get(summarizer_stats))
         .route("/api/summarizer/session/{session_id}", get(summarizer_history_session))
+        // Context health API
+        .route("/api/context/health", get(context_health_get))
+        .route("/api/context/health/reset", axum::routing::post(context_health_reset))
         
         // Execution safety API
         .route("/api/safety/stats", get(safety_stats))
@@ -2284,6 +2292,63 @@ async fn summarizer_history_session(
         "sessionId": session_id,
         "entries": entries,
         "count": entries.len(),
+    }))
+}
+
+/// Get context health report
+async fn context_health_get(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let report = state.context_health_monitor.generate_report();
+    Json(serde_json::json!({
+        "health": {
+            "level": format!("{:?}", report.health_level),
+            "levelDisplay": report.health_level.display_name(),
+            "levelEmoji": report.health_level.emoji(),
+            "score": report.health_score,
+        },
+        "composition": {
+            "systemPromptTokens": report.composition.system_prompt_tokens,
+            "skillsTokens": report.composition.skills_tokens,
+            "historyTokens": report.composition.history_tokens,
+            "memoryTokens": report.composition.memory_tokens,
+            "notesTokens": report.composition.notes_tokens,
+            "totalTokens": report.composition.total_tokens,
+            "maxTokens": report.composition.max_tokens,
+            "utilizationPct": report.composition.utilization_pct,
+        },
+        "stats": {
+            "totalTurns": report.stats.total_turns,
+            "truncationCount": report.stats.truncation_count,
+            "summarizationCount": report.stats.summarization_count,
+            "refreshCount": report.stats.refresh_count,
+            "avgCompressionRatio": report.stats.avg_compression_ratio,
+            "totalTokensSaved": report.stats.total_tokens_saved,
+            "nearCapacityCount": report.stats.near_capacity_count,
+            "peakUtilizationPct": report.stats.peak_utilization_pct,
+            "currentSession": report.stats.current_session,
+        },
+        "recommendations": report.recommendations,
+        "recentEvents": report.recent_events.iter().map(|e| serde_json::json!({
+            "timestamp": e.timestamp.to_rfc3339(),
+            "type": format!("{:?}", e.event_type),
+            "messagesAffected": e.messages_affected,
+            "tokensBefore": e.tokens_before,
+            "tokensAfter": e.tokens_after,
+            "compressionRatio": e.compression_ratio,
+        })).collect::<Vec<_>>(),
+        "timestamp": report.timestamp.to_rfc3339(),
+    }))
+}
+
+/// Reset context health statistics
+async fn context_health_reset(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    state.context_health_monitor.reset();
+    Json(serde_json::json!({
+        "success": true,
+        "message": "Context health statistics reset",
     }))
 }
 

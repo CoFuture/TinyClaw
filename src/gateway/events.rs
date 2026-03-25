@@ -332,6 +332,28 @@ pub enum Event {
         /// Turns analyzed
         turns_analyzed: u64,
     },
+    
+    /// Context health updated - periodic or after compression events
+    #[serde(rename = "context.health")]
+    ContextHealth {
+        session_id: String,
+        /// Health level (healthy/warning/critical/emergency)
+        health_level: String,
+        /// Overall health score (0-100)
+        health_score: u8,
+        /// Context utilization percentage
+        utilization_pct: f32,
+        /// Total tokens in context
+        total_tokens: usize,
+        /// Max tokens available
+        max_tokens: usize,
+        /// Truncation count
+        truncation_count: usize,
+        /// Summarization count
+        summarization_count: usize,
+        /// Recommendations count
+        recommendations_count: usize,
+    },
 }
 
 /// Performance insight for events

@@ -14,6 +14,7 @@ use crate::persistence::HistoryManager;
 use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
 use crate::agent::{Agent, SessionSkillManager, TaskManager, Scheduler};
+use crate::agent::context_manager::ContextManager;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -83,6 +84,8 @@ pub struct HandlerContext {
     pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
     /// Session quality manager for tracking session quality metrics
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
+    /// Context health monitor for tracking context utilization
+    pub context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
 }
 
 impl HandlerContext {
@@ -106,6 +109,7 @@ impl HandlerContext {
         conversation_summary: Arc<RwLock<ConversationSummaryManager>>,
         self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
         session_quality_manager: Arc<crate::agent::SessionQualityManager>,
+        context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
     ) -> Self {
         Self {
             session_manager,
@@ -126,6 +130,7 @@ impl HandlerContext {
             conversation_summary,
             self_evaluation_manager,
             session_quality_manager,
+            context_health_monitor,
         }
     }
 
@@ -892,6 +897,61 @@ async fn handle_agent_turn(
         rating: quality.rating,
         issue_count: quality.issues.len(),
         suggestions: quality.suggestions,
+    });
+
+    // Update context health monitor and emit health event
+    let context_composition = crate::agent::context_health::ContextComposition {
+        system_prompt_tokens: skill_prompt.as_ref().map(|p| ContextManager::estimate_tokens(p)).unwrap_or(0),
+        skills_tokens: ctx.skill_manager.get_active_skills(session_key).len() * 500, // rough estimate
+        history_tokens: ctx.history_manager.get(session_key)
+            .map(|h| {
+                let guard = h.read();
+                let msgs = guard.get_messages();
+                ContextManager::estimate_messages_tokens(msgs)
+            })
+            .unwrap_or(0),
+        memory_tokens: 500, // rough estimate for memory context
+        notes_tokens: 200, // rough estimate for notes
+        total_tokens: 0, // will be calculated
+        max_tokens: ctx.context_health_monitor.available_tokens(),
+        utilization_pct: 0.0, // will be calculated
+    };
+    
+    // Calculate total and utilization
+    let total = context_composition.system_prompt_tokens 
+        + context_composition.skills_tokens 
+        + context_composition.history_tokens 
+        + context_composition.memory_tokens 
+        + context_composition.notes_tokens;
+    let max_tokens = ctx.context_health_monitor.available_tokens();
+    let utilization_pct = if max_tokens > 0 {
+        (total as f32 / max_tokens as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    let final_composition = crate::agent::context_health::ContextComposition {
+        total_tokens: total,
+        utilization_pct,
+        ..context_composition
+    };
+    
+    ctx.context_health_monitor.update_composition(final_composition.clone());
+    ctx.context_health_monitor.set_session(Some(session_key.to_string()));
+    ctx.context_health_monitor.record_turn();
+    
+    // Generate and emit context health event
+    let health_report = ctx.context_health_monitor.generate_report();
+    ctx.event_emitter.emit(Event::ContextHealth {
+        session_id: session_key.to_string(),
+        health_level: format!("{:?}", health_report.health_level),
+        health_score: health_report.health_score,
+        utilization_pct: health_report.composition.utilization_pct,
+        total_tokens: health_report.composition.total_tokens,
+        max_tokens: health_report.composition.max_tokens,
+        truncation_count: health_report.stats.truncation_count,
+        summarization_count: health_report.stats.summarization_count,
+        recommendations_count: health_report.recommendations.len(),
     });
 
     // Auto-extract facts from conversation into long-term memory

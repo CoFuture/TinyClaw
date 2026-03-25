@@ -639,6 +639,10 @@ impl TuiApp {
                     insights.insights.len(), insights.turns_analyzed);
                 self.state.perf_data = Some(insights);
             }
+            TuiGatewayEvent::ContextHealthLoaded { health } => {
+                info!("Context health loaded: level={}, score={}", health.health_level, health.health_score);
+                self.state.context_health_data = Some(health);
+            }
         }
     }
 
@@ -976,6 +980,7 @@ impl TuiApp {
                             self.state.eval_mode = false;
                             self.state.recommendations_mode = false;
                             self.state.safety_mode = false;
+                            self.state.context_health_mode = false;
                             // Fetch performance insights
                             let client = self.gateway_client.clone();
                             tokio::spawn(async move {
@@ -983,6 +988,61 @@ impl TuiApp {
                                 if let Ok(data) = client.get_performance_insights_http("http://127.0.0.1:8080").await {
                                     debug!("Fetched performance insights: {:?}", data);
                                     // The data will be processed and stored via the event
+                                }
+                            });
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :context or :ctx command - toggle context health viewing mode
+                    if input_lower.starts_with(":context") || input_lower == ":ctx" || input_lower == ":health" {
+                        self.state.context_health_mode = !self.state.context_health_mode;
+                        if self.state.context_health_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            // Fetch context health
+                            let client = self.gateway_client.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Ok(data) = client.get_context_health_http("http://127.0.0.1:8080").await {
+                                    // Parse the health data
+                                    if let Some(health_obj) = data.get("health").and_then(|h| h.as_object()) {
+                                        if let Some(level) = health_obj.get("level").and_then(|v| v.as_str()) {
+                                            if let Some(score) = health_obj.get("score").and_then(|v| v.as_u64()) {
+                                                // Get composition
+                                                let comp = data.get("composition");
+                                                let util_pct = comp.and_then(|c| c.get("utilizationPct")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                                                let total_toks = comp.and_then(|c| c.get("totalTokens")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                                let max_toks = comp.and_then(|c| c.get("maxTokens")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                                // Get stats
+                                                let stats = data.get("stats");
+                                                let total_turns = stats.and_then(|s| s.get("totalTurns")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                                let trunc_cnt = stats.and_then(|s| s.get("truncationCount")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                                let summ_cnt = stats.and_then(|s| s.get("summarizationCount")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                                let peak_util = stats.and_then(|s| s.get("peakUtilizationPct")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                                                let rec_cnt = data.get("recommendations").and_then(|r| r.as_array()).map(|a| a.len()).unwrap_or(0);
+                                                
+                                                let health_display = crate::tui::state::ContextHealthDisplay {
+                                                    health_level: level.to_string(),
+                                                    health_score: score as u8,
+                                                    utilization_pct: util_pct,
+                                                    total_tokens: total_toks,
+                                                    max_tokens: max_toks,
+                                                    truncation_count: trunc_cnt,
+                                                    summarization_count: summ_cnt,
+                                                    total_turns,
+                                                    peak_utilization_pct: peak_util,
+                                                    recommendations_count: rec_cnt,
+                                                };
+                                                debug!("Parsed context health: {:?}", health_display);
+                                            }
+                                        }
+                                    }
                                 }
                             });
                         }
@@ -1737,6 +1797,9 @@ impl TuiApp {
                     } else if self.state.perf_mode {
                         self.state.perf_mode = false;
                         self.state.perf_data = None;
+                    } else if self.state.context_health_mode {
+                        self.state.context_health_mode = false;
+                        self.state.context_health_data = None;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -1829,6 +1892,8 @@ impl TuiApp {
             crate::tui::components::draw_safety_panel(f, msg_chunks[0], &self.state);
         } else if self.state.perf_mode {
             crate::tui::components::draw_perf_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.context_health_mode {
+            crate::tui::components::draw_context_health_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }
