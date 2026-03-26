@@ -902,6 +902,10 @@ async fn handle_agent_turn(
     });
 
     // Update context health monitor and emit health event
+    let message_count = ctx.history_manager.get(session_key)
+        .map(|h| h.read().get_messages().len())
+        .unwrap_or(0);
+    
     let context_composition = crate::agent::context_health::ContextComposition {
         system_prompt_tokens: skill_prompt.as_ref().map(|p| ContextManager::estimate_tokens(p)).unwrap_or(0),
         skills_tokens: ctx.skill_manager.get_active_skills(session_key).len() * 500, // rough estimate
@@ -961,7 +965,8 @@ async fn handle_agent_turn(
         let mut advisors = crate::gateway::messages::CONTEXT_ADVISORS.write();
         let advisor = advisors.entry(session_key.to_string()).or_default();
         advisor.set_session(session_key.to_string());
-        advisor.record_turn(health_report.composition.utilization_pct, health_report.composition.total_tokens);
+        // Use comprehensive health data integration
+        advisor.update_with_health_data(&health_report, message_count);
         
         // Generate and emit context advice as suggestions
         let advice_list = advisor.generate_advice();

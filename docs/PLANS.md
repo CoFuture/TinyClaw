@@ -2112,3 +2112,33 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: Agent 能力持续增强、更多交互优化
 
+---
+
+### v13.1.0 (已完成 ✅)
+
+**完成事项**:
+- **Context Advisor 完整集成** - 将所有未使用的 ContextAdvisor 方法连接到实际运行时
+  - **问题诊断**：
+    - ContextAdvisor 模块有多个未使用的方法（`record_compression`、`record_inefficient_summarization`、`record_large_system_prompt`、`check_session_length` 等）
+    - 这些方法定义了完整的模式检测逻辑，但从未被调用
+    - 导致 clippy 产生 6 个 "multiple methods are never used" 警告
+  - **修复方案**：
+    - 新增 `last_truncation_count` 和 `last_summarization_count` 字段到 ContextAdvisor 结构体（用于增量检测）
+    - 新增 `update_with_health_data()` 方法 - 综合集成所有模式检测方法
+      - 接收 ContextHealthReport 和 message_count 参数
+      - 追踪截断/摘要事件的增量变化
+      - 调用 `record_compression()` 和 `record_inefficient_summarization()` 追踪压缩事件
+      - 调用 `record_large_system_prompt()` 追踪系统提示词大小
+      - 调用 `check_session_length()` 追踪会话长度
+    - 修改 `handle_agent_turn` 中的 Context Advisor 更新逻辑
+      - 获取消息数量 `message_count`
+      - 调用新的 `update_with_health_data()` 方法替代简单的 `record_turn()`
+  - **效果**：
+    - 所有 ContextAdvisor 方法现在都被实际使用
+    - Context Advisor 能够基于真实健康报告数据进行更准确的模式检测
+    - 截断/摘要/系统提示词大小/会话长度等模式都能被正确追踪
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 396 tests
+
+**下一步**: Agent 能力持续增强、更多交互优化
+

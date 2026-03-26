@@ -91,6 +91,10 @@ pub struct ContextAdvisor {
     total_tokens_processed: usize,
     /// Compression events count
     compression_count: usize,
+    /// Last truncation count (for delta detection)
+    last_truncation_count: usize,
+    /// Last summarization count (for delta detection)
+    last_summarization_count: usize,
 }
 
 impl ContextAdvisor {
@@ -103,6 +107,8 @@ impl ContextAdvisor {
             last_utilization: 0.0,
             total_tokens_processed: 0,
             compression_count: 0,
+            last_truncation_count: 0,
+            last_summarization_count: 0,
         }
     }
 
@@ -122,6 +128,8 @@ impl ContextAdvisor {
         self.last_utilization = 0.0;
         self.total_tokens_processed = 0;
         self.compression_count = 0;
+        self.last_truncation_count = 0;
+        self.last_summarization_count = 0;
     }
 
     /// Record a turn
@@ -139,6 +147,37 @@ impl ContextAdvisor {
         if self.turn_count > 1 && utilization_pct > self.last_utilization + 20.0 {
             self.record_pattern(PatternType::ContextBloating);
         }
+    }
+
+    /// Update advisor with health report data - comprehensive integration
+    /// This method hooks up all the pattern detection methods that were previously unused
+    pub fn update_with_health_data(&mut self, report: &crate::agent::context_health::ContextHealthReport, message_count: usize) {
+        // Basic turn tracking
+        self.record_turn(report.composition.utilization_pct, report.composition.total_tokens);
+        
+        // Track compression events (truncation/summarization) from health stats
+        let truncation_delta = report.stats.truncation_count.saturating_sub(self.last_truncation_count);
+        let summarization_delta = report.stats.summarization_count.saturating_sub(self.last_summarization_count);
+        
+        // Record each new truncation event
+        for _ in 0..truncation_delta {
+            self.record_compression();
+        }
+        
+        // Record each new summarization event (inefficient if happening frequently)
+        for _ in 0..summarization_delta {
+            self.record_inefficient_summarization();
+        }
+        
+        // Update tracking state
+        self.last_truncation_count = report.stats.truncation_count;
+        self.last_summarization_count = report.stats.summarization_count;
+        
+        // Track large system prompt
+        self.record_large_system_prompt(report.composition.system_prompt_tokens);
+        
+        // Track session length
+        self.check_session_length(message_count);
     }
 
     /// Record a compression event (truncation or summarization)
