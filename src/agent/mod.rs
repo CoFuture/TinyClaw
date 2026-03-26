@@ -29,6 +29,7 @@ pub mod task;
 pub mod task_manager;
 pub mod tools;
 pub mod tool_result_formatter;
+pub mod tool_strategy;
 pub mod turn_history;
 pub mod turn_log;
 
@@ -75,3 +76,5 @@ pub use performance_insights::{InsightCategory, InsightSeverity, PerformanceInsi
 pub use context_health::{ContextHealthLevel, ContextHealthMonitor, ContextHealthReport, ContextHealthStats, ContextComposition, CompressionEvent, CompressionEventType, HealthRecommendation};
 #[allow(unused_imports)]
 pub use context_advisor::{ContextAdvisor, ContextAdvice, ContextAdvisorStats, PatternType};
+#[allow(unused_imports)]
+pub use tool_strategy::{ToolStrategy, UserIntent, ToolGuidance, WorkflowPattern};

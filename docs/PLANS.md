@@ -2271,22 +2271,42 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: 更多内置模板、WebUI 模板展示、Agent 模板执行建议
 
+---
+
+### v13.5.0 (已完成 ✅)
+
+**完成事项**:
+- **Tool Strategy Engine - 工具策略引擎** - 基于用户意图的智能工具使用指导
+  - **新增 `agent/tool_strategy.rs` 模块**：
+    - `UserIntent` 枚举：10 种用户意图分类（Explore、Modify、Execute、Search、Read、Write、Analyze、Compare、Fetch、Monitor）
+    - `UserIntent::from_message()` - 基于消息内容自动识别用户意图（词边界匹配避免误判）
+    - `ToolGuidance` 结构：推荐工具列表、使用技巧、常见陷阱
+    - `WorkflowPattern` 结构：常见多工具工作流模式（探索+阅读、查找+修改、备份+写入等）
+    - `ToolStrategy` 引擎：意图分类、工具引导、工作流模式匹配、策略提示词生成
+  - **上下文提示词集成** (`gateway/messages.rs`)：
+    - 新增 `TOOL_STRATEGY` lazy_static 全局实例
+    - `generate_context_prompt()` 在技能后注入工具策略提示
+    - 根据当前用户消息意图动态生成工具使用指导
+  - **12 个新测试**：
+    - 意图分类测试（Explore、Modify、Execute、Search、Read、Write、Analyze、Ambiguous）
+    - 工具引导测试、工作流模式测试、策略提示生成测试
+  - **修复测试问题**：
+    - 词边界匹配修复（避免 "analyze" 匹配 "an" 导致误判为 Read）
+    - 修复 "make" 被误判为 Write 而非 Execute 的问题
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 413 tests（+12 新测试）
+
+**下一步**: Agent 能力持续增强、交互体验优化
+
 
 ---
 
-## 当前迭代规划 (v13.5.0)
+## 当前迭代规划 (v13.6.0)
 
 ### 本轮目标
-**Agent 工具调用增强** - 让 Agent 更好地理解和使用工具
+**Agent 能力持续增强** - 继续提升 Agent 智能程度
 
 **计划完成**:
-- [ ] **工具参数 Schema 增强** - 更详细的参数描述和验证
-  - 扩展工具的 input_schema 支持更多属性
-  - 添加参数描述和示例
-- [ ] **工具使用建议** - 基于上下文推荐合适的工具
-  - 在 system prompt 中增加工具使用指引
-  - 根据用户意图推荐工具
-- [ ] 代码质量
-  - cargo clippy 检查
-  - cargo test 确保通过
+- [ ] 调研下一轮功能方向
+- [ ] 代码质量检查
 

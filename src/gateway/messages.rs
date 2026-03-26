@@ -25,6 +25,8 @@ lazy_static::lazy_static! {
     static ref TOOL_EXECUTOR: ToolExecutor = ToolExecutor::new();
     /// Per-session context advisors
     pub static ref CONTEXT_ADVISORS: parking_lot::RwLock<std::collections::HashMap<String, crate::agent::ContextAdvisor>> = parking_lot::RwLock::new(std::collections::HashMap::new());
+    /// Tool strategy engine for providing tool usage guidance
+    static ref TOOL_STRATEGY: crate::agent::ToolStrategy = crate::agent::ToolStrategy::new();
 }
 
 /// A server-generated unique request ID for tracing
@@ -417,6 +419,12 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
             }
         }
         parts.push(skills_part);
+    }
+
+    // 1b. Tool Strategy - provide tool usage guidance based on user intent
+    let strategy_prompt = TOOL_STRATEGY.generate_strategy_prompt(current_message);
+    if !strategy_prompt.is_empty() {
+        parts.push(strategy_prompt);
     }
 
     // 2. Session notes
