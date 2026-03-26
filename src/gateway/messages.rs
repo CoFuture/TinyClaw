@@ -400,6 +400,20 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
                 if !skill.tool_names.is_empty() {
                     skills_part.push_str(&format!("Tools: {}\n\n", skill.tool_names.join(", ")));
                 }
+                // Include task templates if available
+                if skill.has_templates() {
+                    skills_part.push_str("Available Task Templates:\n");
+                    for template in &skill.templates {
+                        skills_part.push_str(&format!("- **{}**: {}\n", template.name, template.description));
+                        if !template.required_tools.is_empty() {
+                            skills_part.push_str(&format!("  Tools needed: {}\n", template.required_tools.join(", ")));
+                        }
+                        if !template.example.is_empty() {
+                            skills_part.push_str(&format!("  Example: {}\n", template.example));
+                        }
+                    }
+                    skills_part.push('\n');
+                }
             }
         }
         parts.push(skills_part);

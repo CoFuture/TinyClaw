@@ -49,6 +49,8 @@ pub use session_notes::{SessionNoteUpdate, SessionNotesManager};
 #[allow(unused_imports)]
 pub use session_notes::{SessionNote, SessionNoteSummary};
 pub use skill::Skill;
+#[allow(unused_imports)]
+pub use skill::SkillTemplate;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
 #[allow(unused_imports)]

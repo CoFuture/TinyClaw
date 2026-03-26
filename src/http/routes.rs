@@ -1067,6 +1067,9 @@ pub struct SkillInfo {
     pub enabled_by_default: bool,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Task templates offered by this skill
+    #[serde(default)]
+    pub templates: Vec<crate::agent::skill::SkillTemplate>,
 }
 
 /// Skills list handler - returns all available skills
@@ -1081,6 +1084,7 @@ async fn skills_list(State(state): State<Arc<HttpState>>) -> Json<SkillsListResp
             tool_names: s.tool_names,
             enabled_by_default: s.enabled_by_default,
             tags: s.tags,
+            templates: s.templates,
         })
         .collect();
 
@@ -1100,6 +1104,7 @@ async fn skills_get(
             tool_names: skill.tool_names,
             enabled_by_default: skill.enabled_by_default,
             tags: skill.tags,
+            templates: skill.templates,
         };
         (HttpStatusCode::OK, Json(serde_json::to_value(info).unwrap()))
     } else {
@@ -1125,7 +1130,9 @@ async fn skills_create(
         skill.instructions.clone(),
     )
     .with_tools(skill.tool_names.iter().cloned())
-    .with_default_enabled(skill.enabled_by_default);
+    .with_default_enabled(skill.enabled_by_default)
+    .with_tags(skill.tags.iter().cloned())
+    .with_templates(skill.templates.into_iter());
 
     state.skill_registry.register(new_skill);
 
@@ -1152,7 +1159,8 @@ async fn skills_update(
     )
     .with_tools(skill_info.tool_names.iter().cloned())
     .with_default_enabled(skill_info.enabled_by_default)
-    .with_tags(skill_info.tags.iter().cloned());
+    .with_tags(skill_info.tags.iter().cloned())
+    .with_templates(skill_info.templates.into_iter());
 
     if state.skill_registry.update(&updated_skill) {
         Ok(Json(serde_json::json!({

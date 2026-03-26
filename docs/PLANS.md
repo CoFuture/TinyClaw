@@ -2232,3 +2232,61 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - cargo test 396 tests
 
 **下一步**: 更多 Agent 能力增强、交互体验优化
+
+---
+
+### v13.4.0 (已完成 ✅)
+
+**完成事项**:
+- **Skill Templates - 技能任务模板系统** - 让技能提供可复用的任务模板
+  - **新增 `SkillTemplate` 结构** (`agent/skill.rs`)：
+    - `name` - 模板标识符
+    - `description` - 人类可读的任务描述
+    - `steps` - 逐步执行指令（支持 {placeholder} 参数占位符）
+    - `required_tools` - 执行此任务所需的工具列表
+    - `example` - 示例用法
+  - **`Skill` 结构增强** (`agent/skill.rs`)：
+    - 新增 `templates: Vec<SkillTemplate>` 字段
+    - 新增 `with_template()` / `with_templates()` 方法添加模板
+    - 新增 `get_template(name)` 方法按名称获取模板
+    - 新增 `has_templates()` 方法检查是否有模板
+  - **内置技能模板增强** (`agent/skill_registry.rs`)：
+    - `file_ops` 技能新增：explore_project、edit_file 模板
+    - `code_analysis` 技能新增：find_usage、analyze_structure 模板
+  - **上下文提示词集成** (`gateway/messages.rs`)：
+    - 在生成技能上下文时显示可用任务模板
+    - 模板以列表形式展示（名称、描述、所需工具、示例）
+  - **HTTP API 增强** (`http/routes.rs`)：
+    - `SkillInfo` 结构新增 `templates` 字段
+    - 技能创建和更新时支持传入模板
+    - 技能列表和详情接口返回模板信息
+  - **6 个新测试**：
+    - `test_skill_template_new` - 测试模板创建
+    - `test_skill_template_with_tools` - 测试模板添加工具
+    - `test_skill_with_templates` - 测试技能添加模板
+    - `test_skill_get_template_not_found` - 测试获取不存在的模板
+    - `test_skill_no_templates` - 测试无模板情况
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 401 tests
+
+**下一步**: 更多内置模板、WebUI 模板展示、Agent 模板执行建议
+
+
+---
+
+## 当前迭代规划 (v13.5.0)
+
+### 本轮目标
+**Agent 工具调用增强** - 让 Agent 更好地理解和使用工具
+
+**计划完成**:
+- [ ] **工具参数 Schema 增强** - 更详细的参数描述和验证
+  - 扩展工具的 input_schema 支持更多属性
+  - 添加参数描述和示例
+- [ ] **工具使用建议** - 基于上下文推荐合适的工具
+  - 在 system prompt 中增加工具使用指引
+  - 根据用户意图推荐工具
+- [ ] 代码质量
+  - cargo clippy 检查
+  - cargo test 确保通过
+

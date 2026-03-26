@@ -4,7 +4,7 @@
 //! Includes built-in skills for common use cases.
 //! Supports persistence of custom skills to a JSON file.
 
-use crate::agent::skill::Skill;
+use crate::agent::skill::{Skill, SkillTemplate};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fs;
@@ -213,7 +213,27 @@ Always verify the file exists before operations. Use absolute paths when possibl
         .with_tools(["read_file", "write_file", "cat", "cp", "mv", "rm", "mkdir", "stat"])
         .with_tag("file")
         .with_tag("filesystem")
-        .with_default_enabled(true));
+        .with_default_enabled(true)
+        .with_template(SkillTemplate::new(
+            "explore_project",
+            "Explore a project directory structure",
+            r#"1. Use list_dir to see the top-level contents
+2. Use tree to get a full directory view
+3. Identify key files (README, package.json, Cargo.toml, etc.)
+4. Read relevant config files to understand the project"#,
+        )
+        .with_tools(["list_dir", "tree"])
+        .with_example("Explore the ~/projects/myapp directory"))
+        .with_template(SkillTemplate::new(
+            "edit_file",
+            "Safely edit a file",
+            r#"1. Use read_file to view current content
+2. Prepare the new content
+3. Use write_file to save changes
+4. Verify the changes were applied correctly"#,
+        )
+        .with_tools(["read_file", "write_file"])
+        .with_example("Edit config.json to update the port setting")));
 
         // Code Analysis skill
         self.register_builtin(Skill::new(
@@ -238,7 +258,26 @@ Tips:
         .with_tools(["grep", "find", "glob", "tree", "list_dir", "wc"])
         .with_tag("code")
         .with_tag("search")
-        .with_default_enabled(true));
+        .with_default_enabled(true)
+        .with_template(SkillTemplate::new(
+            "find_usage",
+            "Find where a function/variable is used",
+            r#"1. Use grep with -r to search for the identifier
+2. Analyze the results to understand usage patterns
+3. Report the locations and context"#,
+        )
+        .with_tools(["grep"])
+        .with_example("Find all usages of 'calculateTotal' function"))
+        .with_template(SkillTemplate::new(
+            "analyze_structure",
+            "Analyze code structure in a directory",
+            r#"1. Use tree to see the directory layout
+2. Use glob to find source files by extension
+3. Use wc to count lines of code per file
+4. Summarize the architecture and key components"#,
+        )
+        .with_tools(["tree", "glob", "wc"])
+        .with_example("Analyze the src directory structure")));
 
         // System Operations skill
         self.register_builtin(Skill::new(
