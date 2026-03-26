@@ -986,8 +986,56 @@ impl TuiApp {
                             tokio::spawn(async move {
                                 let client = client.read().await;
                                 if let Ok(data) = client.get_performance_insights_http("http://127.0.0.1:8080").await {
-                                    debug!("Fetched performance insights: {:?}", data);
-                                    // The data will be processed and stored via the event
+                                    // Parse insights array
+                                    let insights: Vec<crate::tui::gateway_client::InsightDisplay> = data.get("insights")
+                                        .and_then(|i| i.as_array())
+                                        .map(|arr| {
+                                            arr.iter().filter_map(|item| {
+                                                Some(crate::tui::gateway_client::InsightDisplay {
+                                                    category: item.get("category")?.as_str()?.to_string(),
+                                                    severity: item.get("severity")?.as_str()?.to_string(),
+                                                    title: item.get("title")?.as_str()?.to_string(),
+                                                    description: item.get("description")?.as_str()?.to_string(),
+                                                    suggestions: item.get("suggestions")?.as_array()?
+                                                        .iter()
+                                                        .filter_map(|s| s.as_str().map(String::from))
+                                                        .collect(),
+                                                })
+                                            }).collect()
+                                        })
+                                        .unwrap_or_default();
+
+                                    // Parse tool efficiency
+                                    let tool_eff = data.get("toolEfficiency");
+                                    let most_efficient_tool = tool_eff.and_then(|te| te.get("mostEfficientTool")).and_then(|v| v.as_str()).map(String::from);
+                                    let least_efficient_tool = tool_eff.and_then(|te| te.get("leastEfficientTool")).and_then(|v| v.as_str()).map(String::from);
+                                    let problematic_tools = tool_eff.and_then(|te| te.get("problematicTools"))
+                                        .and_then(|v| v.as_array())
+                                        .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                                        .unwrap_or_default();
+                                    let avg_tools_per_turn = tool_eff.and_then(|te| te.get("avgToolsPerTurn")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                                    // Parse quality trend
+                                    let quality_trend = data.get("qualityTrend");
+                                    let trend_direction = quality_trend.and_then(|qt| qt.get("trendDirection")).and_then(|v| v.as_str()).unwrap_or("stable").to_string();
+                                    let trend_magnitude = quality_trend.and_then(|qt| qt.get("trendMagnitude")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                                    // Parse turns analyzed
+                                    let turns_analyzed = data.get("turnsAnalyzed").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                                    let perf_display = crate::tui::gateway_client::PerformanceInsightsDisplay {
+                                        insights,
+                                        most_efficient_tool,
+                                        least_efficient_tool,
+                                        problematic_tools,
+                                        avg_tools_per_turn,
+                                        trend_direction,
+                                        trend_magnitude,
+                                        turns_analyzed,
+                                    };
+
+                                    // Send event through client to update TUI state
+                                    client.send_event(crate::tui::gateway_client::TuiGatewayEvent::PerformanceInsightsLoaded { insights: perf_display });
                                 }
                             });
                         }
@@ -1039,7 +1087,8 @@ impl TuiApp {
                                                     peak_utilization_pct: peak_util,
                                                     recommendations_count: rec_cnt,
                                                 };
-                                                debug!("Parsed context health: {:?}", health_display);
+                                                // Send event through client to update TUI state
+                                                client.send_event(crate::tui::gateway_client::TuiGatewayEvent::ContextHealthLoaded { health: health_display });
                                             }
                                         }
                                     }

@@ -1046,6 +1046,12 @@ impl TuiGatewayClient {
             .await
             .map_err(|e| e.to_string())
     }
+
+    /// Send a gateway event through the event channel (used by TUI to deliver HTTP fetch results)
+    pub fn send_event(&self, event: TuiGatewayEvent) {
+        // Ignore send errors - if no receiver, the event is simply dropped
+        let _ = self.event_tx.send(event);
+    }
 }
 
 impl Default for TuiGatewayClient {

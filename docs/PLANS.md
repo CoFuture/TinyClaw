@@ -2087,3 +2087,28 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: TUI 上下文健康面板、Agent 能力持续增强
 
+---
+
+### v13.0.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI :context 和 :perf 命令修复** - 修复 TUI 上下文健康和性能洞察命令无法显示数据的问题
+  - **Bug 分析**：
+    - `:context` / `:ctx` / `:health` 命令虽然有 `draw_context_health_panel` 渲染函数
+    - `:perf` / `:performance` / `:insights` 命令虽然有 `draw_perf_panel` 渲染函数
+    - 但两个命令都是通过 HTTP API 获取数据后仅 `debug!` 打印，数据丢失未传递给 AppState
+    - 缺少事件通道传递机制导致 TUI 面板无法显示数据
+  - **修复方案**：
+    - `gateway_client.rs` 新增 `send_event(&self, event: TuiGatewayEvent)` 方法
+    - 通过客户端内部的 `event_tx` 广播通道将解析后的数据发送到主循环
+    - `:context` 命令修复：解析 HTTP 响应后发送 `ContextHealthLoaded` 事件
+    - `:perf` 命令修复：解析 HTTP 响应后发送 `PerformanceInsightsLoaded` 事件
+    - 复用已有的事件处理逻辑 (`handle_gateway_event`) 更新 AppState
+  - **影响范围**：
+    - `src/tui/gateway_client.rs` - 新增 `send_event` 方法
+    - `src/tui/app.rs` - 修复 `:context` 和 `:perf` 命令的数据传递
+- cargo clippy 0 警告（仅 pre-existing dead_code）
+- cargo test 396 tests
+
+**下一步**: Agent 能力持续增强、更多交互优化
+
