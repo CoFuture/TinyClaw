@@ -365,6 +365,12 @@ pub struct AppState {
     pub context_health_mode: bool,
     /// Cached context health data
     pub context_health_data: Option<ContextHealthDisplay>,
+    /// Current context health level for title bar display
+    pub context_health_level: String,
+    /// Whether we're in context advisor viewing mode
+    pub advisor_mode: bool,
+    /// Cached context advisor data
+    pub advisor_data: Option<crate::tui::gateway_client::ContextAdvisorDisplay>,
 }
 
 /// Context health data for TUI display
@@ -484,6 +490,9 @@ impl Default for AppState {
             perf_data: None,
             context_health_mode: false,
             context_health_data: None,
+            context_health_level: String::new(),
+            advisor_mode: false,
+            advisor_data: None,
         }
     }
 }

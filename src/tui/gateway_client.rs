@@ -101,6 +101,46 @@ pub enum TuiGatewayEvent {
     PerformanceInsightsLoaded { insights: PerformanceInsightsDisplay },
     /// Context health data loaded
     ContextHealthLoaded { health: crate::tui::state::ContextHealthDisplay },
+    /// Context health update from SSE (real-time)
+    ContextHealthUpdate {
+        health_level: String,
+        health_score: u8,
+        utilization_pct: f32,
+        total_tokens: usize,
+        max_tokens: usize,
+        truncation_count: usize,
+        summarization_count: usize,
+        recommendations_count: usize,
+    },
+    /// Context advisor data loaded (from :advisor command)
+    AdvisorDataLoaded { data: ContextAdvisorDisplay },
+}
+
+/// Context advisor data for TUI display
+#[derive(Debug, Clone)]
+pub struct ContextAdvisorDisplay {
+    pub session_id: String,
+    pub turn_count: usize,
+    pub total_tokens_processed: usize,
+    pub compression_count: usize,
+    pub current_utilization: f32,
+    pub active_patterns: usize,
+    pub advice_count: usize,
+    pub should_suggest_new_session: bool,
+    pub advice: Vec<ContextAdviceDisplay>,
+}
+
+/// Single context advice item for TUI display
+#[derive(Debug, Clone)]
+pub struct ContextAdviceDisplay {
+    pub id: String,
+    pub category: String,
+    pub title: String,
+    pub explanation: String,
+    pub suggestion: String,
+    pub severity: u8,
+    pub is_urgent: bool,
+    pub trigger_pattern: String,
 }
 
 /// Skill recommendation for TUI display
@@ -502,6 +542,28 @@ impl TuiGatewayClient {
                                 original_tokens,
                                 summary_tokens,
                                 compression_ratio,
+                            });
+                        }
+                    }
+                    "context.health" => {
+                        if let Some(params) = resp.params {
+                            let health_level = params.get("health_level").and_then(|v| v.as_str()).unwrap_or("Healthy").to_string();
+                            let health_score = params.get("health_score").and_then(|v| v.as_u64()).unwrap_or(100) as u8;
+                            let utilization_pct = params.get("utilization_pct").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                            let total_tokens = params.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let max_tokens = params.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(200000) as usize;
+                            let truncation_count = params.get("truncation_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let summarization_count = params.get("summarization_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let recommendations_count = params.get("recommendations_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let _ = event_tx.send(TuiGatewayEvent::ContextHealthUpdate {
+                                health_level,
+                                health_score,
+                                utilization_pct,
+                                total_tokens,
+                                max_tokens,
+                                truncation_count,
+                                summarization_count,
+                                recommendations_count,
                             });
                         }
                     }
@@ -1037,6 +1099,19 @@ impl TuiGatewayClient {
     /// Get context health via HTTP API
     pub async fn get_context_health_http(&self, base_url: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/context/health", base_url);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get context advisor data via HTTP API
+    pub async fn get_context_advisor_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/context/advisor/{}", base_url, session_id);
         let client = reqwest::Client::new();
         client.get(&url)
             .send()

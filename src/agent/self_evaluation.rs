@@ -35,16 +35,6 @@ impl EvaluationDimension {
             EvaluationDimension::ResponseQuality => "Response Quality",
         }
     }
-
-    /// Get a description of this dimension
-    pub fn description(&self) -> &'static str {
-        match self {
-            EvaluationDimension::TaskSuccess => "Did the turn complete the requested task?",
-            EvaluationDimension::ToolSelection => "Were the right tools chosen for the job?",
-            EvaluationDimension::Efficiency => "How well were time and tokens used?",
-            EvaluationDimension::ResponseQuality => "Was the response helpful and accurate?",
-        }
-    }
 }
 
 /// A score for a specific dimension
@@ -519,11 +509,6 @@ impl SelfEvaluationManager {
         evaluation
     }
 
-    /// Get all evaluations
-    pub fn get_all(&self) -> Vec<SelfEvaluation> {
-        self.evaluations.read().clone()
-    }
-
     /// Get evaluations for a session
     pub fn get_by_session(&self, session_id: &str) -> Vec<SelfEvaluation> {
         self.evaluations
@@ -875,7 +860,9 @@ mod tests {
         let turn = create_test_turn(true, vec![create_successful_tool("test")], 100);
         let eval = manager.evaluate_turn(&turn);
         
-        assert_eq!(manager.get_all().len(), 1);
+        // Verify by stats
+        let stats = manager.get_stats();
+        assert_eq!(stats.total_evaluations, 1);
         assert_eq!(manager.get_by_turn(&turn.id).map(|e| e.id), Some(eval.id));
     }
 

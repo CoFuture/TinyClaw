@@ -643,6 +643,16 @@ impl TuiApp {
                 info!("Context health loaded: level={}, score={}", health.health_level, health.health_score);
                 self.state.context_health_data = Some(health);
             }
+            TuiGatewayEvent::ContextHealthUpdate { health_level, .. } => {
+                // Update the health level for title bar display
+                if health_level != self.state.context_health_level {
+                    self.state.context_health_level = health_level.clone();
+                }
+            }
+            TuiGatewayEvent::AdvisorDataLoaded { data } => {
+                info!("Context advisor data loaded: {} advice items", data.advice.len());
+                self.state.advisor_data = Some(data);
+            }
         }
     }
 
@@ -1036,6 +1046,72 @@ impl TuiApp {
 
                                     // Send event through client to update TUI state
                                     client.send_event(crate::tui::gateway_client::TuiGatewayEvent::PerformanceInsightsLoaded { insights: perf_display });
+                                }
+                            });
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :advisor command - toggle context advisor viewing mode
+                    if input_lower.starts_with(":advisor") || input_lower == ":advice" || input_lower == ":suggestions" {
+                        self.state.advisor_mode = !self.state.advisor_mode;
+                        if self.state.advisor_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            // Fetch context advisor data
+                            let client = self.gateway_client.clone();
+                            let session_id = self.state.current_session_id.clone().unwrap_or_else(|| "main".to_string());
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Ok(data) = client.get_context_advisor_http("http://127.0.0.1:8080", &session_id).await {
+                                    // Parse advisor data
+                                    let session_id = data.get("sessionId").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                                    let stats = data.get("stats");
+                                    let turn_count = stats.and_then(|s| s.get("turnCount")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let total_tokens = stats.and_then(|s| s.get("totalTokensProcessed")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let compression_count = stats.and_then(|s| s.get("compressionCount")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let utilization = stats.and_then(|s| s.get("currentUtilization")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                                    let active_patterns = stats.and_then(|s| s.get("activePatterns")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let advice_count = stats.and_then(|s| s.get("adviceCount")).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let should_suggest = data.get("shouldSuggestNewSession").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    
+                                    // Parse advice items
+                                    let advice: Vec<crate::tui::gateway_client::ContextAdviceDisplay> = data.get("advice")
+                                        .and_then(|a| a.as_array())
+                                        .map(|arr| {
+                                            arr.iter().filter_map(|item| {
+                                                Some(crate::tui::gateway_client::ContextAdviceDisplay {
+                                                    id: item.get("id")?.as_str()?.to_string(),
+                                                    category: item.get("category")?.as_str()?.to_string(),
+                                                    title: item.get("title")?.as_str()?.to_string(),
+                                                    explanation: item.get("explanation")?.as_str()?.to_string(),
+                                                    suggestion: item.get("suggestion")?.as_str()?.to_string(),
+                                                    severity: item.get("severity")?.as_u64().unwrap_or(1) as u8,
+                                                    is_urgent: item.get("isUrgent")?.as_bool().unwrap_or(false),
+                                                    trigger_pattern: item.get("triggerPattern")?.as_str()?.to_string(),
+                                                })
+                                            }).collect()
+                                        })
+                                        .unwrap_or_default();
+                                    
+                                    let advisor_display = crate::tui::gateway_client::ContextAdvisorDisplay {
+                                        session_id,
+                                        turn_count,
+                                        total_tokens_processed: total_tokens,
+                                        compression_count,
+                                        current_utilization: utilization,
+                                        active_patterns,
+                                        advice_count,
+                                        should_suggest_new_session: should_suggest,
+                                        advice,
+                                    };
+                                    client.send_event(crate::tui::gateway_client::TuiGatewayEvent::AdvisorDataLoaded { data: advisor_display });
                                 }
                             });
                         }
@@ -1846,6 +1922,9 @@ impl TuiApp {
                     } else if self.state.perf_mode {
                         self.state.perf_mode = false;
                         self.state.perf_data = None;
+                    } else if self.state.advisor_mode {
+                        self.state.advisor_mode = false;
+                        self.state.advisor_data = None;
                     } else if self.state.context_health_mode {
                         self.state.context_health_mode = false;
                         self.state.context_health_data = None;
@@ -1941,6 +2020,8 @@ impl TuiApp {
             crate::tui::components::draw_safety_panel(f, msg_chunks[0], &self.state);
         } else if self.state.perf_mode {
             crate::tui::components::draw_perf_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.advisor_mode {
+            crate::tui::components::draw_advisor_panel(f, msg_chunks[0], &self.state);
         } else if self.state.context_health_mode {
             crate::tui::components::draw_context_health_panel(f, msg_chunks[0], &self.state);
         } else {
@@ -1999,6 +2080,21 @@ impl TuiApp {
         };
         spans.push(Span::raw(" | "));
         spans.push(Span::styled(cb_indicator.0, Style::default().fg(cb_indicator.1)));
+        
+        // Add context health indicator if not healthy
+        let health_level = &self.state.context_health_level;
+        if !health_level.is_empty() && health_level != "Healthy" {
+            let (indicator, color) = match health_level.as_str() {
+                "Warning" => ("⚠ Context Warning", Color::Yellow),
+                "Critical" => ("🔴 Context Critical", Color::Red),
+                "Emergency" => ("🛑 Context Emergency", Color::Red),
+                _ => ("", Color::White),
+            };
+            if !indicator.is_empty() {
+                spans.push(Span::raw(" | "));
+                spans.push(Span::styled(indicator, Style::default().fg(color).add_modifier(Modifier::BOLD)));
+            }
+        }
         
         // Add context summarization indicator if available
         if let Some(ref summary_info) = self.state.last_summary_info {

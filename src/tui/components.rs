@@ -1355,6 +1355,122 @@ pub fn draw_perf_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw context advisor panel
+pub fn draw_advisor_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    use ratatui::{widgets::{Block, Borders, Paragraph}, text::{Text, Line, Span}, style::{Color, Modifier, Style}, layout::Alignment};
+    
+    let title_text = " 💡 Context Advisor ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(Color::Rgb(25, 20, 15)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref advisor) = state.advisor_data {
+        // Session and summary
+        lines.push(Line::from(vec![
+            Span::styled("Session: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&advisor.session_id, Style::default().fg(Color::Cyan)),
+            Span::raw("  |  "),
+            Span::styled("Advice: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", advisor.advice_count), Style::default().fg(if advisor.advice_count > 0 { Color::Yellow } else { Color::Green })),
+        ]));
+        
+        // Suggest new session indicator
+        if advisor.should_suggest_new_session {
+            lines.push(Line::from(vec![
+                Span::styled("⚠️ ", Style::default().fg(Color::Red)),
+                Span::styled("建议开启新会话以改善上下文管理", Style::default().fg(Color::Red)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // Advisor stats
+        lines.push(Line::from(vec![
+            Span::styled("Statistics:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Turns: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", advisor.turn_count), Style::default().fg(Color::Cyan)),
+            Span::raw("  |  "),
+            Span::styled("Tokens: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", advisor.total_tokens_processed), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Compressions: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", advisor.compression_count), Style::default().fg(Color::Yellow)),
+            Span::raw("  |  "),
+            Span::styled("Utilization: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.1}%", advisor.current_utilization), Style::default().fg(if advisor.current_utilization >= 80.0 { Color::Red } else { Color::Green })),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Active Patterns: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", advisor.active_patterns), Style::default().fg(if advisor.active_patterns > 0 { Color::Yellow } else { Color::Green })),
+        ]));
+        
+        // Advice items
+        if !advisor.advice.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Advice:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            
+            for item in advisor.advice.iter().take(8) {
+                let severity_icon = match item.severity {
+                    3 => "🔴",
+                    2 => "🟡",
+                    _ => "🟢",
+                };
+                let severity_color = match item.severity {
+                    3 => Color::Red,
+                    2 => Color::Yellow,
+                    _ => Color::Green,
+                };
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {} ", severity_icon), Style::default().fg(severity_color)),
+                    Span::styled(format!("[{}] ", item.category), Style::default().fg(Color::DarkGray)),
+                    Span::styled(&item.title, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    Span::styled(if item.is_urgent { " ⚡URGENT" } else { "" }, Style::default().fg(Color::Red)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(&item.explanation, Style::default().fg(Color::DarkGray)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::styled("    💡 ", Style::default().fg(Color::Cyan)),
+                    Span::styled(&item.suggestion, Style::default().fg(Color::Cyan)),
+                ]));
+                lines.push(Line::from(""));
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No context advisor data available.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Context advisor analyzes context patterns and generates"));
+        lines.push(Line::from("actionable advice to optimize context management."));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Press :advisor or :advice again to exit."));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :advisor to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw context health panel
 pub fn draw_context_health_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     use ratatui::{widgets::{Block, Borders, Paragraph}, text::{Text, Line, Span}, style::{Color, Modifier, Style}, layout::Alignment};

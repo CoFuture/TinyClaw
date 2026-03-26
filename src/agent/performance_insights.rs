@@ -302,7 +302,6 @@ impl PerformanceInsightsEngine {
                 total_tools += 1;
                 
                 let stats = tool_stats.entry(tool.name.clone()).or_insert_with(|| ToolAggStats {
-                    name: tool.name.clone(),
                     total_calls: 0,
                     successful_calls: 0,
                     total_duration_ms: 0,
@@ -475,7 +474,7 @@ impl PerformanceInsightsEngine {
         if let Some(ref tool) = analysis.tool_efficiency.most_efficient_tool {
             insights.push(PerformanceInsight::info(
                 format!("{} is your most efficient tool", tool),
-                format!("This tool has the best combination of success rate and execution speed."),
+                "This tool has the best combination of success rate and execution speed.".to_string(),
                 vec![
                     format!("Consider using {} more often for similar tasks", tool),
                     format!("Review what makes {} effective and apply to other tools", tool),
@@ -591,7 +590,6 @@ impl PerformanceInsightsEngine {
 /// Internal struct for aggregating tool statistics
 #[derive(Default)]
 struct ToolAggStats {
-    name: String,
     total_calls: u64,
     successful_calls: u64,
     total_duration_ms: u64,

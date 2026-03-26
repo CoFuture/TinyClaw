@@ -816,6 +816,12 @@
         .ctx-health-advice-severity.medium { background: rgba(250,204,21,0.2); color: #facc15; }
         .ctx-health-advice-severity.low { background: rgba(34,197,94,0.2); color: #22c55e; }
         .ctx-health-no-data { color: #888; padding: 20px; text-align: center; }
+        .ctx-advisor-stats { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-top: 12px; border: 1px solid rgba(255,255,255,0.1); }
+        .ctx-advisor-stat { display: inline-block; margin-right: 20px; }
+        .ctx-advisor-stat-label { font-size: 11px; color: #888; }
+        .ctx-advisor-stat-value { font-size: 16px; font-weight: bold; color: #00d9ff; }
+        .ctx-advisor-warning { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); border-radius: 8px; padding: 12px; margin-top: 10px; color: #ef4444; font-size: 13px; }
+        .ctx-advisor-section-title { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 14px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
         /* Modal */
         .modal-overlay {
@@ -4411,13 +4417,46 @@
             const recs = data.recommendations || [];
             // Also get advice from context advisor if available
             const advices = advisorData && advisorData.advice ? advisorData.advice : [];
+            const advisorStats = advisorData && advisorData.stats ? advisorData.stats : null;
+
+            // Advisor stats section (only shown when session is selected and advisor data is available)
+            let advisorStatsHtml = '';
+            if (advisorStats && sessionId) {
+                advisorStatsHtml = '\
+                    <div class="ctx-advisor-stats">\
+                        <div style="color:#888;font-size:11px;margin-bottom:8px;">💡 Context Advisor 统计</div>\
+                        <div class="ctx-advisor-stat">\
+                            <div class="ctx-advisor-stat-value">' + (advisorStats.turnCount || 0) + '</div>\
+                            <div class="ctx-advisor-stat-label">Turns</div>\
+                        </div>\
+                        <div class="ctx-advisor-stat">\
+                            <div class="ctx-advisor-stat-value">' + (advisorStats.totalTokensProcessed ? formatTokenCount(advisorStats.totalTokensProcessed) : '0') + '</div>\
+                            <div class="ctx-advisor-stat-label">Tokens</div>\
+                        </div>\
+                        <div class="ctx-advisor-stat">\
+                            <div class="ctx-advisor-stat-value">' + (advisorStats.compressionCount || 0) + '</div>\
+                            <div class="ctx-advisor-stat-label">压缩次数</div>\
+                        </div>\
+                        <div class="ctx-advisor-stat">\
+                            <div class="ctx-advisor-stat-value">' + ((advisorStats.currentUtilization || 0)).toFixed(1) + '%</div>\
+                            <div class="ctx-advisor-stat-label">利用率</div>\
+                        </div>\
+                        <div class="ctx-advisor-stat">\
+                            <div class="ctx-advisor-stat-value" style="color:' + ((advisorStats.activePatterns || 0) > 0 ? '#facc15' : '#22c55e') + ';">' + (advisorStats.activePatterns || 0) + '</div>\
+                            <div class="ctx-advisor-stat-label">活跃模式</div>\
+                        </div>\
+                    </div>';
+                if (advisorData && advisorData.shouldSuggestNewSession) {
+                    advisorStatsHtml += '<div class="ctx-advisor-warning">⚠️ 建议开启新会话以改善上下文管理</div>';
+                }
+            }
 
             let adviceHtml = '';
             const allAdvice = [...recs.map(r => ({...r, source: 'health'})), ...advices.map(a => ({...a, source: 'advisor'}))];
             if (allAdvice.length === 0) {
                 adviceHtml = '<div style="color:#888;font-size:12px;text-align:center;padding:8px;">暂无优化建议</div>';
             } else {
-                allAdvice.slice(0, 5).forEach(a => {
+                allAdvice.forEach(a => {
                     const severityLabel = a.severity >= 3 ? 'high' : a.severity === 2 ? 'medium' : 'low';
                     const isUrgent = a.is_urgent || a.isUrgent || false;
                     adviceHtml += '<div class="ctx-health-advice' + (isUrgent ? ' urgent' : '') + '">';
@@ -4454,7 +4493,7 @@
                 <div style="margin-top:12px;">\
                     <div style="color:#888;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">💡 优化建议</div>\
                     ' + adviceHtml + '\
-                </div>';
+                </div>' + advisorStatsHtml;
         }
 
         function resetContextHealth() {

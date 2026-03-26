@@ -228,94 +228,26 @@ impl ContextHealthMonitor {
         }
     }
 
-    /// Record a truncation event
-    pub fn record_truncation(&self, messages_affected: usize, tokens_before: usize, tokens_after: usize) {
-        let event = CompressionEvent {
-            timestamp: Utc::now(),
-            event_type: CompressionEventType::Truncation,
-            messages_affected,
-            tokens_before,
-            tokens_after,
-            compression_ratio: if tokens_before > 0 {
-                tokens_after as f32 / tokens_before as f32
-            } else {
-                1.0
-            },
-        };
-
-        let mut events = self.recent_events.write();
-        if events.len() >= MAX_EVENT_HISTORY {
-            events.pop_front();
-        }
-        events.push_back(event.clone());
-
-        let mut stats = self.stats.write();
-        stats.truncation_count += 1;
-        stats.total_tokens_saved += tokens_before.saturating_sub(tokens_after);
-        stats.total_turns += 1;
-        drop(events); // release events lock before calling update_avg_compression
-        self.update_avg_compression(&mut *stats);
-    }
-
-    /// Record a summarization event
-    pub fn record_summarization(&self, messages_affected: usize, tokens_before: usize, tokens_after: usize) {
-        let event = CompressionEvent {
-            timestamp: Utc::now(),
-            event_type: CompressionEventType::Summarization,
-            messages_affected,
-            tokens_before,
-            tokens_after,
-            compression_ratio: if tokens_before > 0 {
-                tokens_after as f32 / tokens_before as f32
-            } else {
-                1.0
-            },
-        };
-
-        let mut events = self.recent_events.write();
-        if events.len() >= MAX_EVENT_HISTORY {
-            events.pop_front();
-        }
-        events.push_back(event.clone());
-
-        let mut stats = self.stats.write();
-        stats.summarization_count += 1;
-        stats.total_tokens_saved += tokens_before.saturating_sub(tokens_after);
-        stats.total_turns += 1;
-        drop(events); // release events lock before calling update_avg_compression
-        self.update_avg_compression(&mut *stats);
-    }
-
-    /// Record a refresh event
-    pub fn record_refresh(&self, tokens_before: usize, tokens_after: usize) {
-        let event = CompressionEvent {
-            timestamp: Utc::now(),
-            event_type: CompressionEventType::Refresh,
-            messages_affected: 0,
-            tokens_before,
-            tokens_after,
-            compression_ratio: if tokens_before > 0 {
-                tokens_after as f32 / tokens_before as f32
-            } else {
-                1.0
-            },
-        };
-
-        let mut events = self.recent_events.write();
-        if events.len() >= MAX_EVENT_HISTORY {
-            events.pop_front();
-        }
-        events.push_back(event.clone());
-
-        let mut stats = self.stats.write();
-        stats.refresh_count += 1;
-        stats.total_tokens_saved += tokens_before.saturating_sub(tokens_after);
-    }
-
     /// Record a turn without compression
     pub fn record_turn(&self) {
         let mut stats = self.stats.write();
         stats.total_turns += 1;
+    }
+
+    /// Record a truncation event
+    pub fn record_truncation(&self, message_count: usize, original_tokens: usize, remaining_tokens: usize) {
+        let mut stats = self.stats.write();
+        stats.total_turns += 1;
+        stats.truncation_count += 1;
+        stats.total_tokens_saved += original_tokens.saturating_sub(remaining_tokens);
+    }
+
+    /// Record a summarization event
+    pub fn record_summarization(&self, message_count: usize, original_tokens: usize, summary_tokens: usize) {
+        let mut stats = self.stats.write();
+        stats.total_turns += 1;
+        stats.summarization_count += 1;
+        stats.total_tokens_saved += original_tokens.saturating_sub(summary_tokens);
     }
 
     /// Update average compression ratio

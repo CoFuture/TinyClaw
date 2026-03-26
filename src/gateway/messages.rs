@@ -989,6 +989,26 @@ async fn handle_agent_turn(
                     suggestions,
                 });
             }
+            
+            // Emit urgent context advice as a separate high-priority event
+            let urgent_advice = advisor.get_urgent_advice();
+            if !urgent_advice.is_empty() {
+                let urgent_items: Vec<_> = urgent_advice.iter().map(|a| crate::gateway::events::UrgentAdviceItem {
+                    id: a.id.clone(),
+                    category: a.category.clone(),
+                    severity: a.severity,
+                    is_urgent: a.is_urgent,
+                    title: a.title.clone(),
+                    explanation: a.explanation.clone(),
+                    suggestion: a.suggestion.clone(),
+                    trigger_pattern: a.trigger_pattern.clone(),
+                }).collect();
+                
+                ctx.event_emitter.emit(Event::UrgentContextAdvice {
+                    session_id: session_key.to_string(),
+                    advice: urgent_items,
+                });
+            }
         }
     }
 

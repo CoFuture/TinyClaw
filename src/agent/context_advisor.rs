@@ -360,11 +360,6 @@ impl ContextAdvisor {
             .collect()
     }
 
-    /// Get advice count
-    pub fn advice_count(&self) -> usize {
-        self.recent_advice.len()
-    }
-
     /// Get session stats summary
     pub fn get_stats(&self) -> ContextAdvisorStats {
         ContextAdvisorStats {
@@ -377,13 +372,6 @@ impl ContextAdvisor {
             advice_count: self.generate_advice().len(),
             patterns: self.patterns.iter().map(|(k, v)| (format!("{:?}", k), v.count)).collect(),
         }
-    }
-
-    /// Check if a similar advice was given recently
-    pub fn is_advice_redundant(&self, title: &str) -> bool {
-        // Check recent advice history (simulate with current advice)
-        let current = self.generate_advice();
-        current.iter().any(|a| a.title == title)
     }
 }
 

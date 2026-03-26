@@ -354,6 +354,14 @@ pub enum Event {
         /// Recommendations count
         recommendations_count: usize,
     },
+    
+    /// Urgent context advice - high severity advice that needs immediate attention
+    #[serde(rename = "context.urgent_advice")]
+    UrgentContextAdvice {
+        session_id: String,
+        /// List of urgent advice items
+        advice: Vec<UrgentAdviceItem>,
+    },
 }
 
 /// Performance insight for events
@@ -410,6 +418,27 @@ pub struct DimensionScoreEvent {
     pub score: f64,
     /// Reason for this score
     pub reason: String,
+}
+
+/// Urgent advice item for urgent context advice events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrgentAdviceItem {
+    /// Advice ID
+    pub id: String,
+    /// Category
+    pub category: String,
+    /// Severity (1-3, with 3 being most severe)
+    pub severity: u8,
+    /// Whether this is marked as urgent
+    pub is_urgent: bool,
+    /// Title
+    pub title: String,
+    /// Explanation
+    pub explanation: String,
+    /// Suggestion
+    pub suggestion: String,
+    /// Trigger pattern that caused this advice
+    pub trigger_pattern: String,
 }
 
 /// Event emitter for broadcasting events

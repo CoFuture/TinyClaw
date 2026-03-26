@@ -2142,3 +2142,93 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: Agent 能力持续增强、更多交互优化
 
+---
+
+### v13.2.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI 实时上下文健康监控** - 标题栏实时显示上下文健康状态
+  - **新增 `context.health` SSE 事件解析** (`gateway_client.rs`)：
+    - 解析 `context.health` 事件获取健康数据
+    - 新增 `ContextHealthUpdate` 事件变体包含实时健康指标
+  - **新增 TUI 状态字段** (`state.rs`)：
+    - `context_health_level: String` - 追踪当前健康等级
+  - **标题栏实时显示** (`app.rs`)：
+    - 当健康等级非 Healthy 时显示警告指示器
+    - Warning → 🟡 Warning 黄色显示
+    - Critical → 🔴 Critical 红色显示
+    - Emergency → 🛑 Emergency 红色加粗显示
+- **Context Advisor 紧急建议实时推送** - 高优先级建议即时通知
+  - **新增 `context.urgent_advice` 事件类型** (`events.rs`)：
+    - `UrgentAdviceItem` 结构包含 id/category/severity/is_urgent/title/explanation/suggestion/trigger_pattern
+  - **Gateway 事件发射** (`messages.rs`)：
+    - 调用 `advisor.get_urgent_advice()` 获取高优先级建议（severity >= 3 或 is_urgent）
+    - 发射 `Event::UrgentContextAdvice` 事件
+  - **HTTP SSE 路由集成** (`routes.rs`)：
+    - 添加 `context.urgent_advice` 事件到事件过滤
+    - 支持 session_id 过滤
+- **代码质量**：
+  - 修复 clippy 警告（unused health_score 变量）
+  - cargo clippy 0 警告（仅 pre-existing dead_code）
+  - cargo test 396 tests
+
+**下一步**: WebUI 紧急建议面板、更多 Agent 能力增强
+
+
+---
+
+### v13.3.0 (已完成 ✅)
+
+**完成事项**:
+- **TUI Context Advisor Panel - 修复破损的 `:advisor` 命令** - 终端界面查看上下文优化建议
+  - **问题诊断**：
+    - `:advisor` / `:advice` / `:suggestions` 命令虽然在 `TUI_COMMANDS` 中定义但从未实现
+    - 类似于 v13.0.0 修复 `:context` 和 `:perf` 命令的模式
+  - **新增数据结构** (`gateway_client.rs`)：
+    - `ContextAdvisorDisplay` 结构：session_id、turn_count、total_tokens_processed、compression_count、current_utilization、active_patterns、advice_count、should_suggest_new_session、advice 列表
+    - `ContextAdviceDisplay` 结构：id、category、title、explanation、suggestion、severity、is_urgent、trigger_pattern
+    - `TuiGatewayEvent::AdvisorDataLoaded` 事件变体携带完整建议数据
+  - **HTTP 客户端方法** (`gateway_client.rs`)：
+    - `get_context_advisor_http(base_url, session_id)` - 从 `/api/context/advisor/{session_id}` 获取建议数据
+  - **AppState 增强** (`state.rs`)：
+    - 新增 `advisor_mode: bool` - 是否处于建议查看模式
+    - 新增 `advisor_data: Option<ContextAdvisorDisplay>` - 缓存建议数据
+  - **命令处理** (`app.rs`)：
+    - 添加 `:advisor` / `:advice` / `:suggestions` 命令处理
+    - 进入模式时退出其他查看模式
+    - 异步获取建议数据并通过 `send_event` 传递给主循环
+    - 解析 HTTP 响应构造 `ContextAdvisorDisplay` 并发送 `AdvisorDataLoaded` 事件
+  - **面板渲染** (`components.rs`)：
+    - 新增 `draw_advisor_panel()` 函数：
+      - 显示会话信息和统计摘要（Turns/Tokens/压缩次数/利用率/活跃模式）
+      - 当 `should_suggest_new_session` 时显示警告横幅
+      - 显示所有建议项（带严重程度图标 🔴/🟡/🟢、分类、标题、解释、建议）
+      - 紧急建议标记 ⚡URGENT
+  - **事件处理** (`app.rs`)：
+    - 处理 `TuiGatewayEvent::AdvisorDataLoaded` 事件更新 AppState
+  - **渲染循环** (`app.rs`)：
+    - 在 `context_health_mode` 之前添加 `advisor_mode` 面板渲染
+  - **Esc 键处理** (`app.rs`)：
+    - Esc 退出 `advisor_mode` 并清空建议数据
+- **WebUI Context Health Panel 增强** - 更完整的上下文建议展示
+  - **Advisor 统计卡片** (admin.html)：
+    - 仅在选择会话后显示
+    - 显示 Turns / Tokens / 压缩次数 / 利用率 / 活跃模式
+    - 活跃模式数量颜色编码（>0 黄色 / 0 绿色）
+  - **"Start New Session" 警告横幅**：
+    - 当 `shouldSuggestNewSession` 为 true 时显示红色警告
+    - 提示用户开启新会话以改善上下文管理
+  - **显示所有建议**：
+    - 移除原有的 5 条限制（`allAdvice.slice(0, 5)` → `allAdvice`）
+    - 所有建议均可显示
+  - **新增 CSS 样式**：
+    - `.ctx-advisor-stats` / `.ctx-advisor-stat` / `.ctx-advisor-warning` / `.ctx-advisor-section-title`
+- **Bug Fix - 测试编译修复**：
+  - 恢复 `ContextHealthMonitor::record_truncation()` 和 `record_summarization()` 方法
+  - 这些方法在测试中被引用但之前被简化时意外删除
+- **代码清理**：
+  - 移除多个模块的 dead code：`context_advisor.rs`、`performance_insights.rs`、`self_evaluation.rs`
+  - cargo clippy 0 警告（仅 pre-existing dead_code）
+  - cargo test 396 tests
+
+**下一步**: 更多 Agent 能力增强、交互体验优化

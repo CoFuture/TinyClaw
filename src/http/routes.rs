@@ -708,6 +708,7 @@ async fn sse_events(
                                     Event::PerformanceInsights { session_id, .. } => session_id == filter,
                                     // Context health - apply session filter
                                     Event::ContextHealth { session_id, .. } => session_id == filter,
+                                    Event::UrgentContextAdvice { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -760,6 +761,7 @@ async fn sse_events(
                                     Event::PerformanceInsights { .. } => "agent.performance_insights",
                                     // Context health events
                                     Event::ContextHealth { .. } => "context.health",
+                                    Event::UrgentContextAdvice { .. } => "context.urgent_advice",
                                 };
                                 
                                 let event = SseEvent::default()
