@@ -373,6 +373,8 @@ pub struct AppState {
     pub context_health_data: Option<ContextHealthDisplay>,
     /// Current context health level for title bar display
     pub context_health_level: String,
+    /// Current context utilization percentage (from real-time events)
+    pub context_utilization_pct: Option<f32>,
     /// Whether we're in context advisor viewing mode
     pub advisor_mode: bool,
     /// Cached context advisor data
@@ -508,6 +510,7 @@ impl Default for AppState {
             context_health_mode: false,
             context_health_data: None,
             context_health_level: String::new(),
+            context_utilization_pct: None,
             advisor_mode: false,
             advisor_data: None,
             sessions_mode: false,

@@ -643,11 +643,13 @@ impl TuiApp {
                 info!("Context health loaded: level={}, score={}", health.health_level, health.health_score);
                 self.state.context_health_data = Some(health);
             }
-            TuiGatewayEvent::ContextHealthUpdate { health_level, .. } => {
+            TuiGatewayEvent::ContextHealthUpdate { health_level, utilization_pct, .. } => {
                 // Update the health level for title bar display
                 if health_level != self.state.context_health_level {
                     self.state.context_health_level = health_level.clone();
                 }
+                // Store utilization percentage for real-time display
+                self.state.context_utilization_pct = Some(utilization_pct);
             }
             TuiGatewayEvent::AdvisorDataLoaded { data } => {
                 info!("Context advisor data loaded: {} advice items", data.advice.len());
@@ -2080,6 +2082,22 @@ impl TuiApp {
         };
         spans.push(Span::raw(" | "));
         spans.push(Span::styled(cb_indicator.0, Style::default().fg(cb_indicator.1)));
+        
+        // Add context utilization percentage if available
+        if let Some(util_pct) = self.state.context_utilization_pct {
+            spans.push(Span::raw(" | "));
+            let util_color = if util_pct >= 90.0 {
+                Color::Red
+            } else if util_pct >= 75.0 {
+                Color::Yellow
+            } else {
+                Color::Green
+            };
+            spans.push(Span::styled(
+                format!("📊 Context: {:.0}%", util_pct),
+                Style::default().fg(util_color)
+            ));
+        }
         
         // Add context health indicator if not healthy
         let health_level = &self.state.context_health_level;

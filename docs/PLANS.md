@@ -2358,10 +2358,33 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: 交互体验优化继续、WebUI/TUI 细节完善
 
+---
+
+### v13.8.0 (已完成 ✅)
+
+**日期**: 2026-04-01
+
+**完成事项**:
+- **TUI Real-time Context Utilization Display** - 标题栏实时显示上下文使用百分比
+  - **`AppState` 新增字段** (`state.rs`)：
+    - `context_utilization_pct: Option<f32>` - 实时追踪上下文利用率
+  - **事件处理增强** (`app.rs`)：
+    - `ContextHealthUpdate` 事件处理器现在存储 `utilization_pct` 而非忽略
+    - 每次收到上下文健康更新时更新 `context_utilization_pct`
+  - **标题栏实时显示** (`app.rs`)：
+    - 当 `context_utilization_pct` 可用时显示 "📊 Context: X%"
+    - 颜色编码：绿色 (<75%)、黄色 (75-90%)、红色 (>=90%)
+    - 在 circuit breaker 指示器后显示
+  - 上下文使用率在每轮 Agent Turn 结束后自动更新
+- cargo clippy **0 警告**
+- cargo test **419 tests 全部通过**
+
+**下一步**: WebUI 状态可视化继续完善、TUI 交互优化
+
 
 ---
 
-## 当前迭代规划 (v13.8.0)
+## 当前迭代规划 (v13.9.0)
 
 ### 本轮目标
 **交互体验优化** - 继续完善 WebUI 和 TUI
