@@ -30,19 +30,6 @@ pub enum QualityIssue {
 }
 
 impl QualityIssue {
-    /// Get display name
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            QualityIssue::RepeatedQuestions => "重复提问",
-            QualityIssue::ToolErrors => "工具错误过多",
-            QualityIssue::HighTokenUsage => "Token 使用过高",
-            QualityIssue::SlowResponses => "响应缓慢",
-            QualityIssue::LowSuccessRate => "成功率低",
-            QualityIssue::InefficientTools => "工具使用低效",
-            QualityIssue::Dissatisfaction => "用户不满信号",
-        }
-    }
-    
     /// Get severity level (1-5, 5 being most severe)
     pub fn severity(&self) -> u8 {
         match self {
@@ -114,18 +101,6 @@ pub struct SessionQualitySummary {
     pub issue_count: u32,
     pub rating: u8,
     pub last_activity: DateTime<Utc>,
-}
-
-/// Aggregated quality stats across all sessions
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QualityStats {
-    pub total_sessions: u32,
-    pub avg_quality_score: f64,
-    pub avg_task_completion: f64,
-    pub avg_tool_success_rate: f64,
-    pub avg_tokens_per_session: f64,
-    pub common_issues: Vec<(String, u32)>,
-    pub sessions_by_rating: HashMap<String, u32>,
 }
 
 /// Session quality analyzer

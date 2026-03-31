@@ -102,6 +102,7 @@ pub enum TuiGatewayEvent {
     /// Context health data loaded
     ContextHealthLoaded { health: crate::tui::state::ContextHealthDisplay },
     /// Context health update from SSE (real-time)
+    #[allow(dead_code)]
     ContextHealthUpdate {
         health_level: String,
         health_score: u8,
@@ -132,6 +133,7 @@ pub struct ContextAdvisorDisplay {
 
 /// Single context advice item for TUI display
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ContextAdviceDisplay {
     pub id: String,
     pub category: String,
@@ -146,6 +148,7 @@ pub struct ContextAdviceDisplay {
 /// Skill recommendation for TUI display
 #[derive(Debug, Clone)]
 pub struct SkillRecommendationDisplay {
+    #[allow(dead_code)]
     pub id: String,
     pub skill_name: String,
     pub description: String,
@@ -189,12 +192,16 @@ pub struct SessionNoteInfo {
 
 /// Session info from gateway
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SessionInfo {
     pub id: String,
-    #[allow(dead_code)]
     pub label: Option<String>,
-    #[allow(dead_code)]
     pub kind: String,
+    pub message_count: usize,
+    pub duration_secs: i64,
+    pub last_active: String,
+    pub is_active: bool,
+    pub last_message_preview: Option<String>,
 }
 
 /// Tool call preview for action plan
@@ -362,7 +369,12 @@ impl TuiGatewayClient {
                                     let id = obj.get("id")?.as_str()?.to_string();
                                     let label = obj.get("label").and_then(|v| v.as_str()).map(String::from);
                                     let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                                    Some(SessionInfo { id, label, kind })
+                                    let message_count = obj.get("messageCount").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(0);
+                                    let duration_secs = obj.get("durationSecs").and_then(|v| v.as_i64()).unwrap_or(0);
+                                    let last_active = obj.get("lastActive").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let is_active = obj.get("isActive").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    let last_message_preview = obj.get("lastMessagePreview").and_then(|v| v.as_str()).map(String::from);
+                                    Some(SessionInfo { id, label, kind, message_count, duration_secs, last_active, is_active, last_message_preview })
                                 })
                                 .collect();
                             let _ = event_tx.send(TuiGatewayEvent::SessionsList(session_infos));
@@ -1021,6 +1033,7 @@ impl TuiGatewayClient {
     }
 
     /// List skill recommendations for a session (via HTTP API)
+    #[allow(dead_code)]
     pub async fn list_skill_recommendations(&self, session_id: &str) -> Result<(), String> {
         // This method is provided for future HTTP integration
         // For now, skill recommendations come via SSE events
@@ -1029,6 +1042,7 @@ impl TuiGatewayClient {
     }
 
     /// Enable a skill for a session via gateway JSON-RPC
+    #[allow(dead_code)]
     pub async fn enable_session_skill(&self, session_id: &str, skill_name: &str) -> Result<(), String> {
         let request = Request::Standard(RequestStandard {
             id: Some(format!("tui-skill-enable-{}-{}", session_id, skill_name)),
@@ -1071,6 +1085,7 @@ impl TuiGatewayClient {
     }
 
     /// Get execution safety state for a specific session (HTTP)
+    #[allow(dead_code)]
     pub async fn get_safety_session_state_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/safety/session/{}", base_url, session_id);
         let client = reqwest::Client::new();

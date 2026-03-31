@@ -181,6 +181,8 @@ pub struct ContextHealthMonitor {
     recent_events: RwLock<VecDeque<CompressionEvent>>,
     /// Current composition (updated on each turn)
     current_composition: RwLock<ContextComposition>,
+    /// Previous composition (for compression detection)
+    prev_composition: RwLock<Option<ContextComposition>>,
     /// Maximum context tokens
     max_context_tokens: usize,
     /// Reserved output tokens
@@ -203,6 +205,7 @@ impl ContextHealthMonitor {
                 max_tokens: max_context_tokens - reserved_output_tokens,
                 utilization_pct: 0.0,
             }),
+            prev_composition: RwLock::new(None),
             max_context_tokens,
             reserved_output_tokens,
         }
@@ -216,6 +219,9 @@ impl ContextHealthMonitor {
     /// Update composition after a turn
     pub fn update_composition(&self, composition: ContextComposition) {
         let mut current = self.current_composition.write();
+        // Save current composition as previous before updating
+        let mut prev = self.prev_composition.write();
+        *prev = Some(current.clone());
         *current = composition.clone();
 
         // Update peak utilization
@@ -228,42 +234,44 @@ impl ContextHealthMonitor {
         }
     }
 
-    /// Record a turn without compression
+    /// Record a turn, automatically detecting compression if history was reduced
     pub fn record_turn(&self) {
+        let prev = self.prev_composition.read();
+        let current = self.current_composition.read();
+        
         let mut stats = self.stats.write();
         stats.total_turns += 1;
-    }
-
-    /// Record a truncation event
-    pub fn record_truncation(&self, message_count: usize, original_tokens: usize, remaining_tokens: usize) {
-        let mut stats = self.stats.write();
-        stats.total_turns += 1;
-        stats.truncation_count += 1;
-        stats.total_tokens_saved += original_tokens.saturating_sub(remaining_tokens);
-    }
-
-    /// Record a summarization event
-    pub fn record_summarization(&self, message_count: usize, original_tokens: usize, summary_tokens: usize) {
-        let mut stats = self.stats.write();
-        stats.total_turns += 1;
-        stats.summarization_count += 1;
-        stats.total_tokens_saved += original_tokens.saturating_sub(summary_tokens);
-    }
-
-    /// Update average compression ratio
-    fn update_avg_compression(&self, stats: &mut ContextHealthStats) {
-        let total_compressions = stats.truncation_count + stats.summarization_count;
-        if total_compressions > 0 {
-            let events = self.recent_events.read();
-            let sum: f32 = events.iter()
-                .filter(|e| e.event_type != CompressionEventType::Refresh)
-                .map(|e| e.compression_ratio)
-                .sum();
-            let count = events.iter()
-                .filter(|e| e.event_type != CompressionEventType::Refresh)
-                .count();
-            if count > 0 {
-                stats.avg_compression_ratio = sum / count as f32;
+        
+        // Auto-detect compression: if history tokens decreased significantly
+        if let Some(ref prev_comp) = *prev {
+            let reduction = prev_comp.history_tokens as f32 - current.history_tokens as f32;
+            let threshold = prev_comp.history_tokens as f32 * 0.15; // 15% reduction threshold
+            
+            if reduction > threshold && reduction > 1000.0 {
+                // Compression detected - history reduced by more than 20% and 1000 tokens
+                stats.truncation_count += 1;
+                stats.total_tokens_saved += reduction as usize;
+                
+                // Add compression event
+                let compression_ratio = if prev_comp.history_tokens > 0 {
+                    (reduction / prev_comp.history_tokens as f32).min(1.0)
+                } else {
+                    0.0
+                };
+                drop(stats); // Release lock before updating events
+                
+                let mut events = self.recent_events.write();
+                if events.len() >= MAX_EVENT_HISTORY {
+                    events.pop_front();
+                }
+                events.push_back(CompressionEvent {
+                    event_type: CompressionEventType::Truncation,
+                    timestamp: Utc::now(),
+                    tokens_before: prev_comp.history_tokens,
+                    tokens_after: current.history_tokens,
+                    compression_ratio,
+                    messages_affected: 0, // Not tracked in auto-detection
+                });
             }
         }
     }
@@ -424,16 +432,6 @@ impl ContextHealthMonitor {
         recommendations
     }
 
-    /// Get current composition
-    pub fn get_composition(&self) -> ContextComposition {
-        self.current_composition.read().clone()
-    }
-
-    /// Get stats
-    pub fn get_stats(&self) -> ContextHealthStats {
-        self.stats.read().clone()
-    }
-
     /// Reset stats (for new session)
     pub fn reset(&self) {
         let mut stats = self.stats.write();
@@ -464,24 +462,81 @@ mod tests {
     }
 
     #[test]
-    fn test_record_truncation() {
+    fn test_auto_truncation_detection() {
+        // Test that record_turn auto-detects compression from composition changes
         let monitor = ContextHealthMonitor::default();
-        monitor.record_truncation(5, 10000, 6000);
+        
+        // First composition (before compression)
+        let composition_before = ContextComposition {
+            system_prompt_tokens: 1000,
+            skills_tokens: 500,
+            history_tokens: 10000,  // High history tokens
+            memory_tokens: 300,
+            notes_tokens: 100,
+            total_tokens: 11900,
+            max_tokens: 176000,
+            utilization_pct: 6.8,
+        };
+        monitor.update_composition(composition_before);
+        
+        // Second composition (after truncation - significantly reduced)
+        let composition_after = ContextComposition {
+            system_prompt_tokens: 1000,
+            skills_tokens: 500,
+            history_tokens: 6000,  // Significantly reduced (>20% reduction)
+            memory_tokens: 300,
+            notes_tokens: 100,
+            total_tokens: 7900,
+            max_tokens: 176000,
+            utilization_pct: 4.5,
+        };
+        monitor.update_composition(composition_after);
+        
+        // record_turn should auto-detect the truncation
+        monitor.record_turn();
 
-        let stats = monitor.get_stats();
-        assert_eq!(stats.truncation_count, 1);
-        assert_eq!(stats.total_tokens_saved, 4000);
-        assert_eq!(stats.total_turns, 1);
+        let report = monitor.generate_report();
+        assert_eq!(report.stats.truncation_count, 1);
+        assert_eq!(report.stats.total_tokens_saved, 4000);
+        assert_eq!(report.stats.total_turns, 1);
     }
 
     #[test]
-    fn test_record_summarization() {
+    fn test_auto_summarization_detection() {
+        // Test auto-detection of aggressive compression (like summarization)
         let monitor = ContextHealthMonitor::default();
-        monitor.record_summarization(10, 20000, 3000);
+        
+        // Large history before summarization
+        let composition_before = ContextComposition {
+            system_prompt_tokens: 5000,
+            skills_tokens: 3000,
+            history_tokens: 50000,  // Very large
+            memory_tokens: 1000,
+            notes_tokens: 500,
+            total_tokens: 59500,
+            max_tokens: 176000,
+            utilization_pct: 33.8,
+        };
+        monitor.update_composition(composition_before);
+        
+        // Much smaller after summarization
+        let composition_after = ContextComposition {
+            system_prompt_tokens: 5000,
+            skills_tokens: 3000,
+            history_tokens: 3000,  // Massive reduction (>20%)
+            memory_tokens: 1000,
+            notes_tokens: 500,
+            total_tokens: 9500,
+            max_tokens: 176000,
+            utilization_pct: 5.4,
+        };
+        monitor.update_composition(composition_after);
+        
+        monitor.record_turn();
 
-        let stats = monitor.get_stats();
-        assert_eq!(stats.summarization_count, 1);
-        assert_eq!(stats.total_tokens_saved, 17000);
+        let report = monitor.generate_report();
+        assert_eq!(report.stats.truncation_count, 1);
+        assert_eq!(report.stats.total_tokens_saved, 47000);
     }
 
     #[test]
@@ -499,39 +554,18 @@ mod tests {
         };
         monitor.update_composition(composition);
 
-        let current = monitor.get_composition();
-        assert_eq!(current.total_tokens, 3900);
-        assert_eq!(current.utilization_pct, 2.2);
+        // Read back via generate_report().composition
+        let report = monitor.generate_report();
+        assert_eq!(report.composition.total_tokens, 3900);
+        assert_eq!(report.composition.utilization_pct, 2.2);
     }
 
     #[test]
     fn test_generate_report() {
         let monitor = ContextHealthMonitor::default();
-        let composition = ContextComposition {
-            system_prompt_tokens: 5000,
-            skills_tokens: 3000,
-            history_tokens: 80000,
-            memory_tokens: 2000,
-            notes_tokens: 500,
-            total_tokens: 90500,
-            max_tokens: 176000,
-            utilization_pct: 71.0,
-        };
-        monitor.update_composition(composition.clone());
-        monitor.record_truncation(3, 15000, 9000);
-
-        let report = monitor.generate_report();
-        assert_eq!(report.health_level, ContextHealthLevel::Warning);
-        // Score = 75 (Warning base) - 30 (compression penalty: 3 truncations / 1 turn = 100%) - 0 (utilization <= 70 after deduction formula)
-        // = 45. But we want >= 50, so let's assert a more appropriate threshold
-        assert!(report.health_score >= 40, "score {} should be >= 40", report.health_score);
-        assert!(!report.recommendations.is_empty());
-    }
-
-    #[test]
-    fn test_recommendations_sorting() {
-        let monitor = ContextHealthMonitor::default();
-        let composition = ContextComposition {
+        
+        // First composition (before compression)
+        let composition_before = ContextComposition {
             system_prompt_tokens: 5000,
             skills_tokens: 3000,
             history_tokens: 80000,
@@ -541,8 +575,57 @@ mod tests {
             max_tokens: 176000,
             utilization_pct: 51.4,
         };
-        monitor.update_composition(composition);
-        monitor.record_truncation(3, 15000, 9000);
+        monitor.update_composition(composition_before);
+        
+        // Second composition (after truncation)
+        let composition_after = ContextComposition {
+            system_prompt_tokens: 5000,
+            skills_tokens: 3000,
+            history_tokens: 65000,  // Reduced by 15000 (>1000 threshold)
+            memory_tokens: 2000,
+            notes_tokens: 500,
+            total_tokens: 75500,
+            max_tokens: 176000,
+            utilization_pct: 42.9,
+        };
+        monitor.update_composition(composition_after);
+        monitor.record_turn();
+
+        let report = monitor.generate_report();
+        assert_eq!(report.health_level, ContextHealthLevel::Healthy);
+        assert!(report.health_score >= 70);
+        assert_eq!(report.stats.truncation_count, 1);
+        assert!(!report.recommendations.is_empty());
+    }
+
+    #[test]
+    fn test_recommendations_sorting() {
+        let monitor = ContextHealthMonitor::default();
+        
+        let composition_before = ContextComposition {
+            system_prompt_tokens: 5000,
+            skills_tokens: 3000,
+            history_tokens: 80000,
+            memory_tokens: 2000,
+            notes_tokens: 500,
+            total_tokens: 90500,
+            max_tokens: 176000,
+            utilization_pct: 51.4,
+        };
+        monitor.update_composition(composition_before);
+        
+        let composition_after = ContextComposition {
+            system_prompt_tokens: 5000,
+            skills_tokens: 3000,
+            history_tokens: 65000,
+            memory_tokens: 2000,
+            notes_tokens: 500,
+            total_tokens: 75500,
+            max_tokens: 176000,
+            utilization_pct: 42.9,
+        };
+        monitor.update_composition(composition_after);
+        monitor.record_turn();
 
         let report = monitor.generate_report();
         // First recommendation should be highest priority
@@ -555,13 +638,36 @@ mod tests {
     fn test_event_history_limit() {
         let monitor = ContextHealthMonitor::default();
         for i in 0..60 {
-            monitor.record_truncation(i, 1000, 500);
+            // Each pair of update_composition calls simulates compression
+            // Ensure reduction > 1000 to meet minimum threshold
+            let composition_before = ContextComposition {
+                system_prompt_tokens: 1000,
+                skills_tokens: 500,
+                history_tokens: 2500 + i * 100,  // Start higher to ensure reduction > 1000
+                memory_tokens: 300,
+                notes_tokens: 100,
+                total_tokens: 4400 + i * 100,
+                max_tokens: 176000,
+                utilization_pct: 2.5 + (i as f32) * 0.05,
+            };
+            monitor.update_composition(composition_before);
+            
+            let composition_after = ContextComposition {
+                system_prompt_tokens: 1000,
+                skills_tokens: 500,
+                history_tokens: 1000 + i * 50,  // At least 1500 reduction (>1000 threshold)
+                memory_tokens: 300,
+                notes_tokens: 100,
+                total_tokens: 2900 + i * 50,
+                max_tokens: 176000,
+                utilization_pct: 1.6 + (i as f32) * 0.03,
+            };
+            monitor.update_composition(composition_after);
+            monitor.record_turn();
         }
 
-        let stats = monitor.get_stats();
-        assert_eq!(stats.truncation_count, 60);
-
         let report = monitor.generate_report();
+        assert_eq!(report.stats.truncation_count, 60);
         // Should only keep MAX_EVENT_HISTORY recent events
         assert!(report.recent_events.len() <= MAX_EVENT_HISTORY);
     }
@@ -582,6 +688,8 @@ mod tests {
             utilization_pct: 2.2,
         };
         monitor.update_composition(composition);
+        monitor.record_turn();  // No compression detected (not a significant reduction)
+        
         let report = monitor.generate_report();
         assert!(report.health_score >= 90);
     }

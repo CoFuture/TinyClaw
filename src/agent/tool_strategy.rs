@@ -356,11 +356,6 @@ impl ToolStrategy {
             .collect()
     }
     
-    /// Get all workflow patterns
-    pub fn all_patterns(&self) -> &[WorkflowPattern] {
-        &self.patterns
-    }
-    
     /// Generate a comprehensive strategy prompt for the agent
     pub fn generate_strategy_prompt(&self, user_message: &str) -> String {
         let intent = self.classify_intent(user_message);

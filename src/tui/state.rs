@@ -136,6 +136,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         category: CommandCategory::Session,
     },
     TuiCommandMeta {
+        full_name: ":sessions",
+        aliases: &["sessionlist"],
+        description: "List all sessions",
+        category: CommandCategory::Session,
+    },
+    TuiCommandMeta {
         full_name: ":ren",
         aliases: &["rename"],
         description: "Rename current session",
@@ -371,6 +377,15 @@ pub struct AppState {
     pub advisor_mode: bool,
     /// Cached context advisor data
     pub advisor_data: Option<crate::tui::gateway_client::ContextAdvisorDisplay>,
+    /// Whether we're in sessions list viewing mode
+    #[allow(dead_code)]
+    pub sessions_mode: bool,
+    /// Selected session index in the sessions list (for keyboard navigation)
+    #[allow(dead_code)]
+    pub sessions_selected_index: usize,
+    /// Cached sessions list for display
+    #[allow(dead_code)]
+    pub sessions_data: Vec<crate::tui::gateway_client::SessionInfo>,
 }
 
 /// Context health data for TUI display
@@ -405,6 +420,7 @@ pub struct SessionQualityDisplay {
 #[derive(Debug, Clone)]
 pub struct SelfEvaluationDisplay {
     pub turn_id: String,
+    #[allow(dead_code)]
     pub session_id: String,
     pub overall_score: f64,
     pub dimension_scores: Vec<(String, f64)>,
@@ -415,6 +431,7 @@ pub struct SelfEvaluationDisplay {
 /// Skill recommendation data for TUI display
 #[derive(Debug, Clone)]
 pub struct SkillRecommendationDisplay {
+    #[allow(dead_code)]
     pub id: String,
     pub skill_name: String,
     pub description: String,
@@ -493,6 +510,9 @@ impl Default for AppState {
             context_health_level: String::new(),
             advisor_mode: false,
             advisor_data: None,
+            sessions_mode: false,
+            sessions_selected_index: 0,
+            sessions_data: Vec::new(),
         }
     }
 }

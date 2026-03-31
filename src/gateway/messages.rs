@@ -90,6 +90,8 @@ pub struct HandlerContext {
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
     /// Context health monitor for tracking context utilization
     pub context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
+    /// Tool pattern learner for learning from turn history
+    pub tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
 }
 
 impl HandlerContext {
@@ -114,6 +116,7 @@ impl HandlerContext {
         self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
         session_quality_manager: Arc<crate::agent::SessionQualityManager>,
         context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
+        tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
     ) -> Self {
         Self {
             session_manager,
@@ -135,6 +138,7 @@ impl HandlerContext {
             self_evaluation_manager,
             session_quality_manager,
             context_health_monitor,
+            tool_pattern_learner,
         }
     }
 
@@ -905,7 +909,12 @@ async fn handle_agent_turn(
         weaknesses: evaluation.weaknesses.clone(),
     });
     
-    ctx.turn_history.record(turn_record);
+    ctx.turn_history.record(turn_record.clone());
+
+    // Update tool pattern learner with the new turn
+    if let Some(mut learner) = ctx.tool_pattern_learner.try_write() {
+        learner.update_with_turn(&turn_record);
+    }
 
     // Analyze session quality and emit event
     let turns = ctx.turn_history.get_turn_records(session_key);

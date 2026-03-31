@@ -49,21 +49,6 @@ impl SkillRecommendation {
             already_enabled: false,
         }
     }
-
-    /// Mark whether this skill is already enabled
-    pub fn with_already_enabled(mut self, enabled: bool) -> Self {
-        self.already_enabled = enabled;
-        self
-    }
-}
-
-/// Statistics about skill recommendations
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SkillRecommenderStats {
-    /// Total recommendations generated
-    pub total_recommendations: u64,
-    /// Recommendations by skill name
-    pub by_skill: HashMap<String, u64>,
 }
 
 /// Skill recommender engine - analyzes context and generates skill recommendations
@@ -338,21 +323,6 @@ impl SkillRecommender {
         }
 
         reasons
-    }
-
-    /// Get statistics
-    pub fn get_stats(&self) -> SkillRecommenderStats {
-        let stats = self.stats.read();
-        SkillRecommenderStats {
-            total_recommendations: stats.values().sum(),
-            by_skill: stats.clone(),
-        }
-    }
-
-    /// Reset statistics
-    #[allow(dead_code)]
-    pub fn reset_stats(&self) {
-        self.stats.write().clear();
     }
 }
 

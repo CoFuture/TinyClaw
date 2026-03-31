@@ -30,6 +30,7 @@ pub mod task_manager;
 pub mod tools;
 pub mod tool_result_formatter;
 pub mod tool_strategy;
+pub mod tool_pattern_learner;
 pub mod turn_history;
 pub mod turn_log;
 
@@ -45,7 +46,7 @@ pub use scheduler::Scheduler;
 #[allow(unused_imports)]
 pub use self_evaluation::{SelfEvaluation, SelfEvaluationEngine, SelfEvaluationManager, SelfEvaluationStats, SelfEvaluationSummary, DimensionScore, EvaluationDimension};
 #[allow(unused_imports)]
-pub use session_quality::{DetectedIssue, QualityIssue, SessionQuality, SessionQualityAnalyzer, SessionQualityManager, SessionQualitySummary, QualityStats};
+pub use session_quality::{DetectedIssue, QualityIssue, SessionQuality, SessionQualityAnalyzer, SessionQualityManager, SessionQualitySummary};
 pub use session_notes::{SessionNoteUpdate, SessionNotesManager};
 #[allow(unused_imports)]
 pub use session_notes::{SessionNote, SessionNoteSummary};
@@ -55,7 +56,7 @@ pub use skill::SkillTemplate;
 pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
 #[allow(unused_imports)]
-pub use skill_recommender::{SkillRecommendation, SkillRecommender, SkillRecommenderStats};
+pub use skill_recommender::{SkillRecommendation, SkillRecommender};
 #[allow(unused_imports)]
 pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, SuggestionType};
 #[allow(unused_imports)]
@@ -78,3 +79,5 @@ pub use context_health::{ContextHealthLevel, ContextHealthMonitor, ContextHealth
 pub use context_advisor::{ContextAdvisor, ContextAdvice, ContextAdvisorStats, PatternType};
 #[allow(unused_imports)]
 pub use tool_strategy::{ToolStrategy, UserIntent, ToolGuidance, WorkflowPattern};
+#[allow(unused_imports)]
+pub use tool_pattern_learner::{ToolPatternLearner, LearnedPattern, ToolStats, PatternAnalysis};

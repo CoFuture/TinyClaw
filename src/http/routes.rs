@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -49,6 +49,7 @@ pub struct HttpState {
     pub suggestion_manager: Arc<SuggestionManager>,
     pub memory_manager: Arc<MemoryManager>,
     pub turn_history: Arc<TurnHistoryManager>,
+    pub tool_pattern_learner: Arc<RwLock<ToolPatternLearner>>,
     #[allow(dead_code)]
     pub conversation_summary: Arc<RwLock<crate::agent::ConversationSummaryManager>>,
     #[allow(dead_code)]
@@ -877,6 +878,13 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/export", get(turns_export))
         // Tool performance statistics
         .route("/api/tools/stats", get(tool_stats))
+        // Tool pattern learning API - learn from turn history
+        .route("/api/pattern/analysis", get(pattern_analysis))
+        .route("/api/pattern/learn", post(pattern_learn))
+        .route("/api/pattern/tool/{tool_name}", get(pattern_tool_stats))
+        .route("/api/pattern/suggestions/{current_tools}", get(pattern_suggestions))
+        .route("/api/pattern/tips", get(pattern_tips))
+        .route("/api/pattern/tool/{tool_name}/patterns", get(pattern_by_tool))
         // Self-evaluation API - agent performance self-assessment
         .route("/api/evaluations/recent", get(evaluations_recent))
         .route("/api/evaluations/stats", get(evaluations_stats))
@@ -1902,6 +1910,145 @@ async fn tool_stats(
     let stats = state.turn_history.get_tool_stats();
     Json(serde_json::json!({
         "stats": stats,
+    }))
+}
+
+// ============================================================
+// Tool Pattern Learning API Endpoints
+// ============================================================
+
+/// Get full pattern analysis from the tool pattern learner
+async fn pattern_analysis(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let learner = state.tool_pattern_learner.read();
+    let analysis = learner.get_analysis();
+    Json(serde_json::json!({
+        "analysis": {
+            "toolStats": analysis.tool_stats.values().map(|s| serde_json::json!({
+                "name": s.name,
+                "usageCount": s.usage_count,
+                "successCount": s.success_count,
+                "failureCount": s.failure_count,
+                "successRate": s.success_rate,
+                "avgDurationMs": s.avg_duration_ms,
+                "oftenFollowedBy": s.often_followed_by,
+                "oftenPrecededBy": s.often_preceded_by,
+            })).collect::<Vec<_>>(),
+            "learnedPatterns": analysis.learned_patterns.iter().map(|p| serde_json::json!({
+                "id": p.id,
+                "tools": p.tools,
+                "usageCount": p.usage_count,
+                "successRate": p.success_rate,
+                "avgDurationMs": p.avg_duration_ms,
+                "lastSeen": p.last_seen.to_rfc3339(),
+                "firstSeen": p.first_seen.to_rfc3339(),
+            })).collect::<Vec<_>>(),
+            "overallSuccessRate": analysis.overall_success_rate,
+            "totalTurns": analysis.total_turns,
+            "totalToolExecutions": analysis.total_tool_executions,
+            "analyzedAt": analysis.analyzed_at.to_rfc3339(),
+        },
+    }))
+}
+
+/// Trigger pattern learning from turn history
+async fn pattern_learn(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    // Get all turns from turn history
+    let all_turns = state.turn_history.get_all_sessions_turns();
+    let all_turn_records: Vec<_> = all_turns.into_values().flatten().collect();
+    
+    // Learn from all turns
+    let mut learner = state.tool_pattern_learner.write();
+    learner.learn_from_turns(&all_turn_records);
+    
+    let analysis = learner.get_analysis();
+    Json(serde_json::json!({
+        "success": true,
+        "message": format!("Learned from {} turns", analysis.total_turns),
+        "totalTurns": analysis.total_turns,
+        "totalToolExecutions": analysis.total_tool_executions,
+        "overallSuccessRate": analysis.overall_success_rate,
+        "learnedPatternsCount": analysis.learned_patterns.len(),
+        "toolStatsCount": analysis.tool_stats.len(),
+    }))
+}
+
+/// Get statistics for a specific tool
+async fn pattern_tool_stats(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let learner = state.tool_pattern_learner.read();
+    if let Some(stats) = learner.get_tool_stats(&tool_name) {
+        Json(serde_json::json!({
+            "found": true,
+            "stats": {
+                "name": stats.name,
+                "usageCount": stats.usage_count,
+                "successCount": stats.success_count,
+                "failureCount": stats.failure_count,
+                "successRate": stats.success_rate,
+                "avgDurationMs": stats.avg_duration_ms,
+                "oftenFollowedBy": stats.often_followed_by,
+                "oftenPrecededBy": stats.often_preceded_by,
+            },
+        }))
+    } else {
+        Json(serde_json::json!({
+            "found": false,
+            "toolName": tool_name,
+            "message": "No statistics available for this tool",
+        }))
+    }
+}
+
+/// Get suggested next tools based on current tool sequence
+async fn pattern_suggestions(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(current_tools): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let tools: Vec<String> = current_tools.split(',').map(|s| s.trim().to_string()).collect();
+    let learner = state.tool_pattern_learner.read();
+    let suggestions = learner.get_successful_next_tools(&tools);
+    
+    Json(serde_json::json!({
+        "currentTools": tools,
+        "suggestedNextTools": suggestions,
+    }))
+}
+
+/// Get tool usage tips based on learned patterns
+async fn pattern_tips(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let learner = state.tool_pattern_learner.read();
+    let tips = learner.generate_tips();
+    Json(serde_json::json!({
+        "tips": tips,
+        "tipCount": tips.len(),
+    }))
+}
+
+/// Get patterns that start with a specific tool
+async fn pattern_by_tool(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let learner = state.tool_pattern_learner.read();
+    let patterns = learner.get_patterns_starting_with(&tool_name);
+    Json(serde_json::json!({
+        "toolName": tool_name,
+        "patterns": patterns.iter().map(|p| serde_json::json!({
+            "id": p.id,
+            "tools": p.tools,
+            "usageCount": p.usage_count,
+            "successRate": p.success_rate,
+            "avgDurationMs": p.avg_duration_ms,
+        })).collect::<Vec<_>>(),
+        "patternCount": patterns.len(),
     }))
 }
 

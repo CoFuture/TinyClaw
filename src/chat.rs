@@ -437,7 +437,12 @@ impl ChatClient {
                                     let id = obj.get("id")?.as_str()?.to_string();
                                     let label = obj.get("label").and_then(|v| v.as_str()).map(String::from);
                                     let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                                    Some(crate::tui::SessionInfo { id, label, kind })
+                                    let message_count = obj.get("messageCount").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(0);
+                                    let duration_secs = obj.get("durationSecs").and_then(|v| v.as_i64()).unwrap_or(0);
+                                    let last_active = obj.get("lastActive").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let is_active = obj.get("isActive").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    let last_message_preview = obj.get("lastMessagePreview").and_then(|v| v.as_str()).map(String::from);
+                                    Some(crate::tui::SessionInfo { id, label, kind, message_count, duration_secs, last_active, is_active, last_message_preview })
                                 })
                                 .collect();
                             let _ = event_tx.send(crate::tui::TuiGatewayEvent::SessionsList(session_infos));

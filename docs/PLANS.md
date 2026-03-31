@@ -2296,17 +2296,44 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 - cargo clippy 0 警告（仅 pre-existing dead_code）
 - cargo test 413 tests（+12 新测试）
 
-**下一步**: Agent 能力持续增强、交互体验优化
+**下一步**: Agent 能力持续增强（v13.6.0）
 
 
 ---
 
-## 当前迭代规划 (v13.6.0)
+### v13.6.0 (已完成 ✅)
+
+**日期**: 2026-03-31
+
+**完成事项**:
+- **ContextHealthMonitor 自动压缩检测**：
+  - 新增 `prev_composition` 字段，追踪上次上下文组成
+  - 改造 `update_composition()`：在更新前保存当前组成为上一组成
+  - 改造 `record_turn()`：自动检测上下文压缩事件（历史 tokens 减少 >15% 且 >1000 tokens 即判定为压缩）
+  - 移除死代码：`record_truncation()`、`record_summarization()`、`update_avg_compression()`、`get_composition()`、`get_stats()`（这些方法从未在生产代码中被调用）
+  - 更新测试以适配新的自动检测机制
+- **代码清理**：
+  - 移除 `QualityIssue::display_name()`、`QualityStats` 结构（session_quality.rs）
+  - 移除 `SkillRecommenderStats`、`with_already_enabled()`、`get_stats()`（skill_recommender.rs）
+  - 移除 `ToolStrategy::all_patterns()`（tool_strategy.rs）
+  - 移除 `ToolPatternLearner::get_patterns_with_tool()`（tool_pattern_learner.rs）
+  - 为 TUI 死字段添加 `#[allow(dead_code)]`：`ContextAdviceDisplay`、`SessionInfo`、`sessions_mode`/`sessions_selected_index`/`sessions_data`、`SelfEvaluationDisplay::session_id`、`SkillRecommendationDisplay::id`
+  - 为 TUI 死方法添加 `#[allow(dead_code)]`：`list_skill_recommendations`、`enable_session_skill`、`get_safety_session_state_http`
+- cargo clippy **0 警告**（从 15 降至 0）
+- cargo test **419 tests 全部通过**（+6 新测试，替换旧测试）
+
+**下一步**: 交互体验优化、WebUI 进一步完善
+
+
+---
+
+## 当前迭代规划 (v13.7.0)
 
 ### 本轮目标
-**Agent 能力持续增强** - 继续提升 Agent 智能程度
+**交互体验优化** - 完善 WebUI 和 TUI 细节
 
 **计划完成**:
-- [ ] 调研下一轮功能方向
-- [ ] 代码质量检查
+- [ ] WebUI 状态可视化完善
+- [ ] TUI 交互优化
+- [ ] 继续代码质量清理
 

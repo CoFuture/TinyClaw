@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -243,6 +243,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let memory_manager = Arc::new(MemoryManager::new());
     info!("Memory manager initialized");
 
+    // Create tool pattern learner for learning from turn history
+    let tool_pattern_learner = Arc::new(RwLock::new(ToolPatternLearner::new()));
+    info!("Tool pattern learner initialized");
+
     // Create shutdown channel
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
@@ -275,6 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         suggestion_manager: suggestion_manager.clone(),
         memory_manager: memory_manager.clone(),
         turn_history: turn_history.clone(),
+        tool_pattern_learner: tool_pattern_learner.clone(),
         conversation_summary: conversation_summary_manager.clone(),
         self_evaluation_manager: self_evaluation_manager.clone(),
         session_quality_manager: session_quality_manager.clone(),
@@ -306,6 +311,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         self_evaluation_manager.clone(), // Self-evaluation manager
         session_quality_manager.clone(), // Session quality manager
         context_health_monitor.clone(), // Context health monitor
+        tool_pattern_learner.clone(), // Tool pattern learner for learning from turns
     );
     
     let ws_handle = tokio::spawn(async move {
