@@ -823,6 +823,67 @@
         .ctx-advisor-warning { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); border-radius: 8px; padding: 12px; margin-top: 10px; color: #ef4444; font-size: 13px; }
         .ctx-advisor-section-title { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 14px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
+        /* Performance Insights Panel */
+        .perf-insights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .perf-insight-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .perf-insight-card.high { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+        .perf-insight-card.medium { border-color: rgba(250,204,21,0.4); background: rgba(250,204,21,0.05); }
+        .perf-insight-card.low { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.05); }
+        .perf-insight-value { font-size: 22px; font-weight: bold; color: #00d9ff; }
+        .perf-insight-card.high .perf-insight-value { color: #ef4444; }
+        .perf-insight-card.medium .perf-insight-value { color: #facc15; }
+        .perf-insight-card.low .perf-insight-value { color: #22c55e; }
+        .perf-insight-label { font-size: 11px; color: #888; margin-top: 4px; }
+        .perf-insight-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+            border-left: 3px solid #00d9ff;
+        }
+        .perf-insight-item.high { border-left-color: #ef4444; }
+        .perf-insight-item.medium { border-left-color: #facc15; }
+        .perf-insight-item.low { border-left-color: #22c55e; }
+        .perf-insight-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .perf-insight-title { font-weight: bold; font-size: 13px; color: #e2e8f0; }
+        .perf-insight-severity { font-size: 10px; padding: 2px 6px; border-radius: 3px; }
+        .perf-insight-severity.high { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .perf-insight-severity.medium { background: rgba(250,204,21,0.2); color: #facc15; }
+        .perf-insight-severity.low { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .perf-insight-category { font-size: 11px; color: #00d9ff; margin-bottom: 4px; }
+        .perf-insight-description { font-size: 12px; color: #94a3b8; line-height: 1.4; margin-bottom: 8px; }
+        .perf-insight-suggestion { font-size: 12px; color: #22c55e; padding: 6px 10px; background: rgba(34,197,94,0.1); border-radius: 4px; }
+        .perf-quality-trend { display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 12px; }
+        .perf-quality-trend-label { font-size: 12px; color: #888; }
+        .perf-quality-trend-value { font-size: 14px; font-weight: bold; }
+        .perf-quality-trend-value.improving { color: #22c55e; }
+        .perf-quality-trend-value.declining { color: #ef4444; }
+        .perf-quality-trend-value.stable { color: #facc15; }
+        .perf-tool-efficiency { background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+        .perf-tool-efficiency-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .perf-tool-name { color: #00d9ff; font-family: monospace; font-size: 12px; }
+        .perf-tool-rate { font-size: 12px; font-weight: bold; }
+        .perf-tool-rate.high { color: #22c55e; }
+        .perf-tool-rate.medium { color: #facc15; }
+        .perf-tool-rate.low { color: #ef4444; }
+        .perf-tool-bar-bg { background: rgba(0,0,0,0.3); border-radius: 3px; height: 4px; }
+        .perf-tool-bar { height: 4px; border-radius: 3px; }
+        .perf-tool-bar.high { background: #22c55e; }
+        .perf-tool-bar.medium { background: #facc15; }
+        .perf-tool-bar.low { background: #ef4444; }
+        .perf-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+
         /* Modal */
         .modal-overlay {
             display: none;
@@ -2161,6 +2222,18 @@
             </div>
         </div>
 
+        <!-- Performance Insights Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📊 性能洞察 <span class="tool-count-badge" id="perfInsightsCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">分析 Agent 执行效率、质量趋势、工具使用模式，生成可操作的改进建议</p>
+            <div style="margin-bottom: 15px;">
+                <button class="btn" onclick="loadPerformanceInsights()">🔄 刷新</button>
+            </div>
+            <div id="perfInsightsContent">
+                <div class="perf-no-data">加载中...</div>
+            </div>
+        </div>
+
         <!-- Agent Tools Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>🛠️ 可用工具 <span class="tool-count-badge" id="toolCount">-</span></h2>
@@ -2655,6 +2728,14 @@
                 } catch (e) {
                     // Context health API might not be available
                 }
+
+                // Fetch performance insights panel
+                try {
+                    loadPerformanceInsights();
+                } catch (e) {
+                    // Performance insights API might not be available
+                }
+
                 // Fetch tools list
                 try {
                     const toolsData = await fetchJSON(API_BASE + '/api/tools');
@@ -4522,6 +4603,119 @@
                     if (current) sel.value = current;
                 })
                 .catch(() => {});
+        }
+
+        // ============================================================
+        // Performance Insights Functions
+        // ============================================================
+
+        async function loadPerformanceInsights() {
+            const content = document.getElementById('perfInsightsContent');
+            try {
+                const res = await fetch(`${API_BASE}/api/performance/insights`);
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+
+                document.getElementById('perfInsightsCount').textContent = data.insightCount || 0;
+
+                if (!data.insights || data.insights.length === 0) {
+                    content.innerHTML = '<div class="perf-no-data">暂无性能洞察数据。开始与 Agent 对话以收集数据。</div>';
+                    return;
+                }
+
+                let html = '';
+
+                // Quality Trend
+                if (data.qualityTrend) {
+                    const trend = data.qualityTrend;
+                    const trendClass = trend.direction === 'improving' ? 'improving' : trend.direction === 'declining' ? 'declining' : 'stable';
+                    const trendIcon = trend.direction === 'improving' ? '↑' : trend.direction === 'declining' ? '↓' : '→';
+                    html += '<div class="perf-quality-trend">\
+                        <span class="perf-quality-trend-label">质量趋势:</span>\
+                        <span class="perf-quality-trend-value ' + trendClass + '">' + trendIcon + ' ' + trend.currentScore.toFixed(1) + '</span>\
+                        <span style="color: #666; font-size: 11px;">(前一期: ' + trend.previousScore.toFixed(1) + ')</span>\
+                    </div>';
+                }
+
+                // Stats Grid
+                html += '<div class="perf-insights-grid">';
+                if (data.turnsAnalyzed !== undefined) {
+                    html += '<div class="perf-insight-card low">\
+                        <div class="perf-insight-value">' + data.turnsAnalyzed + '</div>\
+                        <div class="perf-insight-label">分析 Turns</div>\
+                    </div>';
+                }
+                if (data.toolEfficiency) {
+                    const te = data.toolEfficiency;
+                    const rate = (te.overallSuccessRate * 100).toFixed(0);
+                    const severity = te.overallSuccessRate >= 0.8 ? 'low' : te.overallSuccessRate >= 0.5 ? 'medium' : 'high';
+                    html += '<div class="perf-insight-card ' + severity + '">\
+                        <div class="perf-insight-value">' + rate + '%</div>\
+                        <div class="perf-insight-label">工具成功率</div>\
+                    </div>';
+                }
+                if (data.toolEfficiency && data.toolEfficiency.avgToolsPerTurn !== undefined) {
+                    html += '<div class="perf-insight-card low">\
+                        <div class="perf-insight-value">' + data.toolEfficiency.avgToolsPerTurn.toFixed(1) + '</div>\
+                        <div class="perf-insight-label">平均工具数/Turn</div>\
+                    </div>';
+                }
+                html += '</div>';
+
+                // Tool Efficiency Section
+                if (data.toolEfficiency) {
+                    const te = data.toolEfficiency;
+                    html += '<div class="ctx-advisor-section-title">🔧 工具效率</div>';
+
+                    if (te.mostEfficientTool) {
+                        const rate = (te.mostEfficientTool.successRate * 100).toFixed(0);
+                        const severity = rate >= 80 ? 'low' : rate >= 50 ? 'medium' : 'high';
+                        html += '<div class="perf-tool-efficiency">\
+                            <div class="perf-tool-efficiency-header">\
+                                <span class="perf-tool-name">最高效: ' + escapeHtml(te.mostEfficientTool.toolName) + '</span>\
+                                <span class="perf-tool-rate ' + severity + '">' + rate + '%</span>\
+                            </div>\
+                            <div class="perf-tool-bar-bg"><div class="perf-tool-bar ' + severity + '" style="width: ' + rate + '%;"></div></div>\
+                        </div>';
+                    }
+
+                    if (te.leastEfficientTool) {
+                        const rate = (te.leastEfficientTool.successRate * 100).toFixed(0);
+                        const severity = rate >= 80 ? 'low' : rate >= 50 ? 'medium' : 'high';
+                        html += '<div class="perf-tool-efficiency">\
+                            <div class="perf-tool-efficiency-header">\
+                                <span class="perf-tool-name">最低效: ' + escapeHtml(te.leastEfficientTool.toolName) + '</span>\
+                                <span class="perf-tool-rate ' + severity + '">' + rate + '%</span>\
+                            </div>\
+                            <div class="perf-tool-bar-bg"><div class="perf-tool-bar ' + severity + '" style="width: ' + rate + '%;"></div></div>\
+                        </div>';
+                    }
+                }
+
+                // Insights Section
+                if (data.insights && data.insights.length > 0) {
+                    html += '<div class="ctx-advisor-section-title">💡 改进建议</div>';
+                    data.insights.forEach(insight => {
+                        const severity = insight.severity || 'medium';
+                        html += '<div class="perf-insight-item ' + severity + '">\
+                            <div class="perf-insight-header">\
+                                <span class="perf-insight-title">' + escapeHtml(insight.title) + '</span>\
+                                <span class="perf-insight-severity ' + severity + '">' + escapeHtml(insight.severity).toUpperCase() + '</span>\
+                            </div>\
+                            <div class="perf-insight-category">' + escapeHtml(insight.category) + '</div>\
+                            <div class="perf-insight-description">' + escapeHtml(insight.description) + '</div>';
+                        if (insight.suggestions && insight.suggestions.length > 0) {
+                            html += '<div class="perf-insight-suggestion">💡 ' + escapeHtml(insight.suggestions[0]) + '</div>';
+                        }
+                        html += '</div>';
+                    });
+                }
+
+                content.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load performance insights:', e);
+                content.innerHTML = '<div class="perf-no-data">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
         }
 
         // ============================================================
@@ -6416,6 +6610,10 @@
                     renderSkillRecommendations(currentSkillRecommendations);
                     document.getElementById('recsCount').textContent = currentSkillRecommendations.length;
                 }
+            } else if (eventType === 'agent.performance_insights' && data.session_id) {
+                // Performance insights event - show toast and refresh panel
+                const insightCount = data.insights ? data.insights.length : 0;
+                showToast('📊 性能洞察: ' + insightCount + ' 条建议', 'info');
             }
         }
         
@@ -6852,7 +7050,8 @@
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
-                    'context.summarized', 'context.health', 'session.quality', 'agent.self_evaluation', 'skill.recommended'
+                    'context.summarized', 'context.health', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
+                    'agent.performance_insights'
                 ];
                 
                 eventTypes.forEach(type => {
@@ -7005,7 +7204,9 @@
                 'status': '状态',
                 'heartbeat': '心跳',
                 'system': '系统',
-                'skill.recommended': '技能推荐'
+                'skill.recommended': '技能推荐',
+                'agent.performance_insights': '性能洞察',
+                'agent.self_evaluation': '自我评估'
             };
             return names[type] || type;
         }

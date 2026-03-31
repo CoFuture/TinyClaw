@@ -2324,16 +2324,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: 交互体验优化、WebUI 进一步完善
 
+---
+
+### v13.7.0 (已完成 ✅)
+
+**日期**: 2026-04-01
+
+**完成事项**:
+- **WebUI Performance Insights Panel - 性能洞察面板**：
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 🧠 性能洞察面板，显示 Agent 执行效率、质量趋势、工具使用模式
+    - 质量趋势显示（↑ improving / ↓ declining / → stable）
+    - 统计卡片：分析 Turns、工具成功率、平均工具数/Turn
+    - 工具效率区域：最高效/最低效工具及其成功率条形图
+    - 改进建议列表：按严重程度显示（🔴 high / 🟡 medium / 🟢 low）
+  - **CSS 样式增强**：
+    - `.perf-insights-grid` - 统计卡片网格布局
+    - `.perf-insight-card` / `.perf-insight-value` / `.perf-insight-label` - 统计卡片样式
+    - `.perf-insight-item` - 建议项样式（左边框颜色编码）
+    - `.perf-quality-trend` - 质量趋势显示样式
+    - `.perf-tool-efficiency` - 工具效率条形图样式
+  - **JavaScript 函数**：
+    - `loadPerformanceInsights()` - 从 `/api/performance/insights` 加载数据
+    - 渲染质量趋势、统计卡片、工具效率、改进建议
+  - **SSE 事件增强**：
+    - 添加 `agent.performance_insights` 到事件类型列表
+    - 添加实时 toast 通知显示洞察数量
+    - `formatEventType` 添加"性能洞察"映射
+  - **refreshData() 集成**：
+    - 自动随页面刷新加载性能洞察面板
+- cargo clippy **0 警告**
+- cargo test **419 tests 全部通过**
+
+**下一步**: 交互体验优化继续、WebUI/TUI 细节完善
+
 
 ---
 
-## 当前迭代规划 (v13.7.0)
+## 当前迭代规划 (v13.8.0)
 
 ### 本轮目标
-**交互体验优化** - 完善 WebUI 和 TUI 细节
+**交互体验优化** - 继续完善 WebUI 和 TUI
 
 **计划完成**:
-- [ ] WebUI 状态可视化完善
+- [ ] WebUI 状态可视化继续完善
 - [ ] TUI 交互优化
-- [ ] 继续代码质量清理
+- [ ] 代码质量清理
 
