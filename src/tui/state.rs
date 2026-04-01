@@ -225,6 +225,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View scheduled tasks",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":ts",
+        aliases: &["turns", "turnsummary"],
+        description: "View turn summaries",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",

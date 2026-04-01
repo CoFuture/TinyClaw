@@ -1670,3 +1670,109 @@ pub fn draw_scheduled_tasks_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
 
     f.render_widget(paragraph, area);
 }
+
+/// Draw the turn summaries panel
+pub fn draw_turn_summary_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📋 Turn Summaries ";
+
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(ref summaries) = state.turn_summary_data {
+        if summaries.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No turn summaries yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Turn summaries are generated after each agent turn."));
+        } else {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} summary(s)", summaries.len()), Style::default().fg(Color::Cyan)),
+                Span::raw(" total"),
+            ]));
+            lines.push(Line::from(""));
+
+            for summary in summaries.iter() {
+                // Turn ID and success status
+                let status_icon = if summary.success { "✅" } else { "❌" };
+                let status_color = if summary.success { Color::Green } else { Color::Red };
+
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(status_icon, Style::default().fg(status_color)),
+                    Span::raw(" "),
+                    Span::styled(format!("Turn {}", &summary.turn_id[..8.min(summary.turn_id.len())]), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    Span::raw(" - "),
+                    Span::styled(format!("{} tool(s)", summary.tool_count), Style::default().fg(Color::Cyan)),
+                    Span::raw(" in "),
+                    Span::styled(format!("{}ms", summary.total_duration_ms), Style::default().fg(Color::Yellow)),
+                ]));
+
+                // Session ID
+                lines.push(Line::from(vec![
+                    Span::styled("     Session: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(&summary.session_id[..16.min(summary.session_id.len())], Style::default().fg(Color::DarkGray)),
+                ]));
+
+                // Accomplishment
+                if !summary.accomplishment.is_empty() {
+                    let acc_preview = if summary.accomplishment.len() > 60 {
+                        format!("{}...", &summary.accomplishment[..60])
+                    } else {
+                        summary.accomplishment.clone()
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled("     ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("📝 ", Style::default().fg(Color::LightGreen)),
+                        Span::styled(acc_preview, Style::default().fg(Color::LightGreen)),
+                    ]));
+                }
+
+                // Affected resources
+                if !summary.affected_resources.is_empty() {
+                    let resources_preview = if summary.affected_resources.len() > 3 {
+                        let first = summary.affected_resources[..3].join(", ");
+                        format!("{}... (+{} more)", first, summary.affected_resources.len() - 3)
+                    } else {
+                        summary.affected_resources.join(", ")
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled("     ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("📁 ", Style::default().fg(Color::LightBlue)),
+                        Span::styled(resources_preview, Style::default().fg(Color::LightBlue)),
+                    ]));
+                }
+
+                lines.push(Line::from(""));
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("No turn summaries collected yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Turn summaries are generated after each agent turn.", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}

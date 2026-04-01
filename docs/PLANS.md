@@ -2441,5 +2441,37 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
   - cargo clippy 2 警告（pre-existing: ScheduledTaskDisplay 未使用字段、turn_summary_mode 未使用字段）
   - cargo test **427 tests 全部通过**（+8 新测试）
 
+---
+
+### v13.12.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **TUI Turn Summary Viewing - 完成 Turn Summary 系统 TUI 集成** - 修复 v13.11.0 未完成的 TUI 命令和面板
+  - **问题诊断**：v13.11.0 添加了 `TurnSummary` SSE 事件收集（数据存储到 `turn_summary_data`），但缺少 `:ts` 命令和面板渲染
+  - **TUI 命令** (`state.rs`)：
+    - 新增 `:ts` / `:turns` / `:turnsummary` 命令到 `TUI_COMMANDS`
+  - **命令处理** (`app.rs`)：
+    - 添加 `:ts` / `:turns` / `:turnsummary` 命令处理
+    - 进入模式时退出其他查看模式
+    - 退出时清空 `turn_summary_mode` 状态
+  - **面板渲染** (`components.rs`)：
+    - 新增 `draw_turn_summary_panel()` 函数：
+      - 显示摘要数量和列表
+      - 每条摘要显示：状态图标（✅/❌）、Turn ID、工具数量、执行时长
+      - 显示 Session ID
+      - 显示 accomplishment 摘要
+      - 显示 affected_resources（文件路径）
+      - 空数据时显示友好提示
+  - **Esc 键处理** (`app.rs`)：
+    - Esc 退出 `turn_summary_mode` 并重置状态
+  - **渲染循环集成** (`app.rs`)：
+    - 在 `scheduled_tasks_mode` 之后添加 `turn_summary_mode` 面板渲染
+  - **代码质量**：
+    - 修复 `turn_summary_mode` 字段 dead_code 警告（原未使用）
+    - cargo clippy 1 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+    - cargo test **427 tests 全部通过**
+
 **下一步**: Agent 能力增强、交互体验优化继续
 

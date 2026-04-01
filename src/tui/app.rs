@@ -1226,6 +1226,24 @@ impl TuiApp {
                         return Ok(true);
                     }
                     
+                    // Handle :ts command - toggle turn summary viewing mode
+                    if input_lower.starts_with(":ts") || input_lower == ":turns" || input_lower == ":turnsummary" {
+                        self.state.turn_summary_mode = !self.state.turn_summary_mode;
+                        if self.state.turn_summary_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            self.state.advisor_mode = false;
+                            self.state.scheduled_tasks_mode = false;
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
                     if self.state.current_session_id.is_some() && !self.state.input_buffer.is_empty() {
                         let content = self.state.input_buffer.clone();
                         let client = self.gateway_client.clone();
@@ -1982,6 +2000,8 @@ impl TuiApp {
                     } else if self.state.scheduled_tasks_mode {
                         self.state.scheduled_tasks_mode = false;
                         self.state.scheduled_tasks_data = None;
+                    } else if self.state.turn_summary_mode {
+                        self.state.turn_summary_mode = false;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -2080,6 +2100,8 @@ impl TuiApp {
             crate::tui::components::draw_context_health_panel(f, msg_chunks[0], &self.state);
         } else if self.state.scheduled_tasks_mode {
             crate::tui::components::draw_scheduled_tasks_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.turn_summary_mode {
+            crate::tui::components::draw_turn_summary_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }
