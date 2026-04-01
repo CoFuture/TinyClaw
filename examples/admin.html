@@ -6617,6 +6617,33 @@
             }
         }
         
+        /// Handle SSE events to update scheduled tasks panel in real-time
+        function handleScheduledTaskEvent(eventType, data) {
+            // Scheduled task events - refresh the scheduled tasks panel
+            if (eventType === 'scheduled.fired') {
+                // Task was triggered - show notification
+                showToast('⏰ 定时任务已触发: ' + (data.schedule_name || '任务'), 'info');
+            } else if (eventType === 'scheduled.failed') {
+                // Task failed - show error notification
+                showToast('❌ 定时任务失败: ' + (data.error || '未知错误'), 'error');
+            } else if (eventType === 'scheduled.created') {
+                // New task created - show notification
+                showToast('✅ 新定时任务已创建: ' + (data.summary ? data.summary.name : '任务'), 'success');
+            } else if (eventType === 'scheduled.deleted') {
+                // Task deleted - show notification
+                showToast('🗑️ 定时任务已删除', 'info');
+            }
+            
+            // Refresh the scheduled tasks panel for any scheduled.* event
+            if (eventType && eventType.startsWith('scheduled.')) {
+                // Only refresh if the panel is visible (not collapsed)
+                const scheduledPanel = document.getElementById('scheduledPanel');
+                if (scheduledPanel && scheduledPanel.offsetParent !== null) {
+                    refreshScheduledTasks();
+                }
+            }
+        }
+        
         /// Activity indicator element (thinking/tool use)
         let activityIndicatorElement = null;
         
@@ -7051,7 +7078,8 @@
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
                     'context.summarized', 'context.health', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
-                    'agent.performance_insights'
+                    'agent.performance_insights',
+                    'scheduled.created', 'scheduled.fired', 'scheduled.failed', 'scheduled.updated', 'scheduled.deleted'
                 ];
                 
                 eventTypes.forEach(type => {
@@ -7066,6 +7094,9 @@
                             
                             // Also update chat panel in real-time for assistant.text events
                             handleSseChatEvent(type, data);
+                            
+                            // Update scheduled tasks panel in real-time
+                            handleScheduledTaskEvent(type, data);
                             
                             // Update session filter dropdown if we see a new session
                             if (data.session_id) {
@@ -7206,7 +7237,12 @@
                 'system': '系统',
                 'skill.recommended': '技能推荐',
                 'agent.performance_insights': '性能洞察',
-                'agent.self_evaluation': '自我评估'
+                'agent.self_evaluation': '自我评估',
+                'scheduled.created': '任务创建',
+                'scheduled.fired': '任务触发',
+                'scheduled.failed': '任务失败',
+                'scheduled.updated': '任务更新',
+                'scheduled.deleted': '任务删除'
             };
             return names[type] || type;
         }

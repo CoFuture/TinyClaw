@@ -2406,3 +2406,34 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: 交互体验优化继续、WebUI/TUI 细节完善
 
+---
+
+### v13.10.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **WebUI Real-time Scheduled Tasks Updates** - Web 界面定时任务实时更新
+  - **SSE 事件监听增强** (`examples/admin.html`)：
+    - 在 `eventTypes` 数组中添加 `scheduled.created`、`scheduled.fired`、`scheduled.failed`、`scheduled.updated`、`scheduled.deleted` 事件
+    - 在事件处理循环中调用 `handleScheduledTaskEvent()` 函数
+  - **事件处理函数** (`examples/admin.html`)：
+    - 新增 `handleScheduledTaskEvent(eventType, data)` 函数
+    - `scheduled.fired` 事件：显示 "⏰ 定时任务已触发: {schedule_name}" toast 通知
+    - `scheduled.failed` 事件：显示 "❌ 定时任务失败: {error}" error toast 通知
+    - `scheduled.created` 事件：显示 "✅ 新定时任务已创建" success toast 通知
+    - `scheduled.deleted` 事件：显示 "🗑️ 定时任务已删除" info toast 通知
+    - 所有 `scheduled.*` 事件自动刷新定时任务面板
+  - **事件类型名称映射增强** (`examples/admin.html`)：
+    - `formatEventType()` 函数新增 scheduled.* 事件的中文映射
+    - 事件日志中正确显示"任务创建/任务触发/任务失败/任务更新/任务删除"
+  - **实时反馈**：
+    - 定时任务触发或失败时自动显示 toast 通知
+    - 任务面板在收到任何 scheduled.* 事件时自动刷新
+
+- **代码质量**：
+  - cargo clippy 1 警告（`ScheduledTaskDisplay` 中未使用的字段 - pre-existing）
+  - cargo test **419 tests 全部通过**
+
+**下一步**: 交互体验优化继续、Agent 能力增强
+
