@@ -115,6 +115,8 @@ pub enum TuiGatewayEvent {
     },
     /// Context advisor data loaded (from :advisor command)
     AdvisorDataLoaded { data: ContextAdvisorDisplay },
+    /// Scheduled tasks loaded (from :tasks command)
+    ScheduledTasksLoaded { tasks: Vec<ScheduledTaskDisplay> },
 }
 
 /// Context advisor data for TUI display
@@ -188,6 +190,22 @@ pub struct SessionNoteInfo {
     pub content: String,
     pub pinned: bool,
     pub tags: Vec<String>,
+}
+
+/// Scheduled task display for TUI
+#[derive(Debug, Clone)]
+pub struct ScheduledTaskDisplay {
+    pub id: String,
+    pub name: String,
+    pub schedule_type: String,
+    pub schedule_display: String,
+    pub task_description: String,
+    pub session_id: String,
+    pub enabled: bool,
+    pub paused: bool,
+    pub next_run_at: Option<String>,
+    pub last_run_at: Option<String>,
+    pub run_count: u64,
 }
 
 /// Session info from gateway
@@ -1135,6 +1153,43 @@ impl TuiGatewayClient {
             .json()
             .await
             .map_err(|e| e.to_string())
+    }
+
+    /// Get scheduled tasks via HTTP API
+    pub async fn get_scheduled_tasks_http(&self, base_url: &str) -> Result<Vec<ScheduledTaskDisplay>, String> {
+        let url = format!("{}/api/scheduled", base_url);
+        let client = reqwest::Client::new();
+        let response = client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // API returns {"schedules": [...]}
+        let schedules = response.get("schedules")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "Invalid response format".to_string())?;
+
+        let tasks: Vec<ScheduledTaskDisplay> = schedules.iter().filter_map(|item| {
+            let schedule_type = item.get("schedule_type")?.as_str()?.to_string();
+            Some(ScheduledTaskDisplay {
+                id: item.get("id")?.as_str()?.to_string(),
+                name: item.get("name")?.as_str()?.to_string(),
+                schedule_type,
+                schedule_display: item.get("schedule_display")?.as_str()?.to_string(),
+                task_description: item.get("task_description")?.as_str()?.to_string(),
+                session_id: item.get("session_id")?.as_str()?.to_string(),
+                enabled: item.get("enabled")?.as_bool()?,
+                paused: item.get("paused")?.as_bool()?,
+                next_run_at: item.get("next_run_at").and_then(|v| v.as_str()).map(String::from),
+                last_run_at: item.get("last_run_at").and_then(|v| v.as_str()).map(String::from),
+                run_count: item.get("run_count")?.as_u64()?,
+            })
+        }).collect();
+
+        Ok(tasks)
     }
 
     /// Send a gateway event through the event channel (used by TUI to deliver HTTP fetch results)

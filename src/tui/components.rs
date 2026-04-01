@@ -1568,3 +1568,105 @@ pub fn draw_context_health_panel(f: &mut Frame<'_>, area: Rect, state: &AppState
 
     f.render_widget(paragraph, area);
 }
+
+/// Draw the scheduled tasks panel
+pub fn draw_scheduled_tasks_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " ⏰ Scheduled Tasks ";
+    
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    if let Some(ref tasks) = state.scheduled_tasks_data {
+        if tasks.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No scheduled tasks yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Use the admin panel to create scheduled tasks."));
+        } else {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} task(s)", tasks.len()), Style::default().fg(Color::Cyan)),
+                Span::raw(" total"),
+            ]));
+            lines.push(Line::from(""));
+            
+            for task in tasks.iter() {
+                // Task name and status
+                let status_icon = if task.paused { "⏸" } else if task.enabled { "✅" } else { "❌" };
+                let status_color = if task.paused { Color::Yellow } else if task.enabled { Color::Green } else { Color::Red };
+                
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(status_icon, Style::default().fg(status_color)),
+                    Span::raw(" "),
+                    Span::styled(&task.name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                ]));
+                
+                // Schedule info
+                lines.push(Line::from(vec![
+                    Span::styled("     Schedule: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(&task.schedule_display, Style::default().fg(Color::Cyan)),
+                ]));
+                
+                // Task description
+                if !task.task_description.is_empty() {
+                    let desc_preview = if task.task_description.len() > 50 {
+                        format!("{}...", &task.task_description[..50])
+                    } else {
+                        task.task_description.clone()
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled("     Task: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(desc_preview, Style::default().fg(Color::LightGreen)),
+                    ]));
+                }
+                
+                // Next run
+                if let Some(ref next) = task.next_run_at {
+                    lines.push(Line::from(vec![
+                        Span::styled("     Next: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(next, Style::default().fg(Color::Yellow)),
+                    ]));
+                }
+                
+                // Stats
+                lines.push(Line::from(vec![
+                    Span::styled("     Runs: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!("{}", task.run_count), Style::default().fg(Color::White)),
+                ]));
+                if let Some(ref last) = task.last_run_at {
+                    lines.push(Line::from(vec![
+                        Span::styled("     Last: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(last, Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+                
+                lines.push(Line::from(""));
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Loading scheduled tasks...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}

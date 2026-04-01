@@ -655,6 +655,10 @@ impl TuiApp {
                 info!("Context advisor data loaded: {} advice items", data.advice.len());
                 self.state.advisor_data = Some(data);
             }
+            TuiGatewayEvent::ScheduledTasksLoaded { tasks } => {
+                debug!("Scheduled tasks loaded: {} tasks", tasks.len());
+                self.state.scheduled_tasks_data = Some(tasks);
+            }
         }
     }
 
@@ -1170,6 +1174,31 @@ impl TuiApp {
                                             }
                                         }
                                     }
+                                }
+                            });
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :sched command - toggle scheduled tasks viewing mode
+                    if input_lower.starts_with(":sched") || input_lower == ":scheduled" {
+                        self.state.scheduled_tasks_mode = !self.state.scheduled_tasks_mode;
+                        if self.state.scheduled_tasks_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            self.state.advisor_mode = false;
+                            // Fetch scheduled tasks
+                            let client = self.gateway_client.clone();
+                            tokio::spawn(async move {
+                                let client = client.read().await;
+                                if let Ok(tasks) = client.get_scheduled_tasks_http("http://127.0.0.1:8080").await {
+                                    client.send_event(crate::tui::gateway_client::TuiGatewayEvent::ScheduledTasksLoaded { tasks });
                                 }
                             });
                         }
@@ -1930,6 +1959,9 @@ impl TuiApp {
                     } else if self.state.context_health_mode {
                         self.state.context_health_mode = false;
                         self.state.context_health_data = None;
+                    } else if self.state.scheduled_tasks_mode {
+                        self.state.scheduled_tasks_mode = false;
+                        self.state.scheduled_tasks_data = None;
                     } else if self.state.instructions_mode {
                         self.state.instructions_mode = false;
                         self.state.instructions_session_id = None;
@@ -2026,6 +2058,8 @@ impl TuiApp {
             crate::tui::components::draw_advisor_panel(f, msg_chunks[0], &self.state);
         } else if self.state.context_health_mode {
             crate::tui::components::draw_context_health_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.scheduled_tasks_mode {
+            crate::tui::components::draw_scheduled_tasks_panel(f, msg_chunks[0], &self.state);
         } else {
             crate::tui::components::draw_messages_panel(f, msg_chunks[0], &self.state);
         }

@@ -219,6 +219,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View context optimization advice",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":sched",
+        aliases: &["scheduled"],
+        description: "View scheduled tasks",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -379,6 +385,10 @@ pub struct AppState {
     pub advisor_mode: bool,
     /// Cached context advisor data
     pub advisor_data: Option<crate::tui::gateway_client::ContextAdvisorDisplay>,
+    /// Whether we're in scheduled tasks viewing mode
+    pub scheduled_tasks_mode: bool,
+    /// Cached scheduled tasks data
+    pub scheduled_tasks_data: Option<Vec<crate::tui::gateway_client::ScheduledTaskDisplay>>,
     /// Whether we're in sessions list viewing mode
     #[allow(dead_code)]
     pub sessions_mode: bool,
@@ -513,6 +523,8 @@ impl Default for AppState {
             context_utilization_pct: None,
             advisor_mode: false,
             advisor_data: None,
+            scheduled_tasks_mode: false,
+            scheduled_tasks_data: None,
             sessions_mode: false,
             sessions_selected_index: 0,
             sessions_data: Vec::new(),

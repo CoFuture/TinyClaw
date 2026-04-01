@@ -2384,13 +2384,25 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-## 当前迭代规划 (v13.9.0)
+### v13.9.0 (已完成 ✅)
 
-### 本轮目标
-**交互体验优化** - 继续完善 WebUI 和 TUI
+**日期**: 2026-04-01
 
-**计划完成**:
-- [ ] WebUI 状态可视化继续完善
-- [ ] TUI 交互优化
-- [ ] 代码质量清理
+**完成事项**:
+- **Bug Fix - ScheduledTasksLoaded Event Handler Missing** - 修复编译错误
+  - `app.rs` 中添加缺失的 `TuiGatewayEvent::ScheduledTasksLoaded` 事件处理器
+  - 事件处理器将定时任务数据存储到 `state.scheduled_tasks_data`
+
+- **TUI Scheduled Tasks Viewing Feature** - 完成未实现的定时任务查看功能
+  - 添加 `:sched` / `:scheduled` 命令到 TUI_COMMANDS
+  - 添加命令处理以通过 HTTP API 加载定时任务
+  - 添加 Esc 键处理以退出定时任务查看模式
+  - 在 `components.rs` 中添加 `draw_scheduled_tasks_panel()` 组件
+  - 在 TUI 渲染链中添加面板渲染
+
+- **代码质量**：
+  - cargo clippy 1 警告（`ScheduledTaskDisplay` 中未使用的字段 - 这些是 API 响应数据结构的一部分）
+  - cargo test **419 tests 全部通过**
+
+**下一步**: 交互体验优化继续、WebUI/TUI 细节完善
 
