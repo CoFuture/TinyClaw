@@ -2475,3 +2475,46 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 **下一步**: Agent 能力增强、交互体验优化继续
 
+---
+
+### v13.13.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **WebUI Turn Summary Panel - Turn 总结面板** - 完成 Turn Summary 系统的 WebUI 集成
+  - **新增 CSS 样式** (`examples/admin.html`)：
+    - `.turn-summary-grid` - 统计卡片网格布局
+    - `.turn-summary-card` / `.turn-summary-value` / `.turn-summary-label` - 统计卡片样式
+    - `.turn-summary-card.success` / `.turn-summary-card.failure` - 成功/失败状态颜色
+    - `.turn-summary-list` - 摘要列表容器
+    - `.turn-summary-item` / `.turn-summary-header` / `.turn-summary-meta` - 摘要项样式
+    - `.turn-summary-turn-id` / `.turn-summary-status` - Turn ID 和状态徽章样式
+    - `.turn-summary-accomplishment` / `.turn-summary-tools` - 成就和工具显示样式
+    - `.turn-summary-tool-item` - 工具项标签样式
+    - `.turn-summary-resources` / `.turn-summary-resource` - 资源显示样式
+    - `.turn-summary-no-data` - 无数据提示样式
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 📋 Turn 总结面板，显示 Agent 每次执行的简洁总结
+    - 统计数据卡片：总 Turns、成功/总数、工具调用总数、平均耗时
+    - 摘要列表：每条显示 Turn ID、状态、时长、工具数、Session ID
+    - 显示 accomplishment 摘要
+    - 显示工具调用列表（带成功/失败状态）
+    - 显示受影响的资源（文件路径）
+  - **JavaScript 函数** (`examples/admin.html`)：
+    - `turnSummaries` 数组存储最近 50 条总结
+    - `addTurnSummary(summary)` - 添加新总结到列表
+    - `clearTurnSummaries()` - 清空所有总结
+    - `renderTurnSummaries()` - 渲染总结面板
+  - **SSE 事件集成** (`examples/admin.html`)：
+    - 添加 `turn.summary` 到 SSE 事件类型列表
+    - 在 `handleSseChatEvent` 中处理 `turn.summary` 事件
+    - 实时将新总结添加到面板显示
+  - **formatEventType 映射**：
+    - 添加 `turn.summary` → "Turn总结" 映射
+- **代码质量**：
+  - cargo clippy 1 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+  - cargo test **427 tests 全部通过**
+
+**下一步**: Agent 能力增强、交互体验优化继续
+

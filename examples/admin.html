@@ -884,6 +884,102 @@
         .perf-tool-bar.low { background: #ef4444; }
         .perf-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
 
+        /* Turn Summary Panel */
+        .turn-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .turn-summary-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .turn-summary-card.success { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); }
+        .turn-summary-card.failure { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+        .turn-summary-value { font-size: 22px; font-weight: bold; color: #00d9ff; }
+        .turn-summary-card.success .turn-summary-value { color: #22c55e; }
+        .turn-summary-card.failure .turn-summary-value { color: #ef4444; }
+        .turn-summary-label { font-size: 11px; color: #888; margin-top: 4px; }
+        .turn-summary-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 16px;
+        }
+        .turn-summary-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #00d9ff;
+        }
+        .turn-summary-item.success { border-left-color: #22c55e; }
+        .turn-summary-item.failure { border-left-color: #ef4444; }
+        .turn-summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .turn-summary-turn-id {
+            font-family: monospace;
+            font-size: 12px;
+            color: #00d9ff;
+            font-weight: bold;
+        }
+        .turn-summary-status {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        .turn-summary-status.success { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .turn-summary-status.failure { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .turn-summary-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        .turn-summary-accomplishment {
+            font-size: 13px;
+            color: #e2e8f0;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        .turn-summary-tools {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .turn-summary-tool-item {
+            display: inline-block;
+            background: rgba(0,217,255,0.1);
+            border: 1px solid rgba(0,217,255,0.2);
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: 2px;
+            font-family: monospace;
+        }
+        .turn-summary-tool-item.failed {
+            background: rgba(239,68,68,0.1);
+            border-color: rgba(239,68,68,0.2);
+        }
+        .turn-summary-resources {
+            font-size: 11px;
+            color: #888;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .turn-summary-resource {
+            font-family: monospace;
+            color: #00d9ff;
+        }
+        .turn-summary-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+
         /* Modal */
         .modal-overlay {
             display: none;
@@ -2231,6 +2327,19 @@
             </div>
             <div id="perfInsightsContent">
                 <div class="perf-no-data">加载中...</div>
+            </div>
+        </div>
+
+        <!-- Turn Summary Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📋 Turn 总结 <span class="tool-count-badge" id="turnSummaryCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">查看 Agent 每次执行的简洁总结，了解工具调用情况和完成状态</p>
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-secondary" onclick="clearTurnSummaries()">🗑️ 清空</button>
+                <button class="btn" onclick="renderTurnSummaries()">🔄 刷新</button>
+            </div>
+            <div id="turnSummaryContent">
+                <div class="turn-summary-no-data">暂无 Turn 总结数据。开始与 Agent 对话以收集数据。</div>
             </div>
         </div>
 
@@ -4719,6 +4828,121 @@
         }
 
         // ============================================================
+        // Turn Summary Functions
+        // ============================================================
+
+        // Store turn summaries (limit to last 50)
+        let turnSummaries = [];
+
+        function addTurnSummary(summary) {
+            turnSummaries.unshift(summary);
+            if (turnSummaries.length > 50) {
+                turnSummaries = turnSummaries.slice(0, 50);
+            }
+            renderTurnSummaries();
+            // Update badge count
+            document.getElementById('turnSummaryCount').textContent = turnSummaries.length;
+        }
+
+        function clearTurnSummaries() {
+            turnSummaries = [];
+            renderTurnSummaries();
+            document.getElementById('turnSummaryCount').textContent = '0';
+        }
+
+        function renderTurnSummaries() {
+            const content = document.getElementById('turnSummaryContent');
+            document.getElementById('turnSummaryCount').textContent = turnSummaries.length;
+
+            if (turnSummaries.length === 0) {
+                content.innerHTML = '<div class="turn-summary-no-data">暂无 Turn 总结数据。开始与 Agent 对话以收集数据。</div>';
+                return;
+            }
+
+            let html = '';
+
+            // Stats Grid
+            const totalTurns = turnSummaries.length;
+            const successCount = turnSummaries.filter(s => s.success).length;
+            const totalTools = turnSummaries.reduce((sum, s) => sum + (s.tool_count || 0), 0);
+            const avgDuration = turnSummaries.length > 0
+                ? Math.round(turnSummaries.reduce((sum, s) => sum + (s.total_duration_ms || 0), 0) / turnSummaries.length)
+                : 0;
+
+            html += '<div class="turn-summary-grid">';
+            html += '<div class="turn-summary-card">\
+                <div class="turn-summary-value">' + totalTurns + '</div>\
+                <div class="turn-summary-label">总 Turns</div>\
+            </div>';
+            html += '<div class="turn-summary-card ' + (successCount === totalTurns ? 'success' : 'failure') + '">\
+                <div class="turn-summary-value">' + successCount + '/' + totalTurns + '</div>\
+                <div class="turn-summary-label">成功/总数</div>\
+            </div>';
+            html += '<div class="turn-summary-card">\
+                <div class="turn-summary-value">' + totalTools + '</div>\
+                <div class="turn-summary-label">工具调用总数</div>\
+            </div>';
+            html += '<div class="turn-summary-card">\
+                <div class="turn-summary-value">' + avgDuration + 'ms</div>\
+                <div class="turn-summary-label">平均耗时</div>\
+            </div>';
+            html += '</div>';
+
+            // List of summaries
+            html += '<div class="turn-summary-list">';
+            turnSummaries.forEach(summary => {
+                const success = summary.success;
+                const statusClass = success ? 'success' : 'failure';
+                const durationStr = summary.total_duration_ms ? (summary.total_duration_ms < 1000
+                    ? summary.total_duration_ms + 'ms'
+                    : (summary.total_duration_ms / 1000).toFixed(1) + 's')
+                    : '-';
+
+                html += '<div class="turn-summary-item ' + statusClass + '">';
+                html += '<div class="turn-summary-header">';
+                html += '<span class="turn-summary-turn-id">' + escapeHtml(summary.turn_id || summary.turnId || 'N/A') + '</span>';
+                html += '<span class="turn-summary-status ' + statusClass + '">' + (success ? '✓ 成功' : '✗ 失败') + '</span>';
+                html += '</div>';
+                html += '<div class="turn-summary-meta">';
+                html += '<span>🕐 ' + durationStr + '</span>';
+                html += '<span>🔧 ' + (summary.tool_count || 0) + ' 工具</span>';
+                if (summary.session_id || summary.sessionId) {
+                    html += '<span>💬 ' + escapeHtml((summary.session_id || summary.sessionId).substring(0, 8)) + '...</span>';
+                }
+                html += '</div>';
+                if (summary.accomplishment) {
+                    html += '<div class="turn-summary-accomplishment">' + escapeHtml(summary.accomplishment) + '</div>';
+                }
+                if (summary.tool_summaries && summary.tool_summaries.length > 0) {
+                    html += '<div class="turn-summary-tools">';
+                    summary.tool_summaries.forEach(tool => {
+                        const toolFailed = !tool.success;
+                        html += '<span class="turn-summary-tool-item' + (toolFailed ? ' failed' : '') + '">';
+                        html += escapeHtml(tool.tool_name || tool.toolName || 'unknown');
+                        if (tool.summary) {
+                            html += ': ' + escapeHtml(tool.summary.length > 20 ? tool.summary.substring(0, 20) + '...' : tool.summary);
+                        }
+                        html += '</span>';
+                    });
+                    html += '</div>';
+                }
+                if (summary.affected_resources && summary.affected_resources.length > 0) {
+                    html += '<div class="turn-summary-resources">📁 资源: ';
+                    const resources = summary.affected_resources.slice(0, 3);
+                    html += resources.map(r => '<span class="turn-summary-resource">' + escapeHtml(r.length > 30 ? r.substring(0, 30) + '...' : r) + '</span>').join(', ');
+                    if (summary.affected_resources.length > 3) {
+                        html += ' +' + (summary.affected_resources.length - 3) + ' 更多';
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+
+            content.innerHTML = html;
+        }
+
+        // ============================================================
         // Conversation Summary Functions
         // ============================================================
         
@@ -6614,6 +6838,9 @@
                 // Performance insights event - show toast and refresh panel
                 const insightCount = data.insights ? data.insights.length : 0;
                 showToast('📊 性能洞察: ' + insightCount + ' 条建议', 'info');
+            } else if (eventType === 'turn.summary' && data.session_id) {
+                // Turn summary event - add to the turn summaries list and update panel
+                addTurnSummary(data);
             }
         }
         
@@ -7074,7 +7301,7 @@
                 
                 // Handle all event types
                 const eventTypes = [
-                    'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled',
+                    'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled', 'turn.summary',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
                     'context.summarized', 'context.health', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
@@ -7223,6 +7450,7 @@
                 'turn.thinking': '思考中',
                 'turn.ended': 'Turn结束',
                 'turn.usage': 'Token使用',
+                'turn.summary': 'Turn总结',
                 'context.summarized': '上下文摘要',
                 'context.health': '上下文健康',
                 'assistant.text': 'AI回复',
