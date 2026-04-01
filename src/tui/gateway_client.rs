@@ -91,6 +91,8 @@ pub enum TuiGatewayEvent {
     SessionQuality { session_id: String, quality_score: f64, turn_count: u32, task_completion_rate: f64, tool_success_rate: f64, rating: u8, issue_count: usize, suggestions: Vec<String> },
     /// Self-evaluation received
     SelfEvaluation { session_id: String, turn_id: String, overall_score: f64, dimension_scores: Vec<(String, f64)>, strengths: Vec<String>, weaknesses: Vec<String> },
+    /// Turn summary received - concise summary of what was accomplished
+    TurnSummary { session_id: String, turn_id: String, tool_count: usize, success: bool, total_duration_ms: u64, accomplishment: String, affected_resources: Vec<String> },
     /// Skill recommendations received
     SkillRecommendations { session_id: String, recommendations: Vec<SkillRecommendationDisplay> },
     /// Execution safety warning - approaching safety limit
@@ -556,6 +558,29 @@ impl TuiGatewayClient {
                                 input_tokens,
                                 output_tokens,
                                 total_tokens,
+                            });
+                        }
+                    }
+                    "turn.summary" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let turn_id = params.get("turn_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let tool_count = params.get("tool_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                            let success = params.get("success").and_then(|v| v.as_bool()).unwrap_or(true);
+                            let total_duration_ms = params.get("total_duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let accomplishment = params.get("accomplishment").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let affected_resources = params.get("affected_resources")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::TurnSummary {
+                                session_id,
+                                turn_id,
+                                tool_count,
+                                success,
+                                total_duration_ms,
+                                accomplishment,
+                                affected_resources,
                             });
                         }
                     }

@@ -351,6 +351,10 @@ pub struct AppState {
     pub eval_mode: bool,
     /// Cached self-evaluation data for display
     pub eval_data: Option<Vec<SelfEvaluationDisplay>>,
+    /// Whether we're in turn summary viewing mode
+    pub turn_summary_mode: bool,
+    /// Cached turn summary data (most recent summaries)
+    pub turn_summary_data: Option<Vec<TurnSummaryDisplay>>,
     /// Whether we're in skill recommendations viewing mode
     pub recommendations_mode: bool,
     /// Session ID for current recommendations view
@@ -453,6 +457,19 @@ pub struct SkillRecommendationDisplay {
     pub already_enabled: bool,
 }
 
+/// Turn summary data for TUI display
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct TurnSummaryDisplay {
+    pub turn_id: String,
+    pub session_id: String,
+    pub tool_count: usize,
+    pub success: bool,
+    pub total_duration_ms: u64,
+    pub accomplishment: String,
+    pub affected_resources: Vec<String>,
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self {
@@ -506,6 +523,8 @@ impl Default for AppState {
             quality_data: None,
             eval_mode: false,
             eval_data: None,
+            turn_summary_mode: false,
+            turn_summary_data: None,
             recommendations_mode: false,
             recommendations_session_id: None,
             recommendations_data: None,

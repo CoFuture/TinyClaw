@@ -7,6 +7,7 @@ use crate::agent::turn_log::{TurnLogEntry, TurnLogSummary};
 use crate::agent::task::TaskSummary;
 use crate::agent::skill_recommender::SkillRecommendation;
 use crate::agent::suggestion::Suggestion;
+use crate::agent::turn_summary::ToolExecutionSummary;
 
 /// Tool call info for action plan preview
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +65,19 @@ pub enum Event {
         summary_tokens: usize,
         /// Compression ratio (summary_tokens / original_tokens)
         compression_ratio: f32,
+    },
+    
+    /// Turn summary - concise summary of what was accomplished in the turn
+    #[serde(rename = "turn.summary")]
+    TurnSummary {
+        session_id: String,
+        turn_id: String,
+        tool_count: usize,
+        tool_summaries: Vec<ToolExecutionSummary>,
+        success: bool,
+        total_duration_ms: u64,
+        accomplishment: String,
+        affected_resources: Vec<String>,
     },
     
     /// Turn was cancelled

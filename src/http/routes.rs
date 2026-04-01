@@ -710,6 +710,8 @@ async fn sse_events(
                                     // Context health - apply session filter
                                     Event::ContextHealth { session_id, .. } => session_id == filter,
                                     Event::UrgentContextAdvice { session_id, .. } => session_id == filter,
+                                    // Turn summary - apply session filter
+                                    Event::TurnSummary { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -763,6 +765,8 @@ async fn sse_events(
                                     // Context health events
                                     Event::ContextHealth { .. } => "context.health",
                                     Event::UrgentContextAdvice { .. } => "context.urgent_advice",
+                                    // Turn summary events
+                                    Event::TurnSummary { .. } => "turn.summary",
                                 };
                                 
                                 let event = SseEvent::default()

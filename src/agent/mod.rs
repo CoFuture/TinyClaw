@@ -33,6 +33,7 @@ pub mod tool_strategy;
 pub mod tool_pattern_learner;
 pub mod turn_history;
 pub mod turn_log;
+pub mod turn_summary;
 
 pub use client::Agent;
 #[allow(unused_imports)]
@@ -67,6 +68,8 @@ pub use task_manager::TaskManager;
 pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, ToolExecution};
 #[allow(unused_imports)]
 pub use turn_log::{TurnLog, TurnLogEntry, TurnLogSummary};
+#[allow(unused_imports)]
+pub use turn_summary::{AgentTurnSummary, ToolExecutionSummary};
 #[allow(unused_imports)]
 pub use conversation_summary::{ConversationSummary, ConversationSummaryManager};
 #[allow(unused_imports)]

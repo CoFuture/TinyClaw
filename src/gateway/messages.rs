@@ -915,6 +915,31 @@ async fn handle_agent_turn(
     if let Some(mut learner) = ctx.tool_pattern_learner.try_write() {
         learner.update_with_turn(&turn_record);
     }
+    
+    // Generate and emit turn summary
+    let tool_executions_summary: Vec<(String, String, bool, u64)> = turn_record.tools
+        .iter()
+        .map(|t| (t.name.clone(), t.output_preview.clone(), t.success, t.duration_ms))
+        .collect();
+    
+    let turn_summary = crate::agent::turn_summary::generate_turn_summary(
+        session_key,
+        &turn_record.id,
+        &tool_executions_summary,
+        turn_success,
+        turn_duration,
+    );
+    
+    ctx.event_emitter.emit(Event::TurnSummary {
+        session_id: session_key.to_string(),
+        turn_id: turn_record.id.clone(),
+        tool_count: turn_summary.tool_count,
+        tool_summaries: turn_summary.tool_summaries,
+        success: turn_summary.success,
+        total_duration_ms: turn_summary.total_duration_ms,
+        accomplishment: turn_summary.accomplishment,
+        affected_resources: turn_summary.affected_resources,
+    });
 
     // Analyze session quality and emit event
     let turns = ctx.turn_history.get_turn_records(session_key);

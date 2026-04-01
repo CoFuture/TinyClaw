@@ -2408,32 +2408,38 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
-### v13.10.0 (已完成 ✅)
+### v13.11.0 (已完成 ✅)
 
 **日期**: 2026-04-02
 
 **完成事项**:
-- **WebUI Real-time Scheduled Tasks Updates** - Web 界面定时任务实时更新
-  - **SSE 事件监听增强** (`examples/admin.html`)：
-    - 在 `eventTypes` 数组中添加 `scheduled.created`、`scheduled.fired`、`scheduled.failed`、`scheduled.updated`、`scheduled.deleted` 事件
-    - 在事件处理循环中调用 `handleScheduledTaskEvent()` 函数
-  - **事件处理函数** (`examples/admin.html`)：
-    - 新增 `handleScheduledTaskEvent(eventType, data)` 函数
-    - `scheduled.fired` 事件：显示 "⏰ 定时任务已触发: {schedule_name}" toast 通知
-    - `scheduled.failed` 事件：显示 "❌ 定时任务失败: {error}" error toast 通知
-    - `scheduled.created` 事件：显示 "✅ 新定时任务已创建" success toast 通知
-    - `scheduled.deleted` 事件：显示 "🗑️ 定时任务已删除" info toast 通知
-    - 所有 `scheduled.*` 事件自动刷新定时任务面板
-  - **事件类型名称映射增强** (`examples/admin.html`)：
-    - `formatEventType()` 函数新增 scheduled.* 事件的中文映射
-    - 事件日志中正确显示"任务创建/任务触发/任务失败/任务更新/任务删除"
-  - **实时反馈**：
-    - 定时任务触发或失败时自动显示 toast 通知
-    - 任务面板在收到任何 scheduled.* 事件时自动刷新
+- **Turn Summary System - Turn 总结系统** - 为每次 Agent Turn 生成简洁的执行摘要
+  - **新增 `agent/turn_summary.rs` 模块**：
+    - `ToolExecutionSummary` 结构：单个工具执行的摘要（tool_name、summary、success、duration_ms）
+    - `AgentTurnSummary` 结构：整个 Turn 的摘要（session_id、turn_id、tool_count、tool_summaries、success、total_duration_ms、accomplishment、affected_resources）
+    - `generate_turn_summary()` 函数：从 Turn Record 数据生成摘要
+    - `ToolExecutionSummary::from_tool_result()` - 从工具名和结果生成摘要
+    - 智能摘要生成：基于工具类型生成人类可读的摘要（read_file 显示行数、exec 显示首行输出等）
+    - 资源提取：自动识别受影响的文件路径和资源
+  - **Gateway 事件集成** (`gateway/events.rs`)：
+    - 新增 `TurnSummary` 事件类型（session_id、turn_id、tool_count、tool_summaries、success、total_duration_ms、accomplishment、affected_resources）
+  - **Gateway 消息处理集成** (`gateway/messages.rs`)：
+    - 在 `handle_agent_turn` 中每轮结束后生成并发射 `TurnSummary` 事件
+    - 从 `turn_record.tools` 提取工具执行数据
+  - **HTTP SSE 事件过滤** (`http/routes.rs`)：
+    - 添加 `turn.summary` 事件到事件过滤和映射
+  - **TUI 支持** (`tui/`)：
+    - `TuiGatewayEvent::TurnSummary` 事件变体
+    - `gateway_client.rs` 添加 `turn.summary` SSE 事件解析
+    - `AppState` 添加 `turn_summary_mode` 和 `turn_summary_data` 字段
+    - `state.rs` 添加 `TurnSummaryDisplay` 结构
+    - `app.rs` 添加 `TurnSummary` 事件处理
+  - **测试覆盖**：
+    - 9 个新测试覆盖工具执行摘要生成、Turn 摘要生成、资源提取、显示字符串生成
 
 - **代码质量**：
-  - cargo clippy 1 警告（`ScheduledTaskDisplay` 中未使用的字段 - pre-existing）
-  - cargo test **419 tests 全部通过**
+  - cargo clippy 2 警告（pre-existing: ScheduledTaskDisplay 未使用字段、turn_summary_mode 未使用字段）
+  - cargo test **427 tests 全部通过**（+8 新测试）
 
-**下一步**: 交互体验优化继续、Agent 能力增强
+**下一步**: Agent 能力增强、交互体验优化继续
 

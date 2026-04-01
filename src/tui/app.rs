@@ -591,6 +591,26 @@ impl TuiApp {
                     }
                 }
             }
+            TuiGatewayEvent::TurnSummary { session_id, turn_id, tool_count, success, total_duration_ms, accomplishment, affected_resources } => {
+                debug!("Turn summary received for session {}: {} tools in {}ms", session_id, tool_count, total_duration_ms);
+                let summary = crate::tui::state::TurnSummaryDisplay {
+                    turn_id,
+                    session_id,
+                    tool_count,
+                    success,
+                    total_duration_ms,
+                    accomplishment,
+                    affected_resources,
+                };
+                // Prepend to turn_summary_data (most recent first)
+                self.state.turn_summary_data.get_or_insert_with(Vec::new).insert(0, summary);
+                // Keep only last 20 turn summaries
+                if let Some(ref mut data) = self.state.turn_summary_data {
+                    if data.len() > 20 {
+                        data.truncate(20);
+                    }
+                }
+            }
             TuiGatewayEvent::SkillRecommendations { session_id, recommendations } => {
                 debug!("Skill recommendations received for session {}: {} recommendations", session_id, recommendations.len());
                 // Convert from gateway_client type to state type
