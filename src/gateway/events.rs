@@ -41,6 +41,7 @@ pub enum Event {
     #[serde(rename = "turn.ended")]
     TurnEnded {
         session_id: String,
+        turn_id: String,
         response: String,
     },
     
@@ -90,6 +91,7 @@ pub enum Event {
     #[serde(rename = "assistant.text")]
     AssistantText {
         session_id: String,
+        turn_id: String,
         text: String,
     },
     

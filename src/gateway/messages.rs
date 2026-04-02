@@ -867,6 +867,9 @@ async fn handle_agent_turn(
 
     let response = response?;
 
+    // Generate turn_id for this turn (used for feedback, events, and history)
+    let turn_id = uuid::Uuid::new_v4().to_string();
+
     // Add assistant response to history
     ctx.history_manager.add_message(
         session_key,
@@ -876,12 +879,14 @@ async fn handle_agent_turn(
     // Emit assistant text event
     ctx.event_emitter.emit(Event::AssistantText {
         session_id: session_key.to_string(),
+        turn_id: turn_id.clone(),
         text: response.clone(),
     });
 
     // Emit turn ended event
     ctx.event_emitter.emit(Event::TurnEnded {
         session_id: session_key.to_string(),
+        turn_id: turn_id.clone(),
         response: response.clone(),
     });
 
@@ -899,8 +904,9 @@ async fn handle_agent_turn(
         });
     }
     
-    let turn_record = crate::agent::TurnHistoryManager::record_turn_full(
+    let turn_record = crate::agent::TurnHistoryManager::record_turn_with_id(
         &ctx.turn_history,
+        &turn_id,
         session_key,
         &turn_user_message,
         &response_text,
@@ -928,6 +934,9 @@ async fn handle_agent_turn(
     });
     
     ctx.turn_history.record(turn_record.clone());
+
+    // Store turn_id for response (so client can reference it for feedback)
+    let turn_id_for_response = turn_record.id.clone();
 
     // Update tool pattern learner with the new turn
     if let Some(mut learner) = ctx.tool_pattern_learner.try_write() {
@@ -1197,7 +1206,8 @@ async fn handle_agent_turn(
     });
 
     Ok(serde_json::json!({
-        "text": response
+        "text": response,
+        "turn_id": turn_id_for_response
     }))
 }
 

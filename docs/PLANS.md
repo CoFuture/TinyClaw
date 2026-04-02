@@ -2771,6 +2771,51 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.22.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Turn Feedback System - 用户反馈系统** - 允许用户对 Agent 响应进行反馈
+  - **新增 `agent/turn_feedback.rs` 模块**：
+    - `FeedbackRating` 枚举：ThumbsUp、ThumbsDown、Neutral
+    - `TurnFeedback` 结构：turn_id、session_id、rating、comment、created_at
+    - `TurnFeedbackSummary` 结构：会话反馈统计摘要
+    - `TurnFeedbackManager` 管理器：内存存储 + JSON 文件持久化
+    - 持久化到 `~/.config/tiny_claw/turn_feedback/`
+    - 支持每个会话最多 100 条反馈自动清理
+  - **Gateway 事件增强** (`gateway/events.rs`)：
+    - `AssistantText` 事件新增 `turn_id` 字段
+    - `TurnEnded` 事件新增 `turn_id` 字段
+  - **Gateway 消息处理增强** (`gateway/messages.rs`)：
+    - 每次 Turn 生成唯一 `turn_id` 用于反馈追踪
+    - 响应 JSON 中返回 `turn_id` 供客户端引用
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `POST /api/feedback` - 提交反馈（turn_id、session_id、rating、comment）
+    - `GET /api/feedback/{turn_id}` - 获取特定 Turn 的反馈
+    - `GET /api/sessions/{session_id}/feedback` - 获取会话的所有反馈
+    - `GET /api/sessions/{session_id}/feedback/summary` - 获取会话反馈摘要
+    - `GET /api/feedback/stats` - 获取全局反馈统计
+  - **WebUI 反馈 UI** (`examples/admin.html`)：
+    - 助手消息下方显示反馈按钮（👍👎💬）
+    - 点击 👍/👎 直接提交反馈
+    - 点击 💬 展开评论输入框
+    - 提交后显示 Toast 通知
+    - 按钮状态视觉反馈（激活状态样式）
+  - **main.rs 集成**：
+    - 创建 `TurnFeedbackManager` 实例并持久化
+    - 传递到 `HttpState` 供 HTTP API 使用
+- **Bug Fix - showToast 函数签名冲突**：
+  - 统一 `showToast` 函数支持 `(message, type)` 和 `(type, message)` 两种调用方式
+  - 移除重复的 toast CSS 定义
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **449 tests 全部通过**
+
+**下一步**: Agent 上下文管理能力增强、Skill 机制优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

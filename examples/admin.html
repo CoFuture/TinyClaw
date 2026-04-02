@@ -1910,6 +1910,87 @@
         .action-confirm-btn-deny:hover {
             background: rgba(255,82,82,0.2);
         }
+
+        /* Feedback buttons for assistant messages */
+        .feedback-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .feedback-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #888;
+        }
+        .feedback-btn:hover {
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.3);
+            color: #eee;
+        }
+        .feedback-btn.active-positive {
+            background: rgba(34,197,94,0.2);
+            border-color: rgba(34,197,94,0.4);
+            color: #22c55e;
+        }
+        .feedback-btn.active-negative {
+            background: rgba(239,68,68,0.2);
+            border-color: rgba(239,68,68,0.4);
+            color: #ef4444;
+        }
+        .feedback-comment-container {
+            display: none;
+            margin-top: 8px;
+        }
+        .feedback-comment-container.show {
+            display: block;
+        }
+        .feedback-comment-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #eee;
+            font-size: 13px;
+            resize: none;
+            min-height: 60px;
+        }
+        .feedback-comment-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .feedback-submit-btn {
+            margin-top: 8px;
+            padding: 6px 16px;
+            background: rgba(0,217,255,0.2);
+            border: 1px solid rgba(0,217,255,0.3);
+            border-radius: 6px;
+            color: #00d9ff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .feedback-submit-btn:hover {
+            background: rgba(0,217,255,0.3);
+        }
+        .feedback-sent {
+            color: #22c55e;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        .feedback-error {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 8px;
+        }
     </style>
     <!-- Markdown + Code Highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -6685,10 +6766,11 @@
                 addChatMessage('错误: ' + data.error.message, 'error');
             } else if (data.result) {
                 const text = data.result.text || JSON.stringify(data.result, null, 2);
+                const turnId = data.result.turn_id || null;
                 if (text) {
                     // Cache in session history
                     addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: text });
-                    addChatMessage(text, 'assistant');
+                    addChatMessage(text, 'assistant', turnId);
                 }
             }
         }
@@ -6700,11 +6782,12 @@
             
             if (method === 'assistant.text' && params.text) {
                 const text = params.text;
+                const turnId = params.turn_id || null;
                 // Cache in session history (check session match)
                 const msgSession = params.session_id || chatCurrentSession;
                 if (msgSession === chatCurrentSession) {
                     addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: text });
-                    addChatMessage(text, 'assistant');
+                    addChatMessage(text, 'assistant', turnId);
                 }
             } else if (method === 'assistant.tool_use' && params.tool) {
                 // Show tool use in chat as a notice
@@ -6715,12 +6798,17 @@
             }
         }
 
-        function addChatMessage(content, type) {
+        function addChatMessage(content, type, turnId = null) {
             const container = document.getElementById('chatMessages');
             if (!container) return;
             
             const msg = document.createElement('div');
             msg.className = 'message ' + type;
+            
+            // Store turn_id as data attribute if provided
+            if (turnId) {
+                msg.dataset.turnId = turnId;
+            }
             
             const roleNames = { user: '你', assistant: 'AI', error: '错误', system: '系统', 'tool-call': '工具' };
             const role = roleNames[type] || '系统';
@@ -6780,7 +6868,24 @@
                 ? '<button class="msg-copy-btn" onclick="copyMessageContent(this, \'' + escapeHtml(rawContent.replace(/'/g, "\\'").replace(/\n/g, '\\n')) + '\')" title="复制">复制</button>' 
                 : '';
             
-            msg.innerHTML = copyBtn + '<div class="msg-role">' + role + ' <span class="msg-time">' + time + '</span></div><div class="msg-content">' + displayContent + '</div>';
+            // Add feedback buttons for assistant messages
+            let feedbackHtml = '';
+            if (type === 'assistant' && turnId) {
+                feedbackHtml = `
+                    <div class="feedback-container" data-turn-id="${turnId}">
+                        <span style="color: #666; font-size: 12px;">反馈:</span>
+                        <button class="feedback-btn" onclick="handleFeedback(this, '${turnId}', 'thumbs_up')" title="有帮助">👍</button>
+                        <button class="feedback-btn" onclick="handleFeedback(this, '${turnId}', 'thumbs_down')" title="没帮助">👎</button>
+                        <button class="feedback-btn" onclick="toggleFeedbackComment(this)" title="添加评论">💬</button>
+                        <div class="feedback-comment-container">
+                            <textarea class="feedback-comment-input" placeholder="添加评论（可选）..." maxlength="500"></textarea>
+                            <button class="feedback-submit-btn" onclick="submitFeedbackWithComment(this, '${turnId}')">提交反馈</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            msg.innerHTML = copyBtn + '<div class="msg-role">' + role + ' <span class="msg-time">' + time + '</span></div><div class="msg-content">' + displayContent + '</div>' + feedbackHtml;
             container.appendChild(msg);
             container.scrollTop = container.scrollHeight;
         }
@@ -6803,6 +6908,102 @@
                     btn.textContent = '复制';
                 }, 1500);
             });
+        }
+
+        /// Handle feedback button click (thumbs up/down)
+        async function handleFeedback(btn, turnId, rating) {
+            const sessionId = chatCurrentSession || 'main';
+            
+            // Update button states
+            const container = btn.closest('.feedback-container');
+            const buttons = container.querySelectorAll('.feedback-btn');
+            buttons.forEach(b => {
+                b.classList.remove('active-positive', 'active-negative');
+            });
+            
+            // Set active state
+            if (rating === 'thumbs_up') {
+                btn.classList.add('active-positive');
+            } else if (rating === 'thumbs_down') {
+                btn.classList.add('active-negative');
+            }
+            
+            try {
+                const response = await fetch(API_BASE + '/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        turn_id: turnId,
+                        session_id: sessionId,
+                        rating: rating
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('success', '反馈已提交');
+                } else {
+                    showToast('error', data.error || '提交失败');
+                }
+            } catch (e) {
+                console.error('Feedback submission failed:', e);
+                showToast('error', '提交失败');
+            }
+        }
+
+        /// Toggle feedback comment input
+        function toggleFeedbackComment(btn) {
+            const container = btn.closest('.feedback-container');
+            const commentContainer = container.querySelector('.feedback-comment-container');
+            commentContainer.classList.toggle('show');
+        }
+
+        /// Submit feedback with comment
+        async function submitFeedbackWithComment(btn, turnId) {
+            const container = btn.closest('.feedback-container');
+            const commentInput = container.querySelector('.feedback-comment-input');
+            const comment = commentInput.value.trim();
+            
+            // Determine rating from active button
+            let rating = 'neutral';
+            const activePositive = container.querySelector('.feedback-btn.active-positive');
+            const activeNegative = container.querySelector('.feedback-btn.active-negative');
+            
+            if (activePositive) {
+                rating = 'thumbs_up';
+            } else if (activeNegative) {
+                rating = 'thumbs_down';
+            }
+            
+            const sessionId = chatCurrentSession || 'main';
+            
+            try {
+                const response = await fetch(API_BASE + '/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        turn_id: turnId,
+                        session_id: sessionId,
+                        rating: rating,
+                        comment: comment || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('success', '反馈已提交');
+                    // Hide comment input
+                    container.querySelector('.feedback-comment-container').classList.remove('show');
+                    commentInput.value = '';
+                } else {
+                    showToast('error', data.error || '提交失败');
+                }
+            } catch (e) {
+                console.error('Feedback submission failed:', e);
+                showToast('error', '提交失败');
+            }
         }
 
         /// Format token count with K suffix for large numbers
@@ -7188,15 +7389,16 @@
             } else if (eventType === 'assistant.text' && data.text) {
                 // Final complete text - finalize the streaming message or add new one
                 hideActivityIndicator();
+                const turnId = data.turn_id || null;
                 if (streamingMsgElement) {
                     // Finalize the streaming message with complete content
-                    finalizeStreamingMessage(streamingMsgElement, data.text, 'assistant');
+                    finalizeStreamingMessage(streamingMsgElement, data.text, 'assistant', turnId);
                     streamingMsgElement = null;
                     streamingTextBuffer = '';
                 } else {
                     // No streaming - add as normal message
                     addChatMessageToHistory(chatCurrentSession, { role: 'assistant', content: data.text });
-                    addChatMessage(data.text, 'assistant');
+                    addChatMessage(data.text, 'assistant', turnId);
                 }
             } else if (eventType === 'turn.started' && data.message) {
                 // User message from SSE - add to history
@@ -7539,10 +7741,15 @@
         }
         
         /// Finalize a streaming message with the complete content
-        function finalizeStreamingMessage(msgElement, content, type) {
+        function finalizeStreamingMessage(msgElement, content, type, turnId = null) {
             if (!msgElement) return;
             
             msgElement.classList.remove('streaming');
+            
+            // Store turn_id as data attribute if provided
+            if (turnId) {
+                msgElement.dataset.turnId = turnId;
+            }
             
             const indicator = msgElement.querySelector('.streaming-indicator');
             if (indicator) indicator.remove();
@@ -7562,6 +7769,23 @@
             const contentDiv = msgElement.querySelector('.msg-content');
             if (contentDiv) {
                 contentDiv.innerHTML = displayContent;
+            }
+            
+            // Add feedback buttons for assistant messages
+            if (type === 'assistant' && turnId) {
+                const feedbackHtml = `
+                    <div class="feedback-container" data-turn-id="${turnId}">
+                        <span style="color: #666; font-size: 12px;">反馈:</span>
+                        <button class="feedback-btn" onclick="handleFeedback(this, '${turnId}', 'thumbs_up')" title="有帮助">👍</button>
+                        <button class="feedback-btn" onclick="handleFeedback(this, '${turnId}', 'thumbs_down')" title="没帮助">👎</button>
+                        <button class="feedback-btn" onclick="toggleFeedbackComment(this)" title="添加评论">💬</button>
+                        <div class="feedback-comment-container">
+                            <textarea class="feedback-comment-input" placeholder="添加评论（可选）..." maxlength="500"></textarea>
+                            <button class="feedback-submit-btn" onclick="submitFeedbackWithComment(this, '${turnId}')">提交反馈</button>
+                        </div>
+                    </div>
+                `;
+                msgElement.insertAdjacentHTML('beforeend', feedbackHtml);
             }
             
             // Add to history
@@ -7671,9 +7895,32 @@
         /// Show a general toast notification
         /// type: 'info' | 'success' | 'error' | 'warning' | 'urgent'
         /// title: optional bold title
-        function showToast(message, type, title) {
-            const container = document.getElementById('toastContainer');
-            if (!container) return;
+        /// Show toast notification - supports both (message, type) and (type, message) signatures
+        function showToast(arg1, arg2, arg3) {
+            // Auto-detect calling convention: if arg1 is a known type, use (type, message) convention
+            const knownTypes = ['success', 'error', 'info', 'warning', 'urgent'];
+            let message, type, title;
+            
+            if (knownTypes.includes(arg1) && typeof arg2 === 'string') {
+                // New convention: showToast(type, message, title?)
+                type = arg1;
+                message = arg2;
+                title = arg3;
+            } else {
+                // Old convention: showToast(message, type, title?)
+                message = arg1;
+                type = arg2 || 'info';
+                title = arg3;
+            }
+            
+            // Check if toast container exists, if not create it
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container';
+                toastContainer.id = 'toastContainer';
+                document.body.appendChild(toastContainer);
+            }
             
             const toast = document.createElement('div');
             toast.className = 'toast ' + (type || 'info');
@@ -7685,11 +7932,10 @@
             content += message;
             toast.innerHTML = content;
             
-            container.appendChild(toast);
+            toastContainer.appendChild(toast);
             
-            // Trigger reflow and add show class
-            toast.offsetHeight; // Force reflow
-            toast.classList.add('show');
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
             
             // Auto-hide after 4 seconds (urgent toasts stay 6 seconds)
             const hideDelay = type === 'urgent' ? 6000 : 4000;

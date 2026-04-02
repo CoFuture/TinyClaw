@@ -143,6 +143,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Turn history manager initialized");
 
+    // Create turn feedback manager with persistence
+    let turn_feedback_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("turn_feedback");
+    let turn_feedback = match agent::TurnFeedbackManager::new_with_persistence(&turn_feedback_dir) {
+        Ok(mgr) => {
+            info!("Turn feedback loaded from: {:?}", turn_feedback_dir);
+            Arc::new(mgr)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load turn feedback: {}, using in-memory", e);
+            Arc::new(agent::TurnFeedbackManager::new())
+        }
+    };
+    info!("Turn feedback manager initialized");
+
     // Create session accomplishments manager
     let accomplishments_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -287,6 +304,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         suggestion_manager: suggestion_manager.clone(),
         memory_manager: memory_manager.clone(),
         turn_history: turn_history.clone(),
+        turn_feedback: turn_feedback.clone(),
         tool_pattern_learner: tool_pattern_learner.clone(),
         conversation_summary: conversation_summary_manager.clone(),
         self_evaluation_manager: self_evaluation_manager.clone(),

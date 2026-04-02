@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner, SessionAccomplishmentsManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner, SessionAccomplishmentsManager, TurnFeedbackManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -49,6 +49,7 @@ pub struct HttpState {
     pub suggestion_manager: Arc<SuggestionManager>,
     pub memory_manager: Arc<MemoryManager>,
     pub turn_history: Arc<TurnHistoryManager>,
+    pub turn_feedback: Arc<TurnFeedbackManager>,
     pub tool_pattern_learner: Arc<RwLock<ToolPatternLearner>>,
     #[allow(dead_code)]
     pub conversation_summary: Arc<RwLock<crate::agent::ConversationSummaryManager>>,
@@ -881,6 +882,12 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/stats", get(turns_stats))
         .route("/api/turns/stats/period", get(turns_stats_period))
         .route("/api/turns/export", get(turns_export))
+        // Turn feedback API - user feedback on agent responses
+        .route("/api/feedback", post(feedback_submit))
+        .route("/api/feedback/{turn_id}", get(feedback_get))
+        .route("/api/sessions/{session_id}/feedback", get(feedback_session_list))
+        .route("/api/sessions/{session_id}/feedback/summary", get(feedback_session_summary))
+        .route("/api/feedback/stats", get(feedback_global_stats))
         // Session accomplishments API - track what was accomplished
         .route("/api/sessions/{session_id}/accomplishments", get(session_accomplishments_list))
         .route("/api/sessions/{session_id}/accomplishments", axum::routing::delete(session_accomplishments_clear))
@@ -2741,4 +2748,116 @@ async fn safety_config_update(
         enabled,
     );
     Json(result)
+}
+
+// ============================================================================
+// Turn Feedback API Handlers
+// ============================================================================
+
+/// Submit feedback for a turn
+async fn feedback_submit(
+    State(state): State<Arc<HttpState>>,
+    Json(request): Json<crate::agent::turn_feedback::SubmitFeedbackRequest>,
+) -> (HttpStatusCode, Json<crate::agent::turn_feedback::SubmitFeedbackResponse>) {
+    // Parse rating
+    let rating = match request.parse_rating() {
+        Some(r) => r,
+        None => {
+            return (
+                HttpStatusCode::BAD_REQUEST,
+                Json(crate::agent::turn_feedback::SubmitFeedbackResponse {
+                    success: false,
+                    turn_id: request.turn_id,
+                    session_id: request.session_id,
+                    rating: request.rating,
+                    error: Some("Invalid rating. Must be 'thumbs_up', 'thumbs_down', or 'neutral'".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Record feedback
+    let feedback = state.turn_feedback.record_feedback(
+        &request.turn_id,
+        &request.session_id,
+        rating,
+        request.comment.clone(),
+    );
+
+    info!(
+        turn_id = %feedback.turn_id,
+        session_id = %feedback.session_id,
+        rating = ?feedback.rating,
+        "Recorded turn feedback"
+    );
+
+    (
+        HttpStatusCode::OK,
+        Json(crate::agent::turn_feedback::SubmitFeedbackResponse {
+            success: true,
+            turn_id: feedback.turn_id,
+            session_id: feedback.session_id,
+            rating: feedback.rating.as_str().to_string(),
+            error: None,
+        }),
+    )
+}
+
+/// Get feedback for a specific turn
+async fn feedback_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(turn_id): axum::extract::Path<String>,
+) -> Json<crate::agent::turn_feedback::GetFeedbackResponse> {
+    let feedback = state.turn_feedback.get_turn_feedback(&turn_id);
+    
+    Json(crate::agent::turn_feedback::GetFeedbackResponse {
+        feedback,
+        error: None,
+    })
+}
+
+/// Get all feedback for a session
+async fn feedback_session_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<crate::agent::turn_feedback::SessionFeedbackResponse> {
+    let feedback = state.turn_feedback.get_session_feedback(&session_id);
+    let count = feedback.len();
+    
+    Json(crate::agent::turn_feedback::SessionFeedbackResponse {
+        session_id,
+        feedback,
+        count,
+    })
+}
+
+/// Get feedback summary for a session
+async fn feedback_session_summary(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<crate::agent::turn_feedback::SessionFeedbackSummaryResponse> {
+    let summary = state.turn_feedback.get_session_feedback_summary(&session_id);
+    
+    Json(crate::agent::turn_feedback::SessionFeedbackSummaryResponse {
+        summary,
+    })
+}
+
+/// Get global feedback statistics
+async fn feedback_global_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let stats = state.turn_feedback.get_global_stats();
+    let sessions = state.turn_feedback.get_sessions_with_feedback();
+    
+    Json(serde_json::json!({
+        "stats": {
+            "totalFeedback": stats.total_feedback,
+            "thumbsUpCount": stats.thumbs_up_count,
+            "thumbsDownCount": stats.thumbs_down_count,
+            "neutralCount": stats.neutral_count,
+            "positiveRate": stats.positive_rate,
+        },
+        "sessionsWithFeedback": sessions.len(),
+    }))
 }
