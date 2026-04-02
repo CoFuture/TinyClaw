@@ -591,7 +591,7 @@ impl TuiApp {
                     }
                 }
             }
-            TuiGatewayEvent::TurnSummary { session_id, turn_id, tool_count, success, total_duration_ms, accomplishment, affected_resources } => {
+            TuiGatewayEvent::TurnSummary { session_id, turn_id, tool_count, success, total_duration_ms, accomplishment, affected_resources, tool_summaries } => {
                 debug!("Turn summary received for session {}: {} tools in {}ms", session_id, tool_count, total_duration_ms);
                 let summary = crate::tui::state::TurnSummaryDisplay {
                     turn_id,
@@ -601,6 +601,7 @@ impl TuiApp {
                     total_duration_ms,
                     accomplishment,
                     affected_resources,
+                    tool_summaries,
                 };
                 // Prepend to turn_summary_data (most recent first)
                 self.state.turn_summary_data.get_or_insert_with(Vec::new).insert(0, summary);

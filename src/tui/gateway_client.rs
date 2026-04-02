@@ -1,6 +1,7 @@
 //! TUI Gateway Client - WebSocket client for connecting to the TinyClaw gateway
 
 use crate::gateway::protocol::{methods, Request, RequestStandard, Response};
+use crate::tui::state::ToolExecutionSummaryDisplay;
 use crate::types::SessionHistory;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
@@ -92,7 +93,16 @@ pub enum TuiGatewayEvent {
     /// Self-evaluation received
     SelfEvaluation { session_id: String, turn_id: String, overall_score: f64, dimension_scores: Vec<(String, f64)>, strengths: Vec<String>, weaknesses: Vec<String> },
     /// Turn summary received - concise summary of what was accomplished
-    TurnSummary { session_id: String, turn_id: String, tool_count: usize, success: bool, total_duration_ms: u64, accomplishment: String, affected_resources: Vec<String> },
+    TurnSummary { 
+        session_id: String, 
+        turn_id: String, 
+        tool_count: usize, 
+        success: bool, 
+        total_duration_ms: u64, 
+        accomplishment: String, 
+        affected_resources: Vec<String>,
+        tool_summaries: Vec<ToolExecutionSummaryDisplay>,
+    },
     /// Skill recommendations received
     SkillRecommendations { session_id: String, recommendations: Vec<SkillRecommendationDisplay> },
     /// Execution safety warning - approaching safety limit
@@ -573,6 +583,28 @@ impl TuiGatewayClient {
                                 .and_then(|v| v.as_array())
                                 .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                                 .unwrap_or_default();
+                            // Parse tool_summaries
+                            let tool_summaries = params.get("tool_summaries")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|item| {
+                                        let tool_name = item.get("tool_name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                        let summary = item.get("summary").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                        let success = item.get("success").and_then(|v| v.as_bool()).unwrap_or(true);
+                                        let duration_ms = item.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+                                        if tool_name.is_empty() {
+                                            None
+                                        } else {
+                                            Some(ToolExecutionSummaryDisplay {
+                                                tool_name,
+                                                summary,
+                                                success,
+                                                duration_ms,
+                                            })
+                                        }
+                                    }).collect()
+                                })
+                                .unwrap_or_default();
                             let _ = event_tx.send(TuiGatewayEvent::TurnSummary {
                                 session_id,
                                 turn_id,
@@ -581,6 +613,7 @@ impl TuiGatewayClient {
                                 total_duration_ms,
                                 accomplishment,
                                 affected_resources,
+                                tool_summaries,
                             });
                         }
                     }

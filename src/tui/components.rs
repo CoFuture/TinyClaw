@@ -1750,6 +1750,35 @@ pub fn draw_turn_summary_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) 
                     ]));
                 }
 
+                // Tool execution summaries
+                if !summary.tool_summaries.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled("     ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("🔧 ", Style::default().fg(Color::Magenta)),
+                        Span::styled("Tools:", Style::default().fg(Color::Magenta)),
+                    ]));
+                    for (i, tool) in summary.tool_summaries.iter().enumerate() {
+                        let prefix = if i == summary.tool_summaries.len() - 1 { "       └─ " } else { "       ├─ " };
+                        let tool_status = if tool.success { "✅" } else { "❌" };
+                        let tool_status_color = if tool.success { Color::Green } else { Color::Red };
+                        let tool_summary_preview = if tool.summary.len() > 50 {
+                            format!("{}...", &tool.summary[..50])
+                        } else {
+                            tool.summary.clone()
+                        };
+                        lines.push(Line::from(vec![
+                            Span::styled(prefix, Style::default().fg(Color::DarkGray)),
+                            Span::styled(&tool.tool_name, Style::default().fg(Color::Cyan)),
+                            Span::raw(" "),
+                            Span::styled(tool_status, Style::default().fg(tool_status_color)),
+                            Span::raw(" "),
+                            Span::styled(format!("({}ms)", tool.duration_ms), Style::default().fg(Color::DarkGray)),
+                            Span::raw(" "),
+                            Span::styled(tool_summary_preview, Style::default().fg(Color::White)),
+                        ]));
+                    }
+                }
+
                 lines.push(Line::from(""));
             }
         }

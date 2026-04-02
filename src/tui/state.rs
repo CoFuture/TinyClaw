@@ -463,6 +463,15 @@ pub struct SkillRecommendationDisplay {
     pub already_enabled: bool,
 }
 
+/// Tool execution summary for TUI display
+#[derive(Debug, Clone)]
+pub struct ToolExecutionSummaryDisplay {
+    pub tool_name: String,
+    pub summary: String,
+    pub success: bool,
+    pub duration_ms: u64,
+}
+
 /// Turn summary data for TUI display
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -474,6 +483,7 @@ pub struct TurnSummaryDisplay {
     pub total_duration_ms: u64,
     pub accomplishment: String,
     pub affected_resources: Vec<String>,
+    pub tool_summaries: Vec<ToolExecutionSummaryDisplay>,
 }
 
 impl Default for AppState {

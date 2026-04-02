@@ -2477,6 +2477,41 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.14.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **TUI Turn Summary 工具执行详情增强** - 修复 Turn Summary 中 tool_summaries 未传递到 TUI 面板的问题
+  - **问题诊断**：gateway/events.rs 中的 `TurnSummary` 事件包含 `tool_summaries` 字段，但 TUI 的事件解析和面板渲染中缺少该字段的传递
+  - **`state.rs` 新增 `ToolExecutionSummaryDisplay` 结构**：
+    - `tool_name: String` - 工具名称
+    - `summary: String` - 执行摘要
+    - `success: bool` - 是否成功
+    - `duration_ms: u64` - 执行耗时
+  - **`TurnSummaryDisplay` 增强** (`state.rs`)：
+    - 新增 `tool_summaries: Vec<ToolExecutionSummaryDisplay>` 字段
+  - **`TuiGatewayEvent::TurnSummary` 增强** (`gateway_client.rs`)：
+    - 添加 `tool_summaries: Vec<ToolExecutionSummaryDisplay>` 字段
+    - 导入 `ToolExecutionSummaryDisplay` 类型
+  - **事件解析增强** (`gateway_client.rs`)：
+    - 解析 `tool_summaries` JSON 数组字段
+    - 构造 `ToolExecutionSummaryDisplay` 结构并传递
+  - **事件处理增强** (`app.rs`)：
+    - 更新 `TuiGatewayEvent::TurnSummary` 解构包含 `tool_summaries`
+    - 传递给 `TurnSummaryDisplay` 结构
+  - **面板渲染增强** (`components.rs`)：
+    - 在每个 Turn Summary 条目中显示工具执行摘要列表
+    - 每个工具显示：工具名称、状态图标（✅/❌）、耗时、执行摘要
+    - 树形缩进展示，模仿命令行动态
+- **代码质量**：
+  - cargo clippy 1 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+  - cargo test **427 tests 全部通过**
+
+**下一步**: Agent 能力增强、交互体验优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
