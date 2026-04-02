@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner, SessionAccomplishmentsManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -56,6 +56,7 @@ pub struct HttpState {
     pub self_evaluation_manager: Arc<crate::agent::SelfEvaluationManager>,
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
     pub context_health_monitor: Arc<ContextHealthMonitor>,
+    pub session_accomplishments: Arc<SessionAccomplishmentsManager>,
 }
 
 /// Health check response
@@ -880,6 +881,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/stats", get(turns_stats))
         .route("/api/turns/stats/period", get(turns_stats_period))
         .route("/api/turns/export", get(turns_export))
+        // Session accomplishments API - track what was accomplished
+        .route("/api/sessions/{session_id}/accomplishments", get(session_accomplishments_list))
+        .route("/api/sessions/{session_id}/accomplishments/summary", get(session_accomplishments_summary))
         // Tool performance statistics
         .route("/api/tools/stats", get(tool_stats))
         // Tool pattern learning API - learn from turn history
@@ -1905,6 +1909,65 @@ async fn turns_export(
         .header(header::CONTENT_TYPE, "application/json")
         .body(axum::body::Body::from(json))
         .unwrap()
+}
+
+/// Get accomplishments for a session
+async fn session_accomplishments_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.session_accomplishments.get_summary(&session_id) {
+        Some(summary) => Json(serde_json::json!({
+            "success": true,
+            "sessionId": session_id,
+            "accomplishments": summary.accomplishments,
+            "stats": summary.stats,
+        })),
+        None => Json(serde_json::json!({
+            "success": true,
+            "sessionId": session_id,
+            "accomplishments": [],
+            "stats": {
+                "totalCount": 0,
+                "byType": {},
+                "turnsWithAccomplishments": 0,
+                "toolUsage": {},
+                "toolSuccess": {},
+                "filesModified": [],
+                "successRate": 0.0f32,
+            },
+        })),
+    }
+}
+
+/// Get accomplishment summary for a session
+async fn session_accomplishments_summary(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.session_accomplishments.get_summary(&session_id) {
+        Some(summary) => {
+            let text_summary = summary.to_text_summary();
+            let context_snippet = summary.to_context_snippet();
+            Json(serde_json::json!({
+                "success": true,
+                "sessionId": session_id,
+                "totalAccomplishments": summary.accomplishments.len(),
+                "stats": summary.stats,
+                "textSummary": text_summary,
+                "contextSnippet": context_snippet,
+                "startedAt": summary.started_at,
+                "generatedAt": summary.generated_at,
+            }))
+        }
+        None => Json(serde_json::json!({
+            "success": true,
+            "sessionId": session_id,
+            "totalAccomplishments": 0,
+            "textSummary": "No accomplishments recorded for this session yet.",
+            "contextSnippet": "No accomplishments recorded yet.",
+        })),
+    }
 }
 
 /// Get tool performance statistics

@@ -2575,6 +2575,59 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.17.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **Session Accomplishment Tracker** - 追踪会话成果，让 Agent 和用户都能清楚了解每次会话完成了什么
+  - **新模块** (`src/agent/session_accomplishments.rs`)：
+    - `Accomplishment` - 单个成果记录（类型、描述、证据、可信度）
+    - `AccomplishmentType` - 成果类型枚举（文件修改、任务完成、决策、问题修复等）
+    - `SessionAccomplishments` - 会话成果聚合器
+    - `SessionAccomplishmentStats` - 成果统计
+    - `SessionAccomplishmentSummary` - 成果摘要（文本摘要 + 上下文片段）
+    - `SessionAccomplishmentsManager` - 跨会话成果管理器（Arc<RwLock> 共享状态）
+  - **成果类型系统**：
+    - `file_modified` - 文件创建/修改
+    - `task_completed` - 任务完成
+    - `decision_made` - 决策做出
+    - `information_learned` - 信息学习
+    - `problem_identified` / `problem_fixed` - 问题发现/修复
+    - `code_analyzed` / `config_changed` / `action_performed`
+  - **Gateway 集成** (`src/gateway/messages.rs`)：
+    - 在 `HandlerContext` 中新增 `session_accomplishments: Arc<SessionAccomplishmentsManager>`
+    - 每次 Turn 结束时调用 `record_from_turn_summary()` 自动记录成果
+    - 从 `AgentTurnSummary` 中提取工具执行作为成果记录
+  - **HTTP API 端点** (`src/http/routes.rs`)：
+    - `GET /api/sessions/{session_id}/accomplishments` - 获取会话成果列表和统计
+    - `GET /api/sessions/{session_id}/accomplishments/summary` - 获取成果摘要文本
+  - **TUI 集成**：
+    - 新增命令 `:acc` / `:accomplishments` - 查看会话成果面板
+    - `AppState` 新增 `accomplishments_mode` 和 `accomplishments_data` 字段
+    - `TuiGatewayEvent::AccomplishmentsLoaded` 事件处理
+    - `draw_accomplishments_panel()` 面板渲染函数
+    - Esc 键退出成果模式
+  - **成果文本摘要格式**：
+    ```
+    📋 Session Accomplishments (3 turns)
+    ├─ 📄 Files Modified: 3
+    │  ├─ src/main.rs
+    │  ├─ Cargo.toml
+    │  └─ ...
+    ├─ ✅ Tasks Completed: 2
+    │  ├─ Set up project structure
+    │  └─ Fixed authentication bug
+    └─ 🔧 Tools Used: 12 (90% success)
+    ```
+- **代码质量**：
+  - cargo clippy 8 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+  - cargo test **438 tests 全部通过**
+
+**下一步**: WebUI 成果面板、跨 Session 成果关联、成果导出
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

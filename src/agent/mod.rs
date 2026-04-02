@@ -31,6 +31,7 @@ pub mod tools;
 pub mod tool_result_formatter;
 pub mod tool_strategy;
 pub mod tool_pattern_learner;
+pub mod session_accomplishments;
 pub mod turn_history;
 pub mod turn_log;
 pub mod turn_summary;
@@ -64,6 +65,8 @@ pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, Suggestion
 pub use suggestion_manager::{SuggestionManager, SuggestionFeedback, TrackedSuggestion, TrackedSuggestionSummary};
 pub use task::{TaskState, TaskSummary};
 pub use task_manager::TaskManager;
+#[allow(unused_imports)]
+pub use session_accomplishments::{SessionAccomplishments, SessionAccomplishmentsManager, SessionAccomplishmentSummary, SessionAccomplishmentStats, Accomplishment, AccomplishmentType};
 #[allow(unused_imports)]
 pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, ToolExecution};
 #[allow(unused_imports)]

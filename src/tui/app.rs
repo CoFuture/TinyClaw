@@ -680,6 +680,10 @@ impl TuiApp {
                 debug!("Scheduled tasks loaded: {} tasks", tasks.len());
                 self.state.scheduled_tasks_data = Some(tasks);
             }
+            TuiGatewayEvent::AccomplishmentsLoaded { text } => {
+                debug!("Accomplishments loaded");
+                self.state.accomplishments_data = Some(text);
+            }
             TuiGatewayEvent::UrgentAdvice { session_id, advice } => {
                 // Display urgent advice as system messages in the chat
                 use crate::types::Message;
@@ -1260,11 +1264,51 @@ impl TuiApp {
                             self.state.context_health_mode = false;
                             self.state.advisor_mode = false;
                             self.state.scheduled_tasks_mode = false;
+                            self.state.accomplishments_mode = false;
                         }
                         self.state.input_buffer.clear();
                         return Ok(true);
                     }
-                    
+
+                    // Handle :acc command - toggle accomplishments viewing mode
+                    if input_lower.starts_with(":acc") || input_lower.starts_with(":accomplishments") {
+                        self.state.accomplishments_mode = !self.state.accomplishments_mode;
+                        if self.state.accomplishments_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            self.state.advisor_mode = false;
+                            self.state.scheduled_tasks_mode = false;
+                            self.state.turn_summary_mode = false;
+                            // Fetch accomplishments if we have a session
+                            if let Some(ref session_id) = self.state.current_session_id {
+                                let client = self.gateway_client.clone();
+                                let sid = session_id.clone();
+                                tokio::spawn(async move {
+                                    let result = {
+                                        let client = client.read().await;
+                                        client.get_session_accomplishments_http("http://127.0.0.1:8080", &sid).await
+                                    };
+                                    match result {
+                                        Ok(text) => {
+                                            let client = client.read().await;
+                                            client.send_event(crate::tui::gateway_client::TuiGatewayEvent::AccomplishmentsLoaded { text });
+                                        }
+                                        Err(e) => {
+                                            tracing::debug!("Failed to fetch accomplishments: {}", e);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+
                     if self.state.current_session_id.is_some() && !self.state.input_buffer.is_empty() {
                         let content = self.state.input_buffer.clone();
                         let client = self.gateway_client.clone();
@@ -2021,6 +2065,9 @@ impl TuiApp {
                     } else if self.state.scheduled_tasks_mode {
                         self.state.scheduled_tasks_mode = false;
                         self.state.scheduled_tasks_data = None;
+                    } else if self.state.accomplishments_mode {
+                        self.state.accomplishments_mode = false;
+                        self.state.accomplishments_data = None;
                     } else if self.state.turn_summary_mode {
                         self.state.turn_summary_mode = false;
                     } else if self.state.instructions_mode {
@@ -2121,6 +2168,8 @@ impl TuiApp {
             crate::tui::components::draw_context_health_panel(f, msg_chunks[0], &self.state);
         } else if self.state.scheduled_tasks_mode {
             crate::tui::components::draw_scheduled_tasks_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.accomplishments_mode {
+            crate::tui::components::draw_accomplishments_panel(f, msg_chunks[0], &self.state);
         } else if self.state.turn_summary_mode {
             crate::tui::components::draw_turn_summary_panel(f, msg_chunks[0], &self.state);
         } else {

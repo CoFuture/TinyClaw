@@ -1671,6 +1671,64 @@ pub fn draw_scheduled_tasks_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
     f.render_widget(paragraph, area);
 }
 
+/// Draw the accomplishments panel
+pub fn draw_accomplishments_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 🏆 Session Accomplishments ";
+
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Green))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(ref text) = state.accomplishments_data {
+        if text.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No accomplishments recorded yet.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Accomplishments are automatically tracked as you work."));
+        } else {
+            // Display the text summary line by line
+            for line in text.lines() {
+                if line.is_empty() {
+                    lines.push(Line::from(""));
+                } else if line.starts_with("📋") || (!line.starts_with("├─") && (line.contains("Files") || line.contains("Tasks") || line.contains("Problems") || line.contains("Tools"))) {
+                    // Header lines
+                    lines.push(Line::from(vec![
+                        Span::styled(line, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    // Regular content
+                    lines.push(Line::from(vec![
+                        Span::styled(line, Style::default().fg(Color::Cyan)),
+                    ]));
+                }
+            }
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Loading accomplishments...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :acc again to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the turn summaries panel
 pub fn draw_turn_summary_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title_text = " 📋 Turn Summaries ";

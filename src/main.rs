@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner, SessionAccomplishmentsManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -142,7 +142,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     info!("Turn history manager initialized");
-    
+
+    // Create session accomplishments manager
+    let accomplishments_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("session_accomplishments");
+    let session_accomplishments = Arc::new(SessionAccomplishmentsManager::new(accomplishments_dir.clone()));
+    info!("Session accomplishments manager initialized (dir: {:?})", accomplishments_dir);
+
     // Create self-evaluation manager with persistence
     let self_eval_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -284,6 +292,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         self_evaluation_manager: self_evaluation_manager.clone(),
         session_quality_manager: session_quality_manager.clone(),
         context_health_monitor: context_health_monitor.clone(),
+        session_accomplishments: session_accomplishments.clone(),
     });
 
     // Spawn WebSocket server
@@ -312,6 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_quality_manager.clone(), // Session quality manager
         context_health_monitor.clone(), // Context health monitor
         tool_pattern_learner.clone(), // Tool pattern learner for learning from turns
+        session_accomplishments.clone(), // Session accomplishments tracker
     );
     
     let ws_handle = tokio::spawn(async move {

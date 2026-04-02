@@ -129,6 +129,8 @@ pub enum TuiGatewayEvent {
     AdvisorDataLoaded { data: ContextAdvisorDisplay },
     /// Scheduled tasks loaded (from :tasks command)
     ScheduledTasksLoaded { tasks: Vec<ScheduledTaskDisplay> },
+    /// Session accomplishments loaded (from :acc command)
+    AccomplishmentsLoaded { text: String },
     /// Urgent context advice from SSE (high priority advice)
     UrgentAdvice { session_id: String, advice: Vec<UrgentAdviceItemDisplay> },
 }
@@ -1287,6 +1289,27 @@ impl TuiGatewayClient {
         }).collect();
 
         Ok(tasks)
+    }
+
+    /// Get session accomplishments summary via HTTP
+    pub async fn get_session_accomplishments_http(&self, base_url: &str, session_id: &str) -> Result<String, String> {
+        let url = format!("{}/api/sessions/{}/accomplishments/summary", base_url, session_id);
+        let client = reqwest::Client::new();
+        let response = client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Extract textSummary from the response
+        let text_summary = response.get("textSummary")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "Invalid response format".to_string())?
+            .to_string();
+
+        Ok(text_summary)
     }
 
     /// Send a gateway event through the event channel (used by TUI to deliver HTTP fetch results)

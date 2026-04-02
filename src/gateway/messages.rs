@@ -92,6 +92,8 @@ pub struct HandlerContext {
     pub context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
     /// Tool pattern learner for learning from turn history
     pub tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
+    /// Session accomplishments tracker
+    pub session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
 }
 
 impl HandlerContext {
@@ -117,6 +119,7 @@ impl HandlerContext {
         session_quality_manager: Arc<crate::agent::SessionQualityManager>,
         context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
         tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
+        session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -139,6 +142,7 @@ impl HandlerContext {
             session_quality_manager,
             context_health_monitor,
             tool_pattern_learner,
+            session_accomplishments,
         }
     }
 
@@ -943,7 +947,10 @@ async fn handle_agent_turn(
         turn_success,
         turn_duration,
     );
-    
+
+    // Record accomplishments from turn summary (before event emission since it moves tool_summaries)
+    ctx.session_accomplishments.record_from_turn_summary(session_key, &turn_summary);
+
     ctx.event_emitter.emit(Event::TurnSummary {
         session_id: session_key.to_string(),
         turn_id: turn_record.id.clone(),
@@ -951,8 +958,8 @@ async fn handle_agent_turn(
         tool_summaries: turn_summary.tool_summaries,
         success: turn_summary.success,
         total_duration_ms: turn_summary.total_duration_ms,
-        accomplishment: turn_summary.accomplishment,
-        affected_resources: turn_summary.affected_resources,
+        accomplishment: turn_summary.accomplishment.clone(),
+        affected_resources: turn_summary.affected_resources.clone(),
     });
 
     // Analyze session quality and emit event
