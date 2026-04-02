@@ -431,6 +431,20 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
         parts.push(strategy_prompt);
     }
 
+    // 1c. Learned Tool Performance - historical patterns from past tool executions
+    // Integrate tool pattern learner data to help agent make informed tool decisions
+    if let Some(learner) = ctx.tool_pattern_learner.try_read() {
+        let tips = learner.generate_tips();
+        if !tips.is_empty() {
+            let mut tips_part = String::from("## Historical Tool Performance\n\n");
+            tips_part.push_str("Based on your past tool executions:\n\n");
+            for tip in &tips {
+                tips_part.push_str(&format!("- {}\n", tip));
+            }
+            parts.push(tips_part);
+        }
+    }
+
     // 2. Session notes
     if let Some(notes_part) = ctx.session_notes.to_system_prompt_addition(session_key) {
         parts.push(notes_part);

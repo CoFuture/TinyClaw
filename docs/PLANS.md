@@ -2550,6 +2550,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.16.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **Tool Strategy Integration with Learned Patterns** - 将历史工具执行模式集成到 Agent 上下文
+  - **问题诊断**：`ToolPatternLearner` 追踪工具使用模式和成功率（v8.1.0 引入），但数据仅用于分析面板，从未影响 Agent 的工具选择行为
+  - **`generate_context_prompt` 增强** (`gateway/messages.rs`)：
+    - 新增 "1c. Learned Tool Performance" 部分
+    - 调用 `ctx.tool_pattern_learner.try_read()` 获取模式学习器
+    - 调用 `learner.generate_tips()` 获取最多 5 条历史性能提示
+    - 当有可用提示时注入到系统上下文中
+    - 提示内容：最高成功率工具、工具序列模式、低成功率警告
+  - **效果**：Agent 在每次 Turn 时都能获得基于历史执行数据的学习建议
+    - 了解哪些工具组合成功率高
+    - 避免低成功率的工具使用方式
+    - 随着使用不断优化工具选择策略
+- **代码质量**：
+  - cargo clippy 1 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+  - cargo test **427 tests 全部通过**
+
+**下一步**: 意图相关工具提示、多轮规划能力增强
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
