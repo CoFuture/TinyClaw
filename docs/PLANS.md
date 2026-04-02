@@ -2669,6 +2669,34 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.20.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **WebUI Chat Input Experience Enhancement** - 网页界面聊天输入体验优化
+  - **聊天输入框键盘快捷键** (`examples/admin.html`)：
+    - 使用 `onkeydown` 替代 `onkeypress`（更好的组合键支持）
+    - `Ctrl+Enter` / `Cmd+Enter` 发送消息
+    - `Escape` 清空输入框并取消聚焦
+    - `Shift+Enter` 换行（保持默认行为）
+    - `Enter` 发送消息（无修饰键）
+  - **全局 "/" 快捷键**：
+    - 在非输入区域按 "/" 键自动聚焦到聊天输入框
+    - 类似 Slack/Discord 的常见快捷键
+  - **输入框 focus 样式改进**：
+    - 更明显的 focus 边框颜色
+    - 更强的 box-shadow 发光效果
+    - focus 时 placeholder 颜色变浅
+  - **Placeholder 文本更新**：
+    - 显示快捷键提示："输入消息... (Ctrl+Enter 发送, Esc 清空, Shift+Enter 换行)"
+- cargo clippy **0 警告**
+- cargo test **438 tests 全部通过**
+
+**下一步**: Agent 能力增强、TUI 交互优化继续
+
+---
+
 ### v13.19.0 (已完成 ✅)
 
 **日期**: 2026-04-02

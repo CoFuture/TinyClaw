@@ -1754,8 +1754,11 @@
         .chat-input-container input:focus {
             outline: none;
             border-color: #00d9ff;
-            background: rgba(255,255,255,0.1);
-            box-shadow: 0 0 0 3px rgba(0,217,255,0.1);
+            background: rgba(255,255,255,0.12);
+            box-shadow: 0 0 0 3px rgba(0,217,255,0.2), 0 0 20px rgba(0,217,255,0.1);
+        }
+        .chat-input-container input:focus::placeholder {
+            color: #888;
         }
         .chat-input-container input:disabled {
             opacity: 0.5;
@@ -6563,12 +6566,28 @@
                 <div class="summary-toast" id="summaryToast"></div>
                 <div class="toast-container" id="toastContainer"></div>
                 <div class="chat-input-container">
-                    <input type="text" id="chatInput" placeholder="输入消息..." disabled onkeypress="if(event.key==='Enter')sendChatMessage()">
+                    <input type="text" id="chatInput" placeholder="输入消息... (Ctrl+Enter 发送, Esc 清空, Shift+Enter 换行)" disabled onkeydown="handleChatInputKeydown(event)">
                     <button class="btn" id="chatSendBtn" onclick="sendChatMessage()" disabled>发送</button>
                     <button class="btn" id="chatCancelBtn" onclick="cancelChatTurn()" style="display:none;background:#f44336;">取消</button>
                 </div>
             `;
             grid.parentNode.insertBefore(chatCard, grid);
+            
+            // Global shortcut: "/" to focus chat input (when not in an input field)
+            document.addEventListener('keydown', function(e) {
+                // Only trigger if "/" is pressed at the start of an input
+                if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    const target = e.target;
+                    // Only focus if not already in a text input
+                    if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+                        e.preventDefault();
+                        const chatInput = document.getElementById('chatInput');
+                        if (chatInput && !chatInput.disabled) {
+                            chatInput.focus();
+                        }
+                    }
+                }
+            });
             
             // Connect WebSocket
             initChatWebSocket();
@@ -6933,6 +6952,39 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        /// Handle keyboard shortcuts in chat input
+        function handleChatInputKeydown(event) {
+            const input = document.getElementById('chatInput');
+            
+            // Ctrl+Enter or Cmd+Enter: Send message
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                sendChatMessage();
+                return;
+            }
+            
+            // Escape: Clear input
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                input.value = '';
+                input.blur();
+                return;
+            }
+            
+            // Shift+Enter: Allow default behavior (newline)
+            if (event.key === 'Enter' && event.shiftKey) {
+                // Allow default behavior - don't prevent
+                return;
+            }
+            
+            // Regular Enter without modifiers: Send message (but not if message is empty)
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendChatMessage();
+                return;
+            }
         }
 
         function sendChatMessage() {
