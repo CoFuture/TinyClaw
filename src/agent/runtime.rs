@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// Tool call from the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +179,7 @@ impl AgentRuntime {
         let mut turn_log = TurnLog::new();
         let emit_events = self.config.read().emit_events;
         let session_id = context.session_id.clone();
+        let turn_id = Uuid::new_v4().to_string();
 
         // Helper to emit TurnLogUpdated events
         let emit_log_update = |entry: TurnLogEntry| {
@@ -264,6 +266,7 @@ impl AgentRuntime {
                             if let Some(emitter) = &self.event_emitter {
                                 emitter.emit(Event::AssistantText {
                                     session_id: session_id.clone(),
+                                    turn_id: turn_id.clone(),
                                     text: text.clone(),
                                 });
                             }

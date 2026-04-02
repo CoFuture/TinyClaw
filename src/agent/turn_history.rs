@@ -333,6 +333,7 @@ impl TurnHistoryManager {
 
     /// Create a new turn record with full details including token usage (for use from gateway)
     #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
     pub fn record_turn_full(
         _manager: &Arc<TurnHistoryManager>,
         session_id: &str,
@@ -344,6 +345,33 @@ impl TurnHistoryManager {
         token_usage: Option<TokenUsage>,
     ) -> TurnRecord {
         let mut turn = TurnRecord::new(session_id, user_message);
+        turn.response_preview = if response.len() > 500 {
+            format!("{}...", &response[..500])
+        } else {
+            response.to_string()
+        };
+        turn.duration_ms = duration_ms;
+        turn.success = success;
+        turn.tools = tools;
+        turn.token_usage = token_usage;
+        turn
+    }
+
+    /// Create a new turn record with a pre-generated turn_id (for feedback tracking)
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_turn_with_id(
+        _manager: &Arc<TurnHistoryManager>,
+        turn_id: &str,
+        session_id: &str,
+        user_message: &str,
+        response: &str,
+        duration_ms: u64,
+        success: bool,
+        tools: Vec<ToolExecution>,
+        token_usage: Option<TokenUsage>,
+    ) -> TurnRecord {
+        let mut turn = TurnRecord::new(session_id, user_message);
+        turn.id = turn_id.to_string(); // Use pre-generated turn_id
         turn.response_preview = if response.len() > 500 {
             format!("{}...", &response[..500])
         } else {

@@ -2730,6 +2730,47 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.21.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Bug Fix - AgentRuntime Compilation Error** - 修复 `runtime.rs` 编译错误
+  - `AssistantText` 事件缺少 `turn_id` 字段
+  - 添加 `use uuid::Uuid` 导入
+  - 在 `run_turn` 方法中生成 `turn_id`
+  - 在 `AssistantText` 事件发射时传入 `turn_id`
+- **TUI Status Dashboard Command** - TUI 状态面板命令
+  - **新增 `:status` / `:dashboard` 命令** (`state.rs`)：
+    - 在 `TUI_COMMANDS` 中注册命令及 `:dashboard` 别名
+    - 添加 `status_mode: bool` 状态字段
+  - **命令处理** (`app.rs`)：
+    - 实现命令处理逻辑，退出其他面板模式时进入状态模式
+    - Esc 键可退出状态模式
+  - **渲染面板** (`components.rs`)：
+    - `draw_status_panel()` 函数显示关键健康指标
+    - Circuit Breaker 状态（🟢 CLOSED / 🟡 HALF-OPEN / 🔴 OPEN）
+    - Context Health 健康级别（🟢 HEALTHY / 🟡 WARNING / 🔴 CRITICAL / 🛑 EMERGENCY）
+    - Context 利用率百分比（实时更新）
+    - Safety 停止/警告状态
+    - Connection 连接状态
+    - Session ID 显示
+- **Clippy Warnings Fixed** - 修复 clippy 警告
+  - `turn_feedback.rs`：
+    - 移除未使用的 `use std::sync::Arc` 导入
+    - `from_str` 重命名为 `parse_from_str`（避免与标准库 trait 混淆）
+    - `FeedbackRating` 使用 `#[derive(Default)]` 和 `#[default]` 替代手动实现
+    - 为 `emoji`、`empty`、`default_persist_path`、`get_recent_feedback`、`get_positive_turn_ids`、`get_negative_turn_ids`、`total_feedback_count`、`clear_session_feedback`、`clear_all` 添加 `#[allow(dead_code)]`
+  - `turn_history.rs`：
+    - 为 `record_turn_full` 添加 `#[allow(dead_code)]`
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **449 tests 全部通过**
+
+**下一步**: Agent 上下文管理能力增强、Skill 机制优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

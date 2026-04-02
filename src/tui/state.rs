@@ -237,6 +237,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         description: "View session accomplishments",
         category: CommandCategory::Session,
     },
+    TuiCommandMeta {
+        full_name: ":status",
+        aliases: &["dashboard"],
+        description: "View agent health overview",
+        category: CommandCategory::Session,
+    },
     // Connection commands
     TuiCommandMeta {
         full_name: ":rc",
@@ -409,6 +415,8 @@ pub struct AppState {
     pub accomplishments_mode: bool,
     /// Cached accomplishments text for display
     pub accomplishments_data: Option<String>,
+    /// Whether we're in status/dashboard viewing mode
+    pub status_mode: bool,
     /// Whether we're in sessions list viewing mode
     #[allow(dead_code)]
     pub sessions_mode: bool,
@@ -572,6 +580,7 @@ impl Default for AppState {
             scheduled_tasks_data: None,
             accomplishments_mode: false,
             accomplishments_data: None,
+            status_mode: false,
             sessions_mode: false,
             sessions_selected_index: 0,
             sessions_data: Vec::new(),

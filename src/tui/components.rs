@@ -1729,6 +1729,118 @@ pub fn draw_accomplishments_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
     f.render_widget(paragraph, area);
 }
 
+/// Draw the status/dashboard panel - a compact overview of agent health
+pub fn draw_status_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📊 Agent Status ";
+
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    // Circuit Breaker Status
+    let cb_state = &state.circuit_breaker_state;
+    let cb_color = match cb_state.as_str() {
+        "open" => Color::Red,
+        "half_open" => Color::Yellow,
+        _ => Color::Green,
+    };
+    let cb_indicator = match cb_state.as_str() {
+        "open" => "🔴 OPEN",
+        "half_open" => "🟡 HALF-OPEN",
+        _ => "🟢 CLOSED",
+    };
+    lines.push(Line::from(vec![
+        Span::styled("Circuit Breaker: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(cb_indicator, Style::default().fg(cb_color).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+
+    // Context Health
+    let health_level = &state.context_health_level;
+    let health_color = match health_level.as_str() {
+        "Emergency" => Color::Red,
+        "Critical" => Color::Red,
+        "Warning" => Color::Yellow,
+        _ => Color::Green,
+    };
+    let health_indicator = match health_level.as_str() {
+        "Emergency" => "🛑 EMERGENCY",
+        "Critical" => "🔴 CRITICAL",
+        "Warning" => "🟡 WARNING",
+        "Healthy" => "🟢 HEALTHY",
+        _ => "⚪ UNKNOWN",
+    };
+    lines.push(Line::from(vec![
+        Span::styled("Context Health: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(health_indicator, Style::default().fg(health_color).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+
+    // Context Utilization
+    if let Some(util_pct) = state.context_utilization_pct {
+        let util_color = if util_pct >= 90.0 {
+            Color::Red
+        } else if util_pct >= 75.0 {
+            Color::Yellow
+        } else {
+            Color::Green
+        };
+        lines.push(Line::from(vec![
+            Span::styled("Context Usage: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.1}%", util_pct), Style::default().fg(util_color).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    // Safety Status
+    if state.safety_halted {
+        lines.push(Line::from(vec![
+            Span::styled("⚠️ Safety Stopped", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+    } else if let Some(ref warning) = state.last_safety_warning {
+        lines.push(Line::from(vec![
+            Span::styled("⚠️ Safety Warning: ", Style::default().fg(Color::Yellow)),
+            Span::styled(warning, Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    // Connection Status
+    let conn_indicator = if state.connected { "🟢 Connected" } else { "🔴 Disconnected" };
+    let conn_color = if state.connected { Color::Green } else { Color::Red };
+    lines.push(Line::from(vec![
+        Span::styled("Connection: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(conn_indicator, Style::default().fg(conn_color)),
+    ]));
+    lines.push(Line::from(""));
+
+    // Session Info
+    if let Some(ref session_id) = state.current_session_id {
+        lines.push(Line::from(vec![
+            Span::styled("Session: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(session_id.as_str(), Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :status again to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the turn summaries panel
 pub fn draw_turn_summary_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title_text = " 📋 Turn Summaries ";
