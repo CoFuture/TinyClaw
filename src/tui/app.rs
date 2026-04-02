@@ -680,6 +680,26 @@ impl TuiApp {
                 debug!("Scheduled tasks loaded: {} tasks", tasks.len());
                 self.state.scheduled_tasks_data = Some(tasks);
             }
+            TuiGatewayEvent::UrgentAdvice { session_id, advice } => {
+                // Display urgent advice as system messages in the chat
+                use crate::types::Message;
+                if self.state.current_session_id.as_ref() == Some(&session_id) {
+                    for item in &advice {
+                        let severity_marker = if item.severity >= 3 { "🔴" } else if item.severity >= 2 { "🟡" } else { "🟢" };
+                        let urgent_marker = if item.is_urgent { " ⚡URGENT" } else { "" };
+                        let content = format!("{} {} {}{}: {}", 
+                            severity_marker, 
+                            item.category, 
+                            item.title,
+                            urgent_marker,
+                            item.suggestion
+                        );
+                        if let Some(history) = self.state.session_histories.get_mut(&session_id) {
+                            history.add_message(Message::system(&content));
+                        }
+                    }
+                }
+            }
         }
     }
 

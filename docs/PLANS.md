@@ -2512,6 +2512,44 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.15.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **Urgent Context Advice 实时显示** - 修复 Context Advisor 紧急建议未被显示的问题
+  - **问题诊断**：系统发射 `UrgentContextAdvice` 事件但 WebUI 和 TUI 均未处理
+    - `messages.rs` 中 `handle_agent_turn` 会发射 `Event::UrgentContextAdvice`（v13.2.0 引入）
+    - 但 admin.html 中缺少 `showToast` 函数实现（函数被调用但从未定义）
+    - `context.urgent_advice` SSE 事件未注册到事件类型列表
+  - **WebUI Toast 通知系统修复** (`examples/admin.html`)：
+    - 新增 `.toast-container` CSS 样式：固定右下角、垂直堆叠、动画过渡
+    - 新增 `.toast` 及变体样式：`.info`/`.success`/`.error`/`.warning`/`.urgent`
+    - 新增 `.urgent` 样式：红色渐变背景、左侧橙色边框、脉冲动画
+    - 新增 `showToast(message, type, title)` 函数：支持类型和可选标题、4-6秒自动隐藏
+    - 新增 `#toastContainer` HTML 容器
+  - **`context.urgent_advice` SSE 事件处理** (`examples/admin.html`)：
+    - 添加到 `eventTypes` 数组
+    - 在 `handleSseChatEvent` 中处理：为每条建议显示红色 urgent toast
+    - 显示格式：`🔴/🟡/🟢 分类 ⚡URGENT: 建议内容`
+  - **`formatEventType` 映射增强**：
+    - 添加 `context.urgent_advice` → "紧急建议"
+  - **TUI SSE 事件解析** (`gateway_client.rs`)：
+    - 新增 `TuiGatewayEvent::UrgentAdvice { session_id, advice }` 事件变体
+    - 新增 `UrgentAdviceItemDisplay` 结构：id/category/severity/is_urgent/title/explanation/suggestion/trigger_pattern
+    - 新增 `context.urgent_advice` SSE 事件解析逻辑
+  - **TUI 事件处理** (`app.rs`)：
+    - 在 `handle_gateway_event` 中处理 `UrgentAdvice` 事件
+    - 作为系统消息显示在聊天区域
+    - 格式：`🔴/🟡/🟢 分类 标题 ⚡URGENT: 建议内容`
+- **代码质量**：
+  - cargo clippy 1 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段）
+  - cargo test **427 tests 全部通过**
+
+**下一步**: 更多 Agent 能力增强、交互体验优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

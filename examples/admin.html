@@ -1426,6 +1426,63 @@
             z-index: 100;
             white-space: nowrap;
         }
+        /* General toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 320px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateX(20px);
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: auto;
+            line-height: 1.4;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .toast.info {
+            background: #3b82f6;
+            color: #fff;
+        }
+        .toast.success {
+            background: #22c55e;
+            color: #fff;
+        }
+        .toast.error {
+            background: #ef4444;
+            color: #fff;
+        }
+        .toast.warning {
+            background: #f97316;
+            color: #fff;
+        }
+        .toast.urgent {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            border-left: 4px solid #fbbf24;
+            animation: toast-pulse 1s ease-in-out infinite;
+        }
+        @keyframes toast-pulse {
+            0%, 100% { box-shadow: 0 4px 12px rgba(239,68,68,0.3); }
+            50% { box-shadow: 0 4px 20px rgba(239,68,68,0.6); }
+        }
+        .toast-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
         .message {
             margin-bottom: 12px;
             padding: 12px 16px;
@@ -6201,6 +6258,7 @@
                     <div class="message notice">欢迎使用 TinyClaw AI 对话！请在下方输入消息开始聊天。</div>
                 </div>
                 <div class="summary-toast" id="summaryToast"></div>
+                <div class="toast-container" id="toastContainer"></div>
                 <div class="chat-input-container">
                     <input type="text" id="chatInput" placeholder="输入消息..." disabled onkeypress="if(event.key==='Enter')sendChatMessage()">
                     <button class="btn" id="chatSendBtn" onclick="sendChatMessage()" disabled>发送</button>
@@ -6817,6 +6875,14 @@
                     badge.textContent = levelEmoji + ' ' + levelDisplay;
                     badge.style.background = colors[levelClass] || '#22c55e';
                 }
+            } else if (eventType === 'context.urgent_advice' && data.session_id && data.advice) {
+                // Urgent context advice event - show prominent toast for each urgent item
+                for (const item of data.advice) {
+                    const severityIcon = item.severity >= 3 ? '🔴' : (item.severity >= 2 ? '🟡' : '🟢');
+                    const urgentFlag = item.is_urgent ? ' ⚡URGENT' : '';
+                    const title = severityIcon + ' ' + (item.category || 'Advice') + urgentFlag;
+                    showToast(item.suggestion || item.title, 'urgent', title);
+                }
             } else if (eventType === 'session.quality' && data.session_id) {
                 // Session quality event - update quality panel in real-time
                 updateQualityPanel(data);
@@ -7242,6 +7308,41 @@
             }, 3000);
         }
         
+        /// Show a general toast notification
+        /// type: 'info' | 'success' | 'error' | 'warning' | 'urgent'
+        /// title: optional bold title
+        function showToast(message, type, title) {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + (type || 'info');
+            
+            let content = '';
+            if (title) {
+                content += '<div class="toast-title">' + title + '</div>';
+            }
+            content += message;
+            toast.innerHTML = content;
+            
+            container.appendChild(toast);
+            
+            // Trigger reflow and add show class
+            toast.offsetHeight; // Force reflow
+            toast.classList.add('show');
+            
+            // Auto-hide after 4 seconds (urgent toasts stay 6 seconds)
+            const hideDelay = type === 'urgent' ? 6000 : 4000;
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300); // Wait for transition
+            }, hideDelay);
+        }
+        
         /// Update the quality panel in real-time from SSE event
         function updateQualityPanel(data) {
             const panel = document.getElementById('sessionQualityPanel');
@@ -7304,7 +7405,7 @@
                     'connected', 'turn.started', 'turn.thinking', 'turn.ended', 'turn.usage', 'turn.cancelled', 'turn.summary',
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
-                    'context.summarized', 'context.health', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
+                    'context.summarized', 'context.health', 'context.urgent_advice', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
                     'agent.performance_insights',
                     'scheduled.created', 'scheduled.fired', 'scheduled.failed', 'scheduled.updated', 'scheduled.deleted'
                 ];
@@ -7453,6 +7554,7 @@
                 'turn.summary': 'Turn总结',
                 'context.summarized': '上下文摘要',
                 'context.health': '上下文健康',
+                'context.urgent_advice': '紧急建议',
                 'assistant.text': 'AI回复',
                 'assistant.tool_use': '工具调用',
                 'action.plan_preview': '执行计划预览',

@@ -129,6 +129,22 @@ pub enum TuiGatewayEvent {
     AdvisorDataLoaded { data: ContextAdvisorDisplay },
     /// Scheduled tasks loaded (from :tasks command)
     ScheduledTasksLoaded { tasks: Vec<ScheduledTaskDisplay> },
+    /// Urgent context advice from SSE (high priority advice)
+    UrgentAdvice { session_id: String, advice: Vec<UrgentAdviceItemDisplay> },
+}
+
+/// Urgent advice item for TUI display
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct UrgentAdviceItemDisplay {
+    pub id: String,
+    pub category: String,
+    pub severity: u8,
+    pub is_urgent: bool,
+    pub title: String,
+    pub explanation: String,
+    pub suggestion: String,
+    pub trigger_pattern: String,
 }
 
 /// Context advisor data for TUI display
@@ -653,6 +669,29 @@ impl TuiGatewayClient {
                                 summarization_count,
                                 recommendations_count,
                             });
+                        }
+                    }
+                    "context.urgent_advice" => {
+                        if let Some(params) = resp.params {
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let advice: Vec<UrgentAdviceItemDisplay> = params.get("advice")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|item| {
+                                        Some(UrgentAdviceItemDisplay {
+                                            id: item.get("id")?.as_str()?.to_string(),
+                                            category: item.get("category")?.as_str()?.to_string(),
+                                            severity: item.get("severity")?.as_u64().unwrap_or(1) as u8,
+                                            is_urgent: item.get("is_urgent").and_then(|v| v.as_bool()).unwrap_or(false),
+                                            title: item.get("title")?.as_str()?.to_string(),
+                                            explanation: item.get("explanation")?.as_str()?.to_string(),
+                                            suggestion: item.get("suggestion")?.as_str()?.to_string(),
+                                            trigger_pattern: item.get("trigger_pattern")?.as_str()?.to_string(),
+                                        })
+                                    }).collect()
+                                })
+                                .unwrap_or_default();
+                            let _ = event_tx.send(TuiGatewayEvent::UrgentAdvice { session_id, advice });
                         }
                     }
                     "assistant.text" => {
