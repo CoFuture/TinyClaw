@@ -2628,6 +2628,47 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.18.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **WebUI Session Accomplishments Panel** - 网页界面显示会话成果追踪面板
+  - **新增 CSS 样式** (`examples/admin.html`)：
+    - `.accomplishments-panel` - 面板布局
+    - `.accomplishments-stats-grid` - 统计卡片网格
+    - `.accomplishment-stat-card` - 统计卡片（files/tasks/problems 变体）
+    - `.accomplishment-list` - 成果列表容器
+    - `.accomplishment-item` - 单个成果卡片
+    - `.accomplishment-type-badge` - 成果类型徽章（9种类型，不同颜色）
+    - `.accomplishment-confidence` - 置信度显示
+    - `.accomplishment-evidence` - 证据/资源显示
+    - `.accomplishments-text-summary` - 文本摘要样式
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 🏆 Session 成果面板：会话选择下拉框、刷新按钮
+    - 统计数据卡片：文件修改数、任务完成数、问题数、成功率、活跃 Turns
+    - 工具使用统计：显示 Top 10 工具及成功率
+    - 成果列表：按类型分类，显示描述、证据、可信度、Turn ID
+  - **JavaScript 函数**：
+    - `accomplishmentsData` - 存储当前会话成果数据
+    - `getAccomplishmentTypeEmoji()` / `getAccomplishmentTypeName()` - 类型显示
+    - `getConfidenceClass()` - 置信度等级样式
+    - `loadAccomplishments(sessionId)` - 从 API 加载成果
+    - `renderAccomplishments()` - 渲染成果面板
+    - `refreshAccomplishmentsSessionList()` - 刷新会话下拉列表
+  - **SSE 事件集成**：
+    - `turn.summary` 事件触发时自动刷新当前会话成果面板
+    - 实时追踪新产生的成果
+  - **`refreshData()` 集成**：
+    - 页面刷新时自动加载成果面板
+- **代码质量**：
+  - cargo clippy 5 警告（pre-existing: `ScheduledTaskDisplay` 未使用字段、`session_accomplishments.rs` 未使用方法）
+  - cargo test **438 tests 全部通过**
+
+**下一步**: 跨 Session 成果关联、成果导出、更多交互优化
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

@@ -980,6 +980,96 @@
         }
         .turn-summary-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
 
+        /* Session Accomplishments Panel */
+        .accomplishments-panel { margin-top: 10px; }
+        .accomplishments-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .accomplishment-stat-card {
+            background: rgba(0,217,255,0.1);
+            border: 1px solid rgba(0,217,255,0.3);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .accomplishment-stat-card.files { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); }
+        .accomplishment-stat-card.tasks { background: rgba(186,104,200,0.1); border-color: rgba(186,104,200,0.3); }
+        .accomplishment-stat-card.problems { background: rgba(249,115,22,0.1); border-color: rgba(249,115,22,0.3); }
+        .accomplishment-stat-value { font-size: 22px; font-weight: bold; color: #00d9ff; }
+        .accomplishment-stat-card.files .accomplishment-stat-value { color: #22c55e; }
+        .accomplishment-stat-card.tasks .accomplishment-stat-value { color: #ba68c8; }
+        .accomplishment-stat-card.problems .accomplishment-stat-value { color: #f97316; }
+        .accomplishment-stat-label { font-size: 11px; color: #888; margin-top: 4px; }
+        .accomplishment-list { max-height: 400px; overflow-y: auto; }
+        .accomplishment-item {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+        .accomplishment-item-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .accomplishment-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .accomplishment-type-badge.file_modified { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .accomplishment-type-badge.task_completed { background: rgba(186,104,200,0.2); color: #ba68c8; }
+        .accomplishment-type-badge.decision_made { background: rgba(250,204,21,0.2); color: #facc15; }
+        .accomplishment-type-badge.information_learned { background: rgba(0,217,255,0.2); color: #00d9ff; }
+        .accomplishment-type-badge.problem_identified { background: rgba(249,115,22,0.2); color: #f97316; }
+        .accomplishment-type-badge.problem_fixed { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .accomplishment-type-badge.code_analyzed { background: rgba(99,102,241,0.2); color: #818cf8; }
+        .accomplishment-type-badge.config_changed { background: rgba(20,184,166,0.2); color: #2dd4bf; }
+        .accomplishment-type-badge.action_performed { background: rgba(251,146,60,0.2); color: #fb923c; }
+        .accomplishment-confidence {
+            font-size: 11px;
+            color: #888;
+        }
+        .accomplishment-confidence.high { color: #22c55e; }
+        .accomplishment-confidence.medium { color: #facc15; }
+        .accomplishment-confidence.low { color: #ef4444; }
+        .accomplishment-description { font-size: 13px; color: #e2e8f0; margin-bottom: 6px; }
+        .accomplishment-evidence {
+            font-size: 11px;
+            color: #888;
+            background: rgba(0,0,0,0.2);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .accomplishment-turn {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .accomplishments-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+        .accomplishments-text-summary {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
         /* Modal */
         .modal-overlay {
             display: none;
@@ -2400,6 +2490,21 @@
             </div>
         </div>
 
+        <!-- Session Accomplishments Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🏆 Session 成果 <span class="tool-count-badge" id="accomplishmentsCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">追踪会话中的工作成果，包括文件修改、任务完成、问题修复等</p>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select id="accomplishmentsSession" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; min-width: 150px;" onchange="loadAccomplishments()">
+                    <option value="">选择会话</option>
+                </select>
+                <button class="btn" onclick="loadAccomplishments()">🔄 刷新</button>
+            </div>
+            <div id="accomplishmentsContent">
+                <div class="accomplishments-no-data">选择会话以查看成果数据。</div>
+            </div>
+        </div>
+
         <!-- Agent Tools Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>🛠️ 可用工具 <span class="tool-count-badge" id="toolCount">-</span></h2>
@@ -2974,6 +3079,13 @@
                     loadSummaryHistory();
                 } catch (e) {
                     // Summary history API might not be available
+                }
+
+                // Fetch accomplishments session list and load current
+                try {
+                    refreshAccomplishmentsSessionList();
+                } catch (e) {
+                    // Accomplishments API might not be available
                 }
                 
                 // Fetch summarizer config
@@ -5000,6 +5112,197 @@
         }
 
         // ============================================================
+        // Session Accomplishments Functions
+        // ============================================================
+
+        // Store accomplishments data
+        let accomplishmentsData = null;
+
+        function getAccomplishmentTypeEmoji(type) {
+            const emojis = {
+                'file_modified': '📄',
+                'task_completed': '✅',
+                'decision_made': '💡',
+                'information_learned': '📚',
+                'problem_identified': '⚠️',
+                'problem_fixed': '🔧',
+                'code_analyzed': '🔍',
+                'config_changed': '⚙️',
+                'action_performed': '🎯'
+            };
+            return emojis[type] || '📌';
+        }
+
+        function getAccomplishmentTypeName(type) {
+            const names = {
+                'file_modified': '文件修改',
+                'task_completed': '任务完成',
+                'decision_made': '决策',
+                'information_learned': '信息',
+                'problem_identified': '发现问题',
+                'problem_fixed': '问题修复',
+                'code_analyzed': '代码分析',
+                'config_changed': '配置变更',
+                'action_performed': '操作'
+            };
+            return names[type] || type;
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.8) return 'high';
+            if (confidence >= 0.5) return 'medium';
+            return 'low';
+        }
+
+        async function loadAccomplishments() {
+            const sessionSelect = document.getElementById('accomplishmentsSession');
+            const sessionId = sessionSelect.value;
+            const content = document.getElementById('accomplishmentsContent');
+
+            if (!sessionId) {
+                content.innerHTML = '<div class="accomplishments-no-data">选择会话以查看成果数据。</div>';
+                document.getElementById('accomplishmentsCount').textContent = '-';
+                return;
+            }
+
+            content.innerHTML = '<div class="accomplishments-no-data">加载中...</div>';
+
+            try {
+                const response = await fetch(API_BASE + '/api/sessions/' + encodeURIComponent(sessionId) + '/accomplishments');
+                const data = await response.json();
+                accomplishmentsData = data;
+                renderAccomplishments();
+            } catch (error) {
+                console.error('Failed to load accomplishments:', error);
+                content.innerHTML = '<div class="accomplishments-no-data">加载失败: ' + escapeHtml(error.message) + '</div>';
+            }
+        }
+
+        function renderAccomplishments() {
+            const content = document.getElementById('accomplishmentsContent');
+
+            if (!accomplishmentsData || !accomplishmentsData.success) {
+                content.innerHTML = '<div class="accomplishments-no-data">暂无成果数据。</div>';
+                document.getElementById('accomplishmentsCount').textContent = '0';
+                return;
+            }
+
+            const data = accomplishmentsData;
+            const accomplishments = data.accomplishments || [];
+            const stats = data.stats || {};
+
+            // Update count badge
+            document.getElementById('accomplishmentsCount').textContent = accomplishments.length;
+
+            if (accomplishments.length === 0) {
+                content.innerHTML = '<div class="accomplishments-no-data">暂无成果记录。开始与 Agent 对话以自动追踪成果。</div>';
+                return;
+            }
+
+            let html = '';
+
+            // Stats Grid
+            const filesCount = stats.by_type ? (stats.by_type['file_modified'] || 0) : 0;
+            const tasksCount = stats.by_type ? (stats.by_type['task_completed'] || 0) : 0;
+            const problemsCount = stats.by_type ? ((stats.by_type['problem_identified'] || 0) + (stats.by_type['problem_fixed'] || 0)) : 0;
+            const successRate = stats.success_rate ? (stats.success_rate * 100).toFixed(0) + '%' : 'N/A';
+
+            html += '<div class="accomplishments-stats-grid">';
+            html += '<div class="accomplishment-stat-card files">\
+                <div class="accomplishment-stat-value">' + filesCount + '</div>\
+                <div class="accomplishment-stat-label">📄 文件修改</div>\
+            </div>';
+            html += '<div class="accomplishment-stat-card tasks">\
+                <div class="accomplishment-stat-value">' + tasksCount + '</div>\
+                <div class="accomplishment-stat-label">✅ 任务完成</div>\
+            </div>';
+            html += '<div class="accomplishment-stat-card problems">\
+                <div class="accomplishment-stat-value">' + problemsCount + '</div>\
+                <div class="accomplishment-stat-label">⚠️ 问题</div>\
+            </div>';
+            html += '<div class="accomplishment-stat-card">\
+                <div class="accomplishment-stat-value">' + successRate + '</div>\
+                <div class="accomplishment-stat-label">🎯 成功率</div>\
+            </div>';
+            html += '<div class="accomplishment-stat-card">\
+                <div class="accomplishment-stat-value">' + (stats.turns_with_accomplishments || 0) + '</div>\
+                <div class="accomplishment-stat-label">💬 活跃 Turns</div>\
+            </div>';
+            html += '</div>';
+
+            // Tool usage summary if available
+            if (stats.tool_usage && Object.keys(stats.tool_usage).length > 0) {
+                html += '<div style="margin-bottom: 15px;">';
+                html += '<h4 style="color: #00d9ff; font-size: 13px; margin-bottom: 8px;">🔧 工具使用统计</h4>';
+                html += '<div style="display: flex; flex-wrap: wrap; gap: 4px;">';
+                Object.entries(stats.tool_usage).slice(0, 10).forEach(([tool, count]) => {
+                    const successCount = stats.tool_success ? (stats.tool_success[tool] || 0) : 0;
+                    const rate = count > 0 ? ((successCount / count) * 100).toFixed(0) : 0;
+                    html += '<span style="background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.2); border-radius: 4px; padding: 2px 8px; font-size: 11px;">';
+                    html += escapeHtml(tool) + ': ' + count + ' <span style="color: ' + (rate >= 80 ? '#22c55e' : rate >= 50 ? '#facc15' : '#ef4444') + ';">(' + rate + '%)</span>';
+                    html += '</span>';
+                });
+                html += '</div></div>';
+            }
+
+            // Accomplishments list
+            html += '<div class="accomplishment-list">';
+            accomplishments.forEach(acc => {
+                const type = acc.acplishment_type || acc.accomplishment_type || acc.type || 'unknown';
+                const typeClass = type.replace(/_/g, '-');
+                const confidence = acc.confidence || 0.5;
+                const confClass = getConfidenceClass(confidence);
+
+                html += '<div class="accomplishment-item">';
+                html += '<div class="accomplishment-item-header">';
+                html += '<span class="accomplishment-type-badge ' + typeClass + '">';
+                html += getAccomplishmentTypeEmoji(type) + ' ' + getAccomplishmentTypeName(type);
+                html += '</span>';
+                html += '<span class="accomplishment-confidence ' + confClass + '">';
+                html += '置信度: ' + (confidence * 100).toFixed(0) + '%';
+                html += '</span>';
+                html += '</div>';
+                html += '<div class="accomplishment-description">' + escapeHtml(acc.description || acc.desc || '') + '</div>';
+                if (acc.evidence && acc.evidence.length > 0) {
+                    html += '<div class="accomplishment-evidence">';
+                    html += acc.evidence.map(e => escapeHtml(e)).join('\n');
+                    html += '</div>';
+                }
+                html += '<div class="accomplishment-turn">Turn: ' + escapeHtml(acc.turn_id || acc.turnId || 'N/A') + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+
+            content.innerHTML = html;
+        }
+
+        async function refreshAccomplishmentsSessionList() {
+            const sessionSelect = document.getElementById('accomplishmentsSession');
+            const currentValue = sessionSelect.value;
+
+            try {
+                const sessions = await fetchJSON(API_BASE + '/api/sessions');
+                sessionSelect.innerHTML = '<option value="">选择会话</option>';
+                sessions.forEach(session => {
+                    const opt = document.createElement('option');
+                    opt.value = session.sessionId;
+                    opt.textContent = (session.label || session.sessionId || 'N/A').substring(0, 30);
+                    sessionSelect.appendChild(opt);
+                });
+
+                if (currentValue && sessions.some(s => s.sessionId === currentValue)) {
+                    sessionSelect.value = currentValue;
+                } else if (sessions.length > 0) {
+                    sessionSelect.value = sessions[0].sessionId;
+                    // Auto-load first session's accomplishments
+                    loadAccomplishments();
+                }
+            } catch (error) {
+                console.error('Failed to refresh session list:', error);
+            }
+        }
+
+        // ============================================================
         // Conversation Summary Functions
         // ============================================================
         
@@ -6907,6 +7210,11 @@
             } else if (eventType === 'turn.summary' && data.session_id) {
                 // Turn summary event - add to the turn summaries list and update panel
                 addTurnSummary(data);
+                // Also refresh accomplishments panel if viewing this session
+                const accSessionSelect = document.getElementById('accomplishmentsSession');
+                if (accSessionSelect && accSessionSelect.value === data.session_id) {
+                    loadAccomplishments();
+                }
             }
         }
         
