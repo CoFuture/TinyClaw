@@ -2816,6 +2816,38 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.23.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Agent Self-Awareness Context Enhancement** - 将自我评估洞察注入 Agent 上下文
+  - **新增 `generate_self_awareness_prompt()` 方法** (`agent/self_evaluation.rs`)：
+    - `analyze_session_patterns()` - 分析当前会话的评估模式
+      - 计算各维度平均分（Task Success、Tool Selection、Efficiency、Response Quality）
+      - 识别薄弱维度并提供改进建议
+      - 识别强项维度并建议发挥优势
+    - `analyze_global_patterns()` - 分析跨会话的全局评估模式
+      - 识别频繁出现的弱点（≥2次评估中出现）
+      - 识别频繁出现的强项（≥2次评估中出现）
+      - 计算性能趋势（improving/stable/declining）
+  - **上下文集成** (`gateway/messages.rs`)：
+    - 在 `generate_context_prompt()` 中新增 "Self-Awareness" 部分
+    - 在 Session Instructions 之后注入自我评估洞察
+    - 仅在有评估数据时添加（避免无数据时冗余）
+  - **效果**：
+    - Agent 在每次 Turn 时都能获得基于历史评估的自我改进建议
+    - 了解自身薄弱维度并主动改进
+    - 了解自身强项并发挥优势
+    - 跟踪性能趋势并调整策略
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **449 tests 全部通过**
+
+**下一步**: 更多 Agent 能力增强、交互体验优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

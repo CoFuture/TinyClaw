@@ -650,6 +650,178 @@ impl SelfEvaluationManager {
             }
         }
     }
+
+    /// Generate a self-awareness prompt for agent context
+    /// This provides the agent with insights about its own performance patterns
+    /// to help it improve its behavior in future turns
+    pub fn generate_self_awareness_prompt(&self, session_id: &str) -> String {
+        let evaluations = self.evaluations.read();
+        
+        // Get evaluations for this session
+        let session_evals: Vec<&SelfEvaluation> = evaluations
+            .iter()
+            .filter(|e| e.session_id == session_id)
+            .collect();
+        
+        // Get recent evaluations (last 10 across all sessions)
+        let recent_evals: Vec<&SelfEvaluation> = evaluations
+            .iter()
+            .rev()
+            .take(10)
+            .collect();
+        
+        if session_evals.is_empty() && recent_evals.is_empty() {
+            return String::new();
+        }
+        
+        let mut parts: Vec<String> = Vec::new();
+        
+        // Session-specific insights
+        if !session_evals.is_empty() {
+            let session_part = self.analyze_session_patterns(&session_evals);
+            if !session_part.is_empty() {
+                parts.push(session_part);
+            }
+        }
+        
+        // Global patterns from recent evaluations
+        if recent_evals.len() >= 3 {
+            let global_part = self.analyze_global_patterns(&recent_evals);
+            if !global_part.is_empty() {
+                parts.push(global_part);
+            }
+        }
+        
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!("## Self-Awareness\n\n{}\n", parts.join("\n\n"))
+        }
+    }
+    
+    /// Analyze patterns in session-specific evaluations
+    fn analyze_session_patterns(&self, evals: &[&SelfEvaluation]) -> String {
+        if evals.is_empty() {
+            return String::new();
+        }
+        
+        let mut suggestions: Vec<String> = Vec::new();
+        
+        // Calculate average scores per dimension
+        let mut dim_totals: HashMap<String, (f64, usize)> = HashMap::new();
+        for eval in evals {
+            for dim in &eval.dimension_scores {
+                let entry = dim_totals.entry(dim.dimension.display_name().to_string()).or_insert((0.0, 0));
+                entry.0 += dim.score;
+                entry.1 += 1;
+            }
+        }
+        
+        // Find weakest dimensions (needs improvement)
+        let mut dim_averages: Vec<(String, f64)> = dim_totals
+            .into_iter()
+            .map(|(name, (sum, count))| (name, sum / count as f64))
+            .collect();
+        dim_averages.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Suggest improvements for weak dimensions
+        for (dim_name, avg_score) in dim_averages.iter().take(2) {
+            if *avg_score < 0.7 {
+                let advice: String = match dim_name.as_str() {
+                    "Task Success" => "Focus on completing the user's actual request. Verify you understand the task before proceeding.".to_string(),
+                    "Tool Selection" => "Consider if the chosen tools are the most appropriate for the task. Check if simpler tools could work.".to_string(),
+                    "Efficiency" => "Try to accomplish tasks with fewer tool calls. Avoid redundant operations.".to_string(),
+                    "Response Quality" => "Provide more complete and well-structured responses. Ensure clarity.".to_string(),
+                    _ => format!("Work on improving your {}", dim_name),
+                };
+                suggestions.push(format!("- **{}** ({}%): {}", dim_name, (*avg_score * 100.0) as i32, advice));
+            }
+        }
+        
+        // Find strongest dimensions (leverage these)
+        let strong_dims: Vec<(String, f64)> = dim_averages
+            .iter()
+            .rev()
+            .take(2)
+            .filter(|(_, avg)| *avg >= 0.7)
+            .cloned()
+            .collect();
+        
+        if !strong_dims.is_empty() {
+            suggestions.push(format!("Your strengths in this session: {}",
+                strong_dims.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>().join(", ")));
+        }
+        
+        if suggestions.is_empty() {
+            String::new()
+        } else {
+            format!("### This Session\n\n{}\n", suggestions.join("\n"))
+        }
+    }
+    
+    /// Analyze patterns across recent global evaluations
+    fn analyze_global_patterns(&self, evals: &[&SelfEvaluation]) -> String {
+        if evals.len() < 3 {
+            return String::new();
+        }
+        
+        // Count common strengths and weaknesses
+        let mut strength_counts: HashMap<String, usize> = HashMap::new();
+        let mut weakness_counts: HashMap<String, usize> = HashMap::new();
+        
+        for eval in evals {
+            for s in &eval.strengths {
+                *strength_counts.entry(s.clone()).or_insert(0) += 1;
+            }
+            for w in &eval.weaknesses {
+                *weakness_counts.entry(w.clone()).or_insert(0) += 1;
+            }
+        }
+        
+        let mut advice: Vec<String> = Vec::new();
+        
+        // Common weaknesses to avoid (appearing in at least 2 evaluations)
+        let critical_weaknesses: Vec<String> = weakness_counts
+            .iter()
+            .filter(|(_, count)| **count >= 2)
+            .map(|(w, _)| w.clone())
+            .collect();
+        
+        if !critical_weaknesses.is_empty() {
+            advice.push(format!("Persistent weaknesses to address: {}", critical_weaknesses.join(", ")));
+        }
+        
+        // Common strengths to leverage (appearing in at least 2 evaluations)
+        let key_strengths: Vec<String> = strength_counts
+            .iter()
+            .filter(|(_, count)| **count >= 2)
+            .map(|(s, _)| s.clone())
+            .collect();
+        
+        if !key_strengths.is_empty() {
+            advice.push(format!("Consistent strengths to leverage: {}", key_strengths.join(", ")));
+        }
+        
+        // Calculate trend (comparing recent to older evaluations)
+        let mid_point = evals.len() / 2;
+        let recent: f64 = evals[..mid_point].iter().map(|e| e.overall_score).sum::<f64>() / mid_point as f64;
+        let older: f64 = evals[mid_point..].iter().map(|e| e.overall_score).sum::<f64>() / (evals.len() - mid_point) as f64;
+        
+        let trend = recent - older;
+        if trend > 0.1 {
+            advice.push(format!("📈 Performance trend: Improving (+{:.0}%)", trend * 100.0));
+        } else if trend < -0.1 {
+            advice.push(format!("📉 Performance trend: Declining ({:.0}%)", trend * 100.0));
+        } else {
+            advice.push("➡️ Performance trend: Stable".to_string());
+        }
+        
+        if advice.is_empty() {
+            String::new()
+        } else {
+            format!("### Recent Performance\n\n{}\n", advice.join("\n"))
+        }
+    }
 }
 
 impl Default for SelfEvaluationManager {

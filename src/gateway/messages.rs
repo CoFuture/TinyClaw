@@ -480,6 +480,12 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
         }
     }
 
+    // 4b. Self-Awareness - insights from self-evaluation to help agent improve
+    let self_awareness = ctx.self_evaluation_manager.generate_self_awareness_prompt(session_key);
+    if !self_awareness.is_empty() {
+        parts.push(self_awareness);
+    }
+
     if parts.is_empty() {
         None
     } else {
