@@ -2669,6 +2669,39 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.19.0 (已完成 ✅)
+
+**日期**: 2026-04-02
+
+**完成事项**:
+- **Session Accomplishments Cross-Session API Enhancement** - 跨会话成果管理 API 增强
+  - **新增 `SessionWithAccomplishmentStats` 结构** (`session_accomplishments.rs`)：
+    - `session_id` - 会话 ID
+    - `total_count` - 成果总数
+    - `turns_with_accomplishments` - 有成果的 Turns 数
+    - `files_modified_count` - 修改的文件数
+    - `tasks_completed_count` - 完成的任务数
+    - `problems_fixed_count` - 修复的问题数
+  - **新增 `get_sessions_with_stats()` 方法** (`SessionAccomplishmentsManager`)：
+    - 返回所有会话及其成果统计信息
+    - 用于列出所有有成果记录的会话
+  - **HTTP API 新增端点** (`routes.rs`)：
+    - `DELETE /api/sessions/{session_id}/accomplishments` - 清除指定会话的成果记录
+    - `GET /api/accomplishments/sessions` - 获取所有会话的成果统计列表
+  - **`get_sessions()` 方法移除**：
+    - 移除未使用的 `get_sessions()` 方法
+    - `get_sessions_with_stats()` 提供更丰富的功能替代
+- **代码质量清理**：
+  - 为 `AccomplishmentType`、`Accomplishment`、`SessionAccomplishments`、`SessionAccomplishmentsManager` 添加 `#[allow(dead_code)]` 标注
+  - 为 `ScheduledTaskDisplay` 添加 `#[allow(dead_code)]` 标注
+  - 保持辅助方法存在以备将来使用
+- cargo clippy **0 警告**
+- cargo test **438 tests 全部通过**
+
+**下一步**: Agent 能力增强、交互体验优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

@@ -223,6 +223,7 @@ pub struct SessionNoteInfo {
 }
 
 /// Scheduled task display for TUI
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ScheduledTaskDisplay {
     pub id: String,

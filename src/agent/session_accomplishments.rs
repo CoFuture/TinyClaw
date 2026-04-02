@@ -55,6 +55,7 @@ pub enum AccomplishmentType {
     ActionPerformed,
 }
 
+#[allow(dead_code)]
 impl AccomplishmentType {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -119,6 +120,7 @@ pub struct Accomplishment {
     pub confidence: f32,
 }
 
+#[allow(dead_code)]
 impl Accomplishment {
     /// Create a new accomplishment
     pub fn new(
@@ -162,6 +164,17 @@ pub struct SessionAccomplishmentStats {
     pub files_modified: Vec<String>,
     /// Success rate (0.0-1.0)
     pub success_rate: f32,
+}
+
+/// Session info with accomplishment stats for listing (used by API)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionWithAccomplishmentStats {
+    pub session_id: String,
+    pub total_count: usize,
+    pub turns_with_accomplishments: usize,
+    pub files_modified_count: usize,
+    pub tasks_completed_count: usize,
+    pub problems_fixed_count: usize,
 }
 
 impl SessionAccomplishmentStats {
@@ -305,6 +318,7 @@ pub struct SessionAccomplishments {
     started_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 impl SessionAccomplishments {
     /// Create new accomplishments tracker for a session
     pub fn new(session_id: String) -> Self {
@@ -474,6 +488,7 @@ pub struct SessionAccomplishmentsManager {
     data_dir: PathBuf,
 }
 
+#[allow(dead_code)]
 impl SessionAccomplishmentsManager {
     /// Create a new manager
     pub fn new(data_dir: PathBuf) -> Self {
@@ -514,10 +529,21 @@ impl SessionAccomplishmentsManager {
         sessions.get(session_id).map(|ac| ac.read().generate_summary())
     }
 
-    /// Get all session IDs with accomplishments
-    pub fn get_sessions(&self) -> Vec<String> {
+    /// Get all sessions with their accomplishment stats
+    pub fn get_sessions_with_stats(&self) -> Vec<SessionWithAccomplishmentStats> {
         let sessions = self.sessions.read();
-        sessions.keys().cloned().collect()
+        sessions.iter().map(|(session_id, ac_locked)| {
+            let ac = ac_locked.read();
+            let stats = ac.generate_stats();
+            SessionWithAccomplishmentStats {
+                session_id: session_id.clone(),
+                total_count: stats.total_count,
+                turns_with_accomplishments: stats.turns_with_accomplishments,
+                files_modified_count: ac.extract_file_paths().len(),
+                tasks_completed_count: *stats.by_type.get("task_completed").unwrap_or(&0),
+                problems_fixed_count: *stats.by_type.get("problem_fixed").unwrap_or(&0),
+            }
+        }).collect()
     }
 
     /// Clear accomplishments for a session

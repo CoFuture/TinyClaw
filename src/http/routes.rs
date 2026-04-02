@@ -883,7 +883,9 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/turns/export", get(turns_export))
         // Session accomplishments API - track what was accomplished
         .route("/api/sessions/{session_id}/accomplishments", get(session_accomplishments_list))
+        .route("/api/sessions/{session_id}/accomplishments", axum::routing::delete(session_accomplishments_clear))
         .route("/api/sessions/{session_id}/accomplishments/summary", get(session_accomplishments_summary))
+        .route("/api/accomplishments/sessions", get(session_accomplishments_sessions_list))
         // Tool performance statistics
         .route("/api/tools/stats", get(tool_stats))
         // Tool pattern learning API - learn from turn history
@@ -1968,6 +1970,31 @@ async fn session_accomplishments_summary(
             "contextSnippet": "No accomplishments recorded yet.",
         })),
     }
+}
+
+/// Clear accomplishments for a session
+async fn session_accomplishments_clear(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    state.session_accomplishments.clear(&session_id);
+    Json(serde_json::json!({
+        "success": true,
+        "sessionId": session_id,
+        "message": "Accomplishments cleared for session",
+    }))
+}
+
+/// Get all sessions with their accomplishment stats
+async fn session_accomplishments_sessions_list(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let sessions_with_stats = state.session_accomplishments.get_sessions_with_stats();
+    Json(serde_json::json!({
+        "success": true,
+        "sessions": sessions_with_stats,
+        "totalSessions": sessions_with_stats.len(),
+    }))
 }
 
 /// Get tool performance statistics
