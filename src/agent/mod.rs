@@ -23,6 +23,7 @@ pub mod skill;
 pub mod skill_manager;
 pub mod skill_recommender;
 pub mod skill_registry;
+pub mod skill_synergy;
 pub mod skill_tracker;
 pub mod suggestion;
 pub mod suggestion_manager;
@@ -64,6 +65,8 @@ pub use skill_manager::SessionSkillManager;
 pub use skill_recommender::{SkillRecommendation, SkillRecommender};
 #[allow(unused_imports)]
 pub use skill_tracker::{SkillTracker, SkillStats, SkillInsight, SkillInsightType, SkillEffectivenessReport, SkillTrackerSummary, TurnSkillActivation};
+#[allow(unused_imports)]
+pub use skill_synergy::{SkillSynergyAnalyzer, SkillSynergyAnalysis, SynergyScore, SynergyPattern, SynergyInsight, SynergyRecommendation, SkillPairStats, SkillSynergySummary};
 #[allow(unused_imports)]
 pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, SuggestionType};
 #[allow(unused_imports)]

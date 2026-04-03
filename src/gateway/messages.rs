@@ -98,6 +98,8 @@ pub struct HandlerContext {
     pub turn_feedback_manager: Arc<TurnFeedbackManager>,
     /// Skill tracker for tracking skill activations and effectiveness
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
+    /// Skill synergy analyzer for analyzing skill pair effectiveness
+    pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
 }
 
 impl HandlerContext {
@@ -126,6 +128,7 @@ impl HandlerContext {
         session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
         turn_feedback_manager: Arc<TurnFeedbackManager>,
         skill_tracker: Arc<crate::agent::SkillTracker>,
+        skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
     ) -> Self {
         Self {
             session_manager,
@@ -151,6 +154,7 @@ impl HandlerContext {
             session_accomplishments,
             turn_feedback_manager,
             skill_tracker,
+            skill_synergy,
         }
     }
 
@@ -454,6 +458,39 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
                 tips_part.push_str(&format!("- {}\n", tip));
             }
             parts.push(tips_part);
+        }
+    }
+
+    // 1d. Skill Synergy Insights - based on historical skill pair effectiveness
+    // Analyze which skill combinations lead to better outcomes
+    {
+        let active_skills = ctx.skill_manager.get_active_skills(session_key);
+        if active_skills.len() >= 2 {
+            // Find synergistic pairs among currently active skills
+            let mut synergy_insights: Vec<String> = Vec::new();
+            for i in 0..active_skills.len() {
+                for j in (i + 1)..active_skills.len() {
+                    if let Some(score) = ctx.skill_synergy.get_pair_synergy(&active_skills[i], &active_skills[j]) {
+                        if score.confidence >= 0.3 && score.score > 0.2 {
+                            synergy_insights.push(format!(
+                                "- {} + {}: {} (confidence: {:.0}%)",
+                                active_skills[i],
+                                active_skills[j],
+                                score.pattern.description(),
+                                score.confidence * 100.0
+                            ));
+                        }
+                    }
+                }
+            }
+            if !synergy_insights.is_empty() {
+                let mut synergy_part = String::from("## Skill Combination Insights\n\n");
+                synergy_part.push_str("Based on your historical patterns:\n\n");
+                for insight in &synergy_insights {
+                    synergy_part.push_str(&format!("{}\n", insight));
+                }
+                parts.push(synergy_part);
+            }
         }
     }
 
@@ -1251,6 +1288,9 @@ async fn handle_agent_turn(
         turn_success,
         had_accomplishment,
     );
+
+    // Record skill synergy data for this turn
+    ctx.skill_synergy.record_turn(&active_skills, turn_success, had_accomplishment);
 
     Ok(serde_json::json!({
         "text": response,

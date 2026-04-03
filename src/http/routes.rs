@@ -59,6 +59,7 @@ pub struct HttpState {
     pub context_health_monitor: Arc<ContextHealthMonitor>,
     pub session_accomplishments: Arc<SessionAccomplishmentsManager>,
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
+    pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
 }
 
 /// Health check response
@@ -854,6 +855,10 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/skills/tracker/report", get(skill_tracker_report))
         .route("/api/skills/tracker/summary", get(skill_tracker_summary))
         .route("/api/skills/tracker/{skill_name}", get(skill_tracker_stats))
+        // Skill synergy API
+        .route("/api/skills/synergy", get(skill_synergy_analysis))
+        .route("/api/skills/synergy/pair/{skill_a}/{skill_b}", get(skill_synergy_pair))
+        .route("/api/skills/synergy/skill/{skill_name}", get(skill_synergy_for_skill))
         // Scheduled task management API
         .route("/api/scheduled", get(scheduled_list))
         .route("/api/scheduled", post(scheduled_create))
@@ -1391,6 +1396,122 @@ async fn skill_tracker_stats(
         })),
         None => Json(serde_json::json!({
             "error": "Skill not found",
+            "skill_name": skill_name
+        }))
+    }
+}
+
+// Skill synergy handlers
+
+/// Get complete skill synergy analysis
+async fn skill_synergy_analysis(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let analysis = state.skill_synergy.generate_analysis();
+    Json(serde_json::json!({
+        "pair_scores": analysis.pair_scores.iter().map(|s| {
+            serde_json::json!({
+                "skill_a": s.skill_a,
+                "skill_b": s.skill_b,
+                "score": s.score,
+                "pattern": format!("{:?}", s.pattern),
+                "pattern_emoji": s.pattern.emoji(),
+                "combined_success_rate": s.combined_success_rate,
+                "expected_success_rate": s.expected_success_rate,
+                "lift": s.lift,
+                "confidence": s.confidence,
+                "co_occurrences": s.co_occurrences
+            })
+        }).collect::<Vec<_>>(),
+        "insights": analysis.insights.iter().map(|i| {
+            serde_json::json!({
+                "skill_a": i.skill_a,
+                "skill_b": i.skill_b,
+                "pattern": format!("{:?}", i.pattern),
+                "pattern_emoji": i.pattern.emoji(),
+                "score": i.score,
+                "description": i.description,
+                "recommendation": i.recommendation
+            })
+        }).collect::<Vec<_>>(),
+        "synergistic_pairs": analysis.synergistic_pairs.iter().map(|s| {
+            serde_json::json!({
+                "skill_a": s.skill_a,
+                "skill_b": s.skill_b,
+                "score": s.score,
+                "pattern": format!("{:?}", s.pattern),
+                "confidence": s.confidence
+            })
+        }).collect::<Vec<_>>(),
+        "antagonistic_pairs": analysis.antagonistic_pairs.iter().map(|s| {
+            serde_json::json!({
+                "skill_a": s.skill_a,
+                "skill_b": s.skill_b,
+                "score": s.score,
+                "pattern": format!("{:?}", s.pattern),
+                "confidence": s.confidence
+            })
+        }).collect::<Vec<_>>(),
+        "recommendations": analysis.recommendations.iter().map(|r| {
+            serde_json::json!({
+                "primary_skill": r.primary_skill,
+                "secondary_skills": r.secondary_skills,
+                "reason": r.reason,
+                "expected_improvement": r.expected_improvement,
+                "confidence": r.confidence
+            })
+        }).collect::<Vec<_>>(),
+        "total_pairs_analyzed": analysis.total_pairs_analyzed,
+        "high_confidence_count": analysis.high_confidence_count,
+        "generated_at": analysis.generated_at.to_rfc3339()
+    }))
+}
+
+/// Get synergy score for a specific skill pair
+async fn skill_synergy_pair(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((skill_a, skill_b)): axum::extract::Path<(String, String)>,
+) -> Json<serde_json::Value> {
+    match state.skill_synergy.get_pair_synergy(&skill_a, &skill_b) {
+        Some(score) => Json(serde_json::json!({
+            "skill_a": score.skill_a,
+            "skill_b": score.skill_b,
+            "score": score.score,
+            "pattern": format!("{:?}", score.pattern),
+            "pattern_emoji": score.pattern.emoji(),
+            "pattern_description": score.pattern.description(),
+            "combined_success_rate": score.combined_success_rate,
+            "expected_success_rate": score.expected_success_rate,
+            "lift": score.lift,
+            "confidence": score.confidence,
+            "co_occurrences": score.co_occurrences
+        })),
+        None => Json(serde_json::json!({
+            "error": "Skill pair not found or insufficient data",
+            "skill_a": skill_a,
+            "skill_b": skill_b
+        }))
+    }
+}
+
+/// Get synergy summary for a specific skill
+async fn skill_synergy_for_skill(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(skill_name): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.skill_synergy.get_skill_synergy_summary(&skill_name) {
+        Some(summary) => Json(serde_json::json!({
+            "skill_name": summary.skill_name,
+            "best_partner": summary.best_partner,
+            "best_synergy_score": summary.best_synergy_score,
+            "worst_partner": summary.worst_partner,
+            "worst_synergy_score": summary.worst_synergy_score,
+            "avg_synergy_score": summary.avg_synergy_score,
+            "positive_partners": summary.positive_partners,
+            "negative_partners": summary.negative_partners
+        })),
+        None => Json(serde_json::json!({
+            "error": "No synergy data found for skill",
             "skill_name": skill_name
         }))
     }

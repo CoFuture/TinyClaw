@@ -3109,6 +3109,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v14.2.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Skill Synergy Intelligence System - 技能协同智能分析系统** - 分析技能配对有效性，超越简单的共现统计
+  - **新增模块** (`src/agent/skill_synergy.rs`)：
+    - `SkillPairStats` - 技能配对统计数据（共同激活次数、成功率、协作完成数）
+    - `SynergyScore` - 协同评分（-1.0 到 +1.0），衡量组合使用是否优于独立使用
+    - `SynergyPattern` - 模式分类（高度协同/协同/中性/对抗/高度对抗/数据不足）
+    - `SkillSynergyAnalysis` - 完整协同分析报告
+    - `SkillSynergySummary` - 单个技能的协同汇总
+    - `SkillSynergyAnalyzer` - 分析引擎，使用 `parking_lot::RwLock` 实现线程安全
+  - **协同评分算法**：
+    - 计算期望成功率 = 技能A独立成功率 × 技能B独立成功率
+    - 计算提升值 (lift) = 实际协同成功率 / 期望成功率
+    - lift > 1.5 → 高度协同，lift > 1.1 → 协同，lift < 0.9 → 对抗
+    - 置信度基于共现次数计算（样本越多置信度越高）
+  - **集成到 HandlerContext** (`src/gateway/messages.rs`)：
+    - 新增 `skill_synergy` 字段到 `HandlerContext`
+    - 在 `handle_agent_turn` 中调用 `skill_synergy.record_turn()` 记录每次 Turn 的技能协同数据
+  - **上下文提示增强** (`generate_context_prompt`)：
+    - 新增 "1d. Skill Synergy Insights" 部分
+    - 当活跃技能 ≥ 2 时，分析并显示配对协同洞察
+    - 仅显示高置信度（≥ 0.3）且高评分（> 0.2）的协同关系
+  - **集成到 main.rs**：
+    - 创建 `SkillSynergyAnalyzer` 并传递到 `HttpState` 和 `HandlerContext`
+  - **HTTP API 端点** (`src/http/routes.rs`)：
+    - `GET /api/skills/synergy` - 获取完整协同分析报告
+    - `GET /api/skills/synergy/pair/{skill_a}/{skill_b}` - 获取特定技能配对评分
+    - `GET /api/skills/synergy/skill/{skill_name}` - 获取特定技能的协同汇总
+  - **集成到 gateway/server.rs** - 将 skill_synergy 传递到 WebSocket 连接处理
+  - **代码质量**：
+    - cargo clippy **0 警告**
+    - cargo test **480 tests 全部通过**（新增 10 个协同分析测试）
+  - **设计原则**：
+    - 不堆砌工具，专注于增强现有技能追踪系统的分析能力
+    - 使用 `parking_lot::RwLock` 实现线程安全，与 `SkillTracker` 保持一致
+    - 协同分析基于统计原理，不依赖 AI 预测
+
+**下一步**: 基于协同分析的智能技能推荐 - 利用协同数据优化技能选择策略
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

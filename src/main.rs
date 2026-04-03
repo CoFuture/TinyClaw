@@ -169,6 +169,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Note: SkillTracker has with_persistence but we start simple with in-memory tracking
     info!("Skill tracker initialized");
 
+    // Create skill synergy analyzer for analyzing skill pair effectiveness
+    let _skill_synergy_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("skill_synergy");
+    let skill_synergy = Arc::new(agent::SkillSynergyAnalyzer::new());
+    info!("Skill synergy analyzer initialized");
+
     // Create session accomplishments manager
     let accomplishments_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -321,6 +329,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         context_health_monitor: context_health_monitor.clone(),
         session_accomplishments: session_accomplishments.clone(),
         skill_tracker: skill_tracker.clone(),
+        skill_synergy: skill_synergy.clone(),
     });
 
     // Spawn WebSocket server
@@ -352,6 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_accomplishments.clone(), // Session accomplishments tracker
         turn_feedback.clone(), // Turn feedback manager for user feedback
         skill_tracker.clone(), // Skill tracker for tracking skill effectiveness
+        skill_synergy.clone(), // Skill synergy analyzer for skill pair analysis
     );
     
     let ws_handle = tokio::spawn(async move {
