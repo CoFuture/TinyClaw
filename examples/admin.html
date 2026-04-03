@@ -884,6 +884,91 @@
         .perf-tool-bar.low { background: #ef4444; }
         .perf-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
 
+        /* Feedback Trend Panel */
+        .feedback-trend-panel { margin-top: 10px; }
+        .feedback-trend-summary {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px;
+            background: rgba(0,0,0,0.25);
+            border-radius: 8px;
+            margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .feedback-trend-direction {
+            font-size: 28px;
+            font-weight: bold;
+            min-width: 50px;
+            text-align: center;
+        }
+        .feedback-trend-direction.improving { color: #22c55e; }
+        .feedback-trend-direction.declining { color: #ef4444; }
+        .feedback-trend-direction.stable { color: #facc15; }
+        .feedback-trend-direction.insufficient { color: #888; }
+        .feedback-trend-stats { flex: 1; }
+        .feedback-trend-stats-main { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+        .feedback-trend-stats-sub { font-size: 12px; color: #94a3b8; }
+        .feedback-trend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .feedback-trend-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .feedback-trend-card.positive { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.05); }
+        .feedback-trend-card.negative { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05); }
+        .feedback-trend-card.neutral { border-color: rgba(156,163,175,0.3); background: rgba(156,163,175,0.05); }
+        .feedback-trend-card.all { border-color: rgba(0,217,255,0.3); background: rgba(0,217,255,0.05); }
+        .feedback-trend-value { font-size: 20px; font-weight: bold; color: #00d9ff; }
+        .feedback-trend-card.positive .feedback-trend-value { color: #22c55e; }
+        .feedback-trend-card.negative .feedback-trend-value { color: #ef4444; }
+        .feedback-trend-card.neutral .feedback-trend-value { color: #9ca3af; }
+        .feedback-trend-label { font-size: 10px; color: #888; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .feedback-trend-periods { margin-bottom: 14px; }
+        .feedback-trend-periods-title { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .feedback-trend-period {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 6px;
+            margin-bottom: 6px;
+        }
+        .feedback-trend-period.current { border: 1px solid rgba(0,217,255,0.3); }
+        .feedback-trend-period-bar { flex: 1; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+        .feedback-trend-period-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+        .feedback-trend-period-label { font-size: 11px; color: #888; min-width: 60px; text-align: right; }
+        .feedback-trend-period-rate { font-size: 12px; font-weight: bold; color: #00d9ff; min-width: 45px; text-align: right; }
+        .feedback-trend-period.is-current .feedback-trend-period-label { color: #00d9ff; font-weight: 600; }
+        .feedback-trend-issues { margin-top: 10px; }
+        .feedback-trend-issues-title { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .feedback-trend-issue {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid #facc15;
+        }
+        .feedback-trend-issue.important { border-left-color: #ef4444; }
+        .feedback-trend-issue-emoji { font-size: 16px; }
+        .feedback-trend-issue-content { flex: 1; }
+        .feedback-trend-issue-type { font-size: 12px; font-weight: 600; color: #e2e8f0; margin-bottom: 3px; }
+        .feedback-trend-issue-count { font-size: 10px; color: #888; margin-bottom: 4px; }
+        .feedback-trend-issue-suggestion { font-size: 11px; color: #22c55e; background: rgba(34,197,94,0.08); padding: 5px 8px; border-radius: 4px; margin-top: 5px; }
+        .feedback-trend-empty { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+        .feedback-trend-loading { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+
         /* Turn Summary Panel */
         .turn-summary-grid {
             display: grid;
@@ -2561,6 +2646,21 @@
             </div>
         </div>
 
+        <!-- Feedback Trend Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>📈 反馈趋势 <span class="tool-count-badge" id="feedbackTrendBadge">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">分析用户反馈趋势，识别问题模式，帮助 Agent 持续改进</p>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select id="feedbackTrendSessionSelect" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: #eee; padding: 6px 10px; border-radius: 4px; max-width: 200px;" onchange="loadFeedbackTrend()">
+                    <option value="">— 全局 —</option>
+                </select>
+                <button class="btn" onclick="loadFeedbackTrend()">🔄 刷新</button>
+            </div>
+            <div id="feedbackTrendContent">
+                <div class="feedback-trend-loading">加载中...</div>
+            </div>
+        </div>
+
         <!-- Turn Summary Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>📋 Turn 总结 <span class="tool-count-badge" id="turnSummaryCount">-</span></h2>
@@ -3089,6 +3189,14 @@
                     loadPerformanceInsights();
                 } catch (e) {
                     // Performance insights API might not be available
+                }
+
+                // Fetch feedback trend panel
+                try {
+                    refreshFeedbackTrendSessionList();
+                    loadFeedbackTrend();
+                } catch (e) {
+                    // Feedback trend API might not be available
                 }
 
                 // Fetch tools list
@@ -5078,6 +5186,172 @@
                 console.error('Failed to load performance insights:', e);
                 content.innerHTML = '<div class="perf-no-data">加载失败: ' + escapeHtml(e.message) + '</div>';
             }
+        }
+
+        // ============================================================
+        // Feedback Trend Functions
+        // ============================================================
+
+        async function loadFeedbackTrend() {
+            const content = document.getElementById('feedbackTrendContent');
+            const sessionId = document.getElementById('feedbackTrendSessionSelect')?.value || '';
+            try {
+                const url = sessionId 
+                    ? `${API_BASE}/api/feedback/trends?session_id=${encodeURIComponent(sessionId)}`
+                    : `${API_BASE}/api/feedback/trends`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                renderFeedbackTrend(data);
+            } catch (e) {
+                console.error('Failed to load feedback trend:', e);
+                content.innerHTML = '<div class="feedback-trend-empty">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function renderFeedbackTrend(data) {
+            const content = document.getElementById('feedbackTrendContent');
+            const badge = document.getElementById('feedbackTrendBadge');
+            
+            if (!data || data.total_feedback_analyzed === 0) {
+                content.innerHTML = '<div class="feedback-trend-empty">暂无反馈数据。开始与 Agent 对话并提交反馈以收集数据。</div>';
+                if (badge) badge.textContent = '0';
+                return;
+            }
+
+            let html = '';
+
+            // Summary Header
+            const trendDir = data.overall_trend || 'insufficient_data';
+            const trendClass = trendDir === 'improving' ? 'improving' : trendDir === 'declining' ? 'declining' : trendDir === 'stable' ? 'stable' : 'insufficient';
+            const trendIcon = trendDir === 'improving' ? '↑' : trendDir === 'declining' ? '↓' : trendDir === 'stable' ? '→' : '?';
+            const trendText = trendDir === 'improving' ? '改善中' : trendDir === 'declining' ? '下降中' : trendDir === 'stable' ? '稳定' : '数据不足';
+
+            html += '<div class="feedback-trend-summary">\
+                <div class="feedback-trend-direction ' + trendClass + '">' + trendIcon + '</div>\
+                <div class="feedback-trend-stats">\
+                    <div class="feedback-trend-stats-main">' + escapeHtml(trendText) + ' · ' + escapeHtml(data.summary || '') + '</div>\
+                    <div class="feedback-trend-stats-sub">分析了 ' + data.total_feedback_analyzed + ' 条反馈，覆盖 ' + data.periods_analyzed + ' 个周期</div>\
+                </div>\
+            </div>';
+
+            // Stats Grid
+            let totalPositive = 0, totalNegative = 0, totalNeutral = 0, totalAll = 0;
+            if (data.period_stats && data.period_stats.length > 0) {
+                // Get current period stats
+                const currentPeriod = data.period_stats.find(p => p.is_current) || data.period_stats[data.period_stats.length - 1];
+                if (currentPeriod) {
+                    totalPositive = currentPeriod.thumbs_up_count || 0;
+                    totalNegative = currentPeriod.thumbs_down_count || 0;
+                    totalNeutral = currentPeriod.neutral_count || 0;
+                    totalAll = currentPeriod.total_count || 0;
+                }
+            }
+
+            html += '<div class="feedback-trend-grid">\
+                <div class="feedback-trend-card all">\
+                    <div class="feedback-trend-value">' + totalAll + '</div>\
+                    <div class="feedback-trend-label">本周期反馈</div>\
+                </div>\
+                <div class="feedback-trend-card positive">\
+                    <div class="feedback-trend-value">' + totalPositive + '</div>\
+                    <div class="feedback-trend-label">👍 正面</div>\
+                </div>\
+                <div class="feedback-trend-card negative">\
+                    <div class="feedback-trend-value">' + totalNegative + '</div>\
+                    <div class="feedback-trend-label">👎 负面</div>\
+                </div>\
+                <div class="feedback-trend-card neutral">\
+                    <div class="feedback-trend-value">' + totalNeutral + '</div>\
+                    <div class="feedback-trend-label">➖ 中性</div>\
+                </div>\
+            </div>';
+
+            // Period Stats (positive rate over time)
+            if (data.period_stats && data.period_stats.length > 0) {
+                html += '<div class="feedback-trend-periods">\
+                    <div class="feedback-trend-periods-title">📈 各周期正面率趋势</div>';
+                
+                // Show last 7 periods
+                const recentPeriods = data.period_stats.slice(-7);
+                recentPeriods.forEach(period => {
+                    const rate = (period.positive_rate * 100).toFixed(0);
+                    const barColor = period.positive_rate >= 0.7 ? '#22c55e' : period.positive_rate >= 0.4 ? '#facc15' : '#ef4444';
+                    const currentClass = period.is_current ? 'is-current' : '';
+                    html += '<div class="feedback-trend-period ' + currentClass + '">\
+                        <div class="feedback-trend-period-label">' + escapeHtml(period.period) + '</div>\
+                        <div class="feedback-trend-period-bar"><div class="feedback-trend-period-bar-fill" style="width:' + (period.positive_rate * 100) + '%; background:' + barColor + ';"></div></div>\
+                        <div class="feedback-trend-period-rate">' + rate + '%</div>\
+                    </div>';
+                });
+                
+                html += '</div>';
+            }
+
+            // Issue Patterns
+            if (data.issue_patterns && data.issue_patterns.length > 0) {
+                html += '<div class="feedback-trend-issues">\
+                    <div class="feedback-trend-issues-title">⚠️ 检测到的问题模式</div>';
+                
+                data.issue_patterns.forEach(pattern => {
+                    const emoji = getIssueTypeEmoji(pattern.issue_type);
+                    const importantClass = pattern.occurrence_count >= 3 ? 'important' : '';
+                    html += '<div class="feedback-trend-issue ' + importantClass + '">\
+                        <div class="feedback-trend-issue-emoji">' + emoji + '</div>\
+                        <div class="feedback-trend-issue-content">\
+                            <div class="feedback-trend-issue-type">' + escapeHtml(pattern.issue_type) + '</div>\
+                            <div class="feedback-trend-issue-count">出现 ' + pattern.occurrence_count + ' 次</div>';
+                    if (pattern.suggestion) {
+                        html += '<div class="feedback-trend-issue-suggestion">💡 ' + escapeHtml(pattern.suggestion) + '</div>';
+                    }
+                    html += '</div></div>';
+                });
+                
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
+            if (badge) badge.textContent = data.total_feedback_analyzed;
+        }
+
+        function getIssueTypeEmoji(issueType) {
+            const emojiMap = {
+                'verbose': '📝',
+                'too_brief': '💬',
+                'incorrect_info': '❌',
+                'misunderstood': '❓',
+                'tool_failed': '🔧',
+                'not_helpful': '🤔',
+                'confusing': '😕',
+                'slow': '⏳',
+                'Verbose': '📝',
+                'TooBrief': '💬',
+                'IncorrectInfo': '❌',
+                'Misunderstood': '❓',
+                'ToolFailed': '🔧',
+                'NotHelpful': '🤔',
+                'Confusing': '😕',
+                'Slow': '⏳'
+            };
+            return emojiMap[issueType] || '⚠️';
+        }
+
+        function refreshFeedbackTrendSessionList() {
+            fetch(API_BASE + '/api/sessions')
+                .then(r => r.json())
+                .then(data => {
+                    const sel = document.getElementById('feedbackTrendSessionSelect');
+                    const sessions = data.sessions || [];
+                    const current = sel?.value;
+                    if (!sel) return;
+                    sel.innerHTML = '<option value="">— 全局 —</option>';
+                    sessions.forEach(s => {
+                        const label = escapeHtml(s.label || s.id);
+                        sel.innerHTML += '<option value="' + escapeHtml(s.id) + '">' + label + '</option>';
+                    });
+                    if (current) sel.value = current;
+                })
+                .catch(() => {});
         }
 
         // ============================================================
@@ -8012,7 +8286,7 @@
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
                     'context.summarized', 'context.health', 'context.urgent_advice', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
-                    'agent.performance_insights',
+                    'agent.performance_insights', 'feedback.trend',
                     'scheduled.created', 'scheduled.fired', 'scheduled.failed', 'scheduled.updated', 'scheduled.deleted'
                 ];
                 
@@ -8173,6 +8447,7 @@
                 'system': '系统',
                 'skill.recommended': '技能推荐',
                 'agent.performance_insights': '性能洞察',
+                'feedback.trend': '反馈趋势',
                 'agent.self_evaluation': '自我评估',
                 'scheduled.created': '任务创建',
                 'scheduled.fired': '任务触发',

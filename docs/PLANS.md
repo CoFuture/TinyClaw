@@ -2961,6 +2961,57 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.27.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **WebUI Feedback Trend Panel - 反馈趋势面板** - 完成反馈趋势分析系统的 WebUI 集成
+  - **新增 CSS 样式** (`examples/admin.html`)：
+    - `.feedback-trend-panel` - 面板容器
+    - `.feedback-trend-summary` - 趋势摘要头部（方向图标 + 统计文字）
+    - `.feedback-trend-direction` - 方向图标（↑改善/↓下降/→稳定/?数据不足）
+    - `.feedback-trend-direction.improving/declining/stable/insufficient` - 方向颜色样式
+    - `.feedback-trend-stats` - 统计文字区域
+    - `.feedback-trend-grid` - 统计数据卡片网格
+    - `.feedback-trend-card` - 数据卡片（正面/负面/中性/全部）
+    - `.feedback-trend-card.positive/negative/neutral/all` - 不同类型颜色
+    - `.feedback-trend-periods` - 周期趋势区域
+    - `.feedback-trend-period` - 单个周期条形图
+    - `.feedback-trend-period.is-current` - 当前周期高亮
+    - `.feedback-trend-period-bar` / `.feedback-trend-period-bar-fill` - 条形图样式
+    - `.feedback-trend-issues` - 问题模式区域
+    - `.feedback-trend-issue` - 问题项（emoji + 类型 + 次数 + 建议）
+    - `.feedback-trend-issue.important` - 高频问题强调样式
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 📈 反馈趋势面板，显示在性能洞察和 Turn 总结之间
+    - 会话选择器（全局或特定会话）
+    - 趋势摘要：方向图标 + 文字总结 + 分析统计
+    - 统计卡片：本周期反馈总数、👍正面、👎负面、➖中性
+    - 周期趋势图：最近 7 个周期的正面率条形图
+    - 问题模式列表：自动检测的 8 种问题类型
+  - **JavaScript 函数** (`examples/admin.html`)：
+    - `loadFeedbackTrend()` - 从 API 加载反馈趋势数据
+    - `renderFeedbackTrend(data)` - 渲染完整反馈趋势面板
+    - `getIssueTypeEmoji(issueType)` - 获取问题类型 emoji
+    - `refreshFeedbackTrendSessionList()` - 刷新会话选择器
+  - **HTTP API 集成**：
+    - `GET /api/feedback/trends` - 获取反馈趋势数据
+    - 支持 `session_id` 查询参数过滤
+  - **SSE 事件集成** (`examples/admin.html`)：
+    - 添加 `feedback.trend` 到 SSE 事件类型列表
+    - 添加 `feedback.trend` → "反馈趋势" 到 formatEventType 映射
+  - **refreshData 集成**：
+    - 在数据刷新周期中加载反馈趋势数据
+    - 页面加载时自动获取反馈趋势
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **457 tests 全部通过**
+
+**下一步**: Skill 机制优化、Agent 主动询问澄清机制
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
