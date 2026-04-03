@@ -23,6 +23,7 @@ pub mod skill;
 pub mod skill_manager;
 pub mod skill_recommender;
 pub mod skill_registry;
+pub mod skill_tracker;
 pub mod suggestion;
 pub mod suggestion_manager;
 pub mod task;
@@ -61,6 +62,8 @@ pub use skill_registry::SkillRegistry;
 pub use skill_manager::SessionSkillManager;
 #[allow(unused_imports)]
 pub use skill_recommender::{SkillRecommendation, SkillRecommender};
+#[allow(unused_imports)]
+pub use skill_tracker::{SkillTracker, SkillStats, SkillInsight, SkillInsightType, SkillEffectivenessReport, SkillTrackerSummary, TurnSkillActivation};
 #[allow(unused_imports)]
 pub use suggestion::{Suggestion, SuggestionEngine, SuggestionSummary, SuggestionType};
 #[allow(unused_imports)]

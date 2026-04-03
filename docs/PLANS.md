@@ -3012,6 +3012,64 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v14.0.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Skill Effectiveness Tracker - 技能效果追踪系统** - 新增技能激活和效果追踪模块
+  - **新增 `agent/skill_tracker.rs` 模块** (`~570 行代码`)：
+    - `SkillStats` 结构体：追踪单个技能的使用统计
+      - `activation_count` - 激活次数
+      - `success_count` / `failure_count` - 成功/失败次数
+      - `success_rate` - 成功率 (0.0-1.0)
+      - `accomplishment_count` - 有成就记录的次数
+      - `avg_quality_score` - 平均质量分数
+      - `often_co_occurs_with` - 经常一起使用的技能
+      - `last_seen` / `first_seen` - 时间追踪
+    - `TurnSkillActivation` 结构体：记录每个 Turn 的技能激活
+    - `SkillInsight` / `SkillInsightType` 结构体：技能洞察类型
+    - `SkillEffectivenessReport` 结构体：技能效果报告
+    - `SkillTracker` 结构体：主追踪器
+      - `record_turn_skills()` - 记录每个 Turn 的技能激活
+      - `update_quality_for_skills()` - 基于会话质量更新技能分数
+      - `generate_effectiveness_report()` - 生成效果报告
+      - `get_effectiveness_for_skill()` - 获取单个技能效果
+      - `get_summary()` - 获取追踪摘要
+      - `persist()` / `load()` - 持久化支持
+  - **集成到 `agent/mod.rs`**：
+    - 新增 `skill_tracker` 模块导出
+    - 新增 `SkillTracker`, `SkillStats`, `SkillInsight`, `SkillEffectivenessReport`, `TurnSkillActivation` 等类型导出
+  - **集成到 `HandlerContext`** (`gateway/messages.rs`)：
+    - 新增 `skill_tracker: Arc<SkillTracker>` 字段
+    - 在 `handle_agent_turn` 结束时记录技能激活：
+      - 获取当前会话激活的技能列表
+      - 判断 Turn 是否成功（有响应）
+      - 判断是否有成就记录
+      - 调用 `record_turn_skills()` 记录
+  - **集成到 `gateway/server.rs`**：传递 `skill_tracker` 到 `HandlerContext::new`
+  - **集成到 `main.rs`**：
+    - 创建 `SkillTracker` 实例
+    - 添加到 `HttpState`
+    - 添加到 `HandlerContext::new`
+  - **集成到 `HttpState`** (`http/routes.rs`)：
+    - 新增 `skill_tracker: Arc<SkillTracker>` 字段
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `GET /api/skills/tracker/report` - 获取技能效果报告
+    - `GET /api/skills/tracker/summary` - 获取追踪摘要
+    - `GET /api/skills/tracker/{skill_name}` - 获取特定技能统计
+  - **Gateway 事件** (`gateway/events.rs`)：
+    - 新增 `Event::SkillTrackerEffectiveness` 事件类型
+    - 新增 `SkillTrackerInsightEvent` 结构体
+    - SSE 事件映射添加 `skill.tracker`
+  - **代码质量**：
+    - cargo clippy **0 警告**
+    - cargo test **470 tests 全部通过**
+
+**下一步**: Skill 效果可视化面板、WebUI Skill 追踪仪表盘
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

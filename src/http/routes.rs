@@ -58,6 +58,7 @@ pub struct HttpState {
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
     pub context_health_monitor: Arc<ContextHealthMonitor>,
     pub session_accomplishments: Arc<SessionAccomplishmentsManager>,
+    pub skill_tracker: Arc<crate::agent::SkillTracker>,
 }
 
 /// Health check response
@@ -716,6 +717,8 @@ async fn sse_events(
                                     Event::TurnSummary { session_id, .. } => session_id == filter,
                                     // Feedback trend - apply session filter
                                     Event::FeedbackTrend { session_id, .. } => session_id == filter,
+                                    // Skill tracker - apply session filter
+                                    Event::SkillTrackerEffectiveness { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -773,6 +776,8 @@ async fn sse_events(
                                     Event::TurnSummary { .. } => "turn.summary",
                                     // Feedback trend events
                                     Event::FeedbackTrend { .. } => "feedback.trend",
+                                    // Skill tracker events
+                                    Event::SkillTrackerEffectiveness { .. } => "skill.tracker",
                                 };
                                 
                                 let event = SseEvent::default()
@@ -845,6 +850,10 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/skills/{skill_name}", axum::routing::delete(session_skills_disable))
         // Skill recommendations API
         .route("/api/sessions/{session_id}/skill-recommendations", get(skill_recommendations_get))
+        // Skill tracker API
+        .route("/api/skills/tracker/report", get(skill_tracker_report))
+        .route("/api/skills/tracker/summary", get(skill_tracker_summary))
+        .route("/api/skills/tracker/{skill_name}", get(skill_tracker_stats))
         // Scheduled task management API
         .route("/api/scheduled", get(scheduled_list))
         .route("/api/scheduled", post(scheduled_create))
@@ -1330,6 +1339,61 @@ async fn skill_recommendations_get(
         "recommendations": recommendations,
         "count": recommendations.len()
     }))
+}
+
+// Skill tracker handlers
+
+/// Get skill effectiveness report
+async fn skill_tracker_report(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let report = state.skill_tracker.generate_effectiveness_report();
+    Json(serde_json::json!({
+        "skill_stats": report.skill_stats,
+        "insights": report.insights,
+        "most_effective_skill": report.most_effective_skill,
+        "least_effective_skill": report.least_effective_skill,
+        "synergistic_pairs": report.synergistic_pairs,
+        "total_turns_tracked": report.total_turns_tracked,
+        "generated_at": report.generated_at.to_rfc3339()
+    }))
+}
+
+/// Get skill tracker summary
+async fn skill_tracker_summary(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let summary = state.skill_tracker.get_summary();
+    Json(serde_json::json!({
+        "total_skills_tracked": summary.total_skills_tracked,
+        "total_activations": summary.total_activations,
+        "total_turns_tracked": summary.total_turns_tracked
+    }))
+}
+
+/// Get statistics for a specific skill
+async fn skill_tracker_stats(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(skill_name): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.skill_tracker.get_skill_stats(&skill_name) {
+        Some(stats) => Json(serde_json::json!({
+            "skill_name": stats.skill_name,
+            "activation_count": stats.activation_count,
+            "success_count": stats.success_count,
+            "failure_count": stats.failure_count,
+            "success_rate": stats.success_rate,
+            "accomplishment_count": stats.accomplishment_count,
+            "avg_quality_score": stats.avg_quality_score,
+            "often_co_occurs_with": stats.often_co_occurs_with,
+            "last_seen": stats.last_seen.map(|t| t.to_rfc3339()),
+            "first_seen": stats.first_seen.map(|t| t.to_rfc3339())
+        })),
+        None => Json(serde_json::json!({
+            "error": "Skill not found",
+            "skill_name": skill_name
+        }))
+    }
 }
 
 // Scheduled task management handlers

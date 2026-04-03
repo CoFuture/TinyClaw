@@ -396,6 +396,20 @@ pub enum Event {
         /// Issue patterns detected
         issue_patterns: Vec<FeedbackIssuePatternEvent>,
     },
+
+    /// Skill tracker effectiveness update - emitted when skill tracking data is updated
+    #[serde(rename = "skill.tracker")]
+    SkillTrackerEffectiveness {
+        session_id: String,
+        /// Most effective skill
+        most_effective_skill: Option<String>,
+        /// Least effective skill
+        least_effective_skill: Option<String>,
+        /// Top insights
+        insights: Vec<SkillTrackerInsightEvent>,
+        /// Total turns tracked
+        total_turns_tracked: usize,
+    },
 }
 
 /// Performance insight for events
@@ -488,6 +502,21 @@ pub struct FeedbackIssuePatternEvent {
     pub occurrence_count: u32,
     /// Suggested behavior change
     pub suggestion: String,
+}
+
+/// Skill tracker insight for events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillTrackerInsightEvent {
+    /// Skill name
+    pub skill_name: String,
+    /// Insight type
+    pub insight_type: String,
+    /// Description
+    pub description: String,
+    /// Effectiveness score
+    pub effectiveness: f32,
+    /// Recommendation
+    pub recommendation: String,
 }
 
 /// Event emitter for broadcasting events

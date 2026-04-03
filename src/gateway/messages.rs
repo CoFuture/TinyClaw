@@ -96,6 +96,8 @@ pub struct HandlerContext {
     pub session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
     /// Turn feedback manager for tracking user feedback on agent responses
     pub turn_feedback_manager: Arc<TurnFeedbackManager>,
+    /// Skill tracker for tracking skill activations and effectiveness
+    pub skill_tracker: Arc<crate::agent::SkillTracker>,
 }
 
 impl HandlerContext {
@@ -123,6 +125,7 @@ impl HandlerContext {
         tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
         session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
         turn_feedback_manager: Arc<TurnFeedbackManager>,
+        skill_tracker: Arc<crate::agent::SkillTracker>,
     ) -> Self {
         Self {
             session_manager,
@@ -147,6 +150,7 @@ impl HandlerContext {
             tool_pattern_learner,
             session_accomplishments,
             turn_feedback_manager,
+            skill_tracker,
         }
     }
 
@@ -1229,6 +1233,24 @@ async fn handle_agent_turn(
             }
         }
     });
+
+    // Record skill activations for this turn
+    // Success = got a response (even if some tools failed, the agent completed its turn)
+    let active_skills = ctx.skill_manager.get_active_skills(session_key);
+    let turn_success = !response.is_empty();
+    // Check if any accomplishment was recorded for this session
+    let had_accomplishment = ctx.session_accomplishments
+        .get_summary(session_key)
+        .map(|s| s.stats.total_count > 0)
+        .unwrap_or(false);
+    
+    ctx.skill_tracker.record_turn_skills(
+        &turn_id_for_response,
+        session_key,
+        &active_skills,
+        turn_success,
+        had_accomplishment,
+    );
 
     Ok(serde_json::json!({
         "text": response,

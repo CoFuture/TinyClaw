@@ -160,6 +160,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Turn feedback manager initialized");
 
+    // Create skill tracker with persistence (reserved for future use)
+    let _skill_tracker_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("skill_tracker");
+    let skill_tracker = Arc::new(agent::SkillTracker::new());
+    // Note: SkillTracker has with_persistence but we start simple with in-memory tracking
+    info!("Skill tracker initialized");
+
     // Create session accomplishments manager
     let accomplishments_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -311,6 +320,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_quality_manager: session_quality_manager.clone(),
         context_health_monitor: context_health_monitor.clone(),
         session_accomplishments: session_accomplishments.clone(),
+        skill_tracker: skill_tracker.clone(),
     });
 
     // Spawn WebSocket server
@@ -341,6 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tool_pattern_learner.clone(), // Tool pattern learner for learning from turns
         session_accomplishments.clone(), // Session accomplishments tracker
         turn_feedback.clone(), // Turn feedback manager for user feedback
+        skill_tracker.clone(), // Skill tracker for tracking skill effectiveness
     );
     
     let ws_handle = tokio::spawn(async move {
