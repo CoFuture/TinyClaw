@@ -410,6 +410,25 @@ pub enum Event {
         /// Total turns tracked
         total_turns_tracked: usize,
     },
+
+    /// Proactive alert - agent proactively alerts user about important events
+    #[serde(rename = "agent.alert")]
+    ProactiveAlert {
+        /// Alert ID
+        id: String,
+        /// Alert category
+        category: String,
+        /// Alert severity
+        severity: String,
+        /// Alert title
+        title: String,
+        /// Alert message
+        message: String,
+        /// Session ID this alert is related to (if applicable)
+        session_id: Option<String>,
+        /// When this alert was created (Unix timestamp)
+        created_at: u64,
+    },
 }
 
 /// Performance insight for events

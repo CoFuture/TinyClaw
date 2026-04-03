@@ -3309,6 +3309,51 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v15.1.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **Agent 主动提醒系统 (Proactive Alert System)** - 让 Agent 主动推送重要事件提醒
+  - **新增模块** (`src/agent/proactive_alerts.rs`, ~550 行代码)：
+    - `AlertSeverity` 枚举：Info、Warning、Critical、Emergency 四个等级
+    - `AlertCategory` 枚举：ContextHealth、FeedbackTrend、Safety、Quality 等类别
+    - `ProactiveAlert` 结构体：提醒数据结构（id、category、severity、title、message、session_id、created_at）
+    - `AlertRule` 结构体：提醒规则，支持冷却时间控制（防止提醒风暴）
+    - `ProactiveAlertManager` 结构体：提醒管理器，支持规则配置、统计、提醒生成
+    - `ProactiveAlertStats` 结构体：提醒统计（按严重级别、按类别统计）
+    - 完整的单元测试覆盖
+  - **Gateway 事件** (`src/gateway/events.rs`)：
+    - 新增 `Event::ProactiveAlert` 变体，发送 `agent.alert` SSE 事件
+  - **HandlerContext 集成** (`src/gateway/messages.rs`)：
+    - 新增 `emit_proactive_alert()` 辅助方法
+    - 在 ContextHealth 事件中集成：当 health_level 为 Critical 或 Emergency 时自动发送提醒
+  - **SSE 路由** (`src/http/routes.rs`)：
+    - 新增 `agent.alert` 事件解析和推送
+    - 支持按 session_id 过滤（提醒可以指定关联的会话）
+  - **TUI 命令** (`:alerts`)：
+    - 查看主动提醒面板
+    - 使用 `:alerts` 或 `:alert` 打开/关闭面板
+  - **TUI 状态** (`state.rs`)：
+    - `alerts_mode` - 是否处于提醒查看模式
+    - `alerts_data: Option<Vec<ProactiveAlertDisplay>>` - 缓存的提醒数据
+    - `ProactiveAlertDisplay` 结构体 - TUI 显示用的数据结构
+  - **TUI 面板** (`components.rs`)：
+    - `draw_alerts_panel()` - 显示主动提醒面板
+    - 黄色边框，按严重级别着色（红色=critical/emergency，黄色=warning，蓝色=info）
+    - 按时间顺序显示最近的提醒（最新在前），最多显示50条
+  - **TUI 事件处理** (`gateway_client.rs`, `app.rs`)：
+    - `TuiGatewayEvent::ProactiveAlert` - 接收主动提醒事件
+    - 提醒同时显示为系统消息（添加到对应会话的聊天历史中）
+    - Esc 键退出提醒查看模式
+  - **代码质量**：
+    - cargo clippy 21 个警告（仅 pre-existing dead_code）
+    - cargo test **506 tests 全部通过**
+
+**下一步**: Agent 任务规划能力、WebUI 主动提醒管理界面
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

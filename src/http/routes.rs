@@ -722,6 +722,10 @@ async fn sse_events(
                                     Event::FeedbackTrend { session_id, .. } => session_id == filter,
                                     // Skill tracker - apply session filter
                                     Event::SkillTrackerEffectiveness { session_id, .. } => session_id == filter,
+                                    // Proactive alert - apply session filter (session_id is optional)
+                                    Event::ProactiveAlert { session_id, .. } => {
+                                        session_id.as_ref().map_or(true, |sid| sid == filter)
+                                    }
                                 }
                             } else {
                                 // No filter - emit all events
@@ -781,6 +785,8 @@ async fn sse_events(
                                     Event::FeedbackTrend { .. } => "feedback.trend",
                                     // Skill tracker events
                                     Event::SkillTrackerEffectiveness { .. } => "skill.tracker",
+                                    // Proactive alert events
+                                    Event::ProactiveAlert { .. } => "agent.alert",
                                 };
                                 
                                 let event = SseEvent::default()

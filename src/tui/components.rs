@@ -1947,6 +1947,106 @@ pub fn draw_status_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     f.render_widget(paragraph, area);
 }
 
+/// Draw the proactive alerts panel
+pub fn draw_alerts_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 🚨 Proactive Alerts ";
+
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    // Check if we have alerts
+    if let Some(ref alerts) = state.alerts_data {
+        if alerts.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("No alerts yet", Style::default().fg(Color::DarkGray)),
+            ]));
+            lines.push(Line::from(""));
+        } else {
+            // Show each alert
+            for (i, alert) in alerts.iter().enumerate().take(20) {
+                // Alert severity color
+                let severity_color = match alert.severity.as_str() {
+                    "emergency" => Color::Red,
+                    "critical" => Color::Red,
+                    "warning" => Color::Yellow,
+                    _ => Color::Cyan,
+                };
+
+                // Severity emoji
+                let severity_emoji = match alert.severity.as_str() {
+                    "emergency" => "🚨",
+                    "critical" => "🔴",
+                    "warning" => "🟡",
+                    _ => "ℹ️",
+                };
+
+                // Alert header
+                lines.push(Line::from(vec![
+                    Span::styled(format!("{}[{}] ", severity_emoji, alert.created_at), Style::default().fg(Color::DarkGray)),
+                    Span::styled(&alert.title, Style::default().fg(severity_color).add_modifier(Modifier::BOLD)),
+                ]));
+
+                // Category badge
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  Category: "), Style::default().fg(Color::DarkGray)),
+                    Span::styled(alert.category.to_uppercase(), Style::default().fg(Color::Cyan)),
+                    Span::styled(format!(" | Severity: "), Style::default().fg(Color::DarkGray)),
+                    Span::styled(alert.severity.to_uppercase(), Style::default().fg(severity_color)),
+                ]));
+
+                // Session ID if available
+                if let Some(ref session_id) = alert.session_id {
+                    lines.push(Line::from(vec![
+                        Span::styled("  Session: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(session_id, Style::default().fg(Color::Cyan)),
+                    ]));
+                }
+
+                // Message
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(&alert.message, Style::default().fg(Color::LightGreen)),
+                ]));
+
+                lines.push(Line::from(""));
+
+                // Add separator if not last alert
+                if i < alerts.len().saturating_sub(1) && i < 19 {
+                    lines.push(Line::from(vec![
+                        Span::styled("─────────────────────────────────────────", Style::default().fg(Color::DarkGray)),
+                    ]));
+                    lines.push(Line::from(""));
+                }
+            }
+        }
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("No alerts received yet", Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(vec![
+        Span::styled("─────────────────────────────────────────", Style::default().fg(Color::DarkGray)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :alerts again to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .alignment(Alignment::Left)
+        .scroll((state.scroll_offset as u16, 0));
+
+    f.render_widget(paragraph, area);
+}
+
 /// Draw the turn summaries panel
 pub fn draw_turn_summary_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title_text = " 📋 Turn Summaries ";

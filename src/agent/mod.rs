@@ -41,6 +41,7 @@ pub mod turn_feedback;
 pub mod turn_history;
 pub mod turn_log;
 pub mod turn_summary;
+pub mod proactive_alerts;
 
 pub use client::Agent;
 #[allow(unused_imports)]
@@ -105,3 +106,5 @@ pub use tool_strategy::{ToolStrategy, UserIntent, ToolGuidance, WorkflowPattern}
 pub use tool_pattern_learner::{ToolPatternLearner, LearnedPattern, ToolStats, PatternAnalysis};
 #[allow(unused_imports)]
 pub use tool_sequence_advisor::{ToolSequenceAdvisor, ToolRecommendation, SequenceRecommendation, RecommendationConfidence};
+#[allow(unused_imports)]
+pub use proactive_alerts::{ProactiveAlertManager, ProactiveAlert, ProactiveAlertStats, AlertSeverity, AlertCategory, AlertRule};

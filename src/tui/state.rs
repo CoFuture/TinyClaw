@@ -444,6 +444,23 @@ pub struct AppState {
     pub command_palette_selected: usize,
     /// Whether the command palette has keyboard focus (for filtering)
     pub command_palette_has_focus: bool,
+    /// Whether we're in proactive alerts viewing mode
+    pub alerts_mode: bool,
+    /// Cached proactive alerts data
+    pub alerts_data: Option<Vec<ProactiveAlertDisplay>>,
+}
+
+/// Proactive alert data for TUI display
+#[derive(Debug, Clone)]
+pub struct ProactiveAlertDisplay {
+    pub id: String,
+    pub category: String,
+    pub severity: String,
+    pub title: String,
+    pub message: String,
+    pub session_id: Option<String>,
+    pub created_at: String,
+    pub acknowledged: bool,
 }
 
 /// Session profile data for TUI display
@@ -618,6 +635,8 @@ impl Default for AppState {
             command_palette_query: String::new(),
             command_palette_selected: 0,
             command_palette_has_focus: false,
+            alerts_mode: false,
+            alerts_data: None,
         }
     }
 }

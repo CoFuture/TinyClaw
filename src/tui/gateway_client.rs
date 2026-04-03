@@ -135,6 +135,8 @@ pub enum TuiGatewayEvent {
     SessionProfileLoaded { profile: crate::tui::state::SessionProfileDisplay },
     /// Urgent context advice from SSE (high priority advice)
     UrgentAdvice { session_id: String, advice: Vec<UrgentAdviceItemDisplay> },
+    /// Proactive alert received from SSE
+    ProactiveAlert { id: String, category: String, severity: String, title: String, message: String, session_id: Option<String>, created_at: u64 },
 }
 
 /// Urgent advice item for TUI display
@@ -697,6 +699,18 @@ impl TuiGatewayClient {
                                 })
                                 .unwrap_or_default();
                             let _ = event_tx.send(TuiGatewayEvent::UrgentAdvice { session_id, advice });
+                        }
+                    }
+                    "agent.alert" => {
+                        if let Some(params) = resp.params {
+                            let id = params.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let category = params.get("category").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let severity = params.get("severity").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let title = params.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let message = params.get("message").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                            let session_id = params.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            let created_at = params.get("created_at").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let _ = event_tx.send(TuiGatewayEvent::ProactiveAlert { id, category, severity, title, message, session_id, created_at });
                         }
                     }
                     "assistant.text" => {

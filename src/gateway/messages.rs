@@ -179,6 +179,32 @@ impl HandlerContext {
         let cloned_engine = engine.clone();
         Arc::new(RwLock::new(cloned_engine))
     }
+
+    /// Emit a proactive alert event
+    pub fn emit_proactive_alert(
+        &self,
+        category: &str,
+        severity: &str,
+        title: &str,
+        message: &str,
+        session_id: Option<String>,
+    ) {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        self.event_emitter.emit(Event::ProactiveAlert {
+            id: uuid::Uuid::new_v4().to_string(),
+            category: category.to_string(),
+            severity: severity.to_string(),
+            title: title.to_string(),
+            message: message.to_string(),
+            session_id,
+            created_at,
+        });
+    }
 }
 
 /// Handle an incoming request
@@ -1131,6 +1157,23 @@ async fn handle_agent_turn(
         summarization_count: health_report.stats.summarization_count,
         recommendations_count: health_report.recommendations.len(),
     });
+
+    // Emit proactive alert if health is critical or emergency
+    let health_level_str = format!("{:?}", health_report.health_level);
+    if health_level_str == "Critical" || health_level_str == "Emergency" {
+        ctx.emit_proactive_alert(
+            "context_health",
+            if health_level_str == "Emergency" { "emergency" } else { "critical" },
+            &format!("Context Health: {}", health_level_str.to_uppercase()),
+            &format!(
+                "Session context health is {} (score: {}/100, utilization: {:.1}%). Consider starting a new session.",
+                health_level_str,
+                health_report.health_score,
+                health_report.composition.utilization_pct
+            ),
+            Some(session_key.to_string()),
+        );
+    }
 
     // Update context advisor with current turn data
     {

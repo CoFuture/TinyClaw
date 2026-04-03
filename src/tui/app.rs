@@ -708,6 +708,64 @@ impl TuiApp {
                     }
                 }
             }
+            TuiGatewayEvent::ProactiveAlert { id, category, severity, title, message, session_id, created_at } => {
+                use crate::types::Message;
+                use std::time::SystemTime;
+
+                // Format the timestamp
+                let created_str = match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(created_at as u64)) {
+                    Some(time) => {
+                        let datetime: chrono::DateTime<chrono::Utc> = time.into();
+                        datetime.format("%H:%M:%S").to_string()
+                    }
+                    None => String::from("unknown"),
+                };
+
+                // Format severity emoji
+                let severity_emoji = match severity.as_str() {
+                    "emergency" => "🚨",
+                    "critical" => "🔴",
+                    "warning" => "🟡",
+                    _ => "ℹ️",
+                };
+
+                // Format the alert as a system message
+                let content = format!("{} [{}] {}: {}", severity_emoji, category.to_uppercase(), title, message);
+
+                // Store in alerts data for the alerts panel
+                let alert_display = crate::tui::state::ProactiveAlertDisplay {
+                    id: id.clone(),
+                    category: category.clone(),
+                    severity: severity.clone(),
+                    title: title.clone(),
+                    message: message.clone(),
+                    session_id: session_id.clone(),
+                    created_at: created_str,
+                    acknowledged: false,
+                };
+
+                // Add to alerts data
+                if self.state.alerts_data.is_none() {
+                    self.state.alerts_data = Some(Vec::new());
+                }
+                if let Some(ref mut alerts) = self.state.alerts_data {
+                    // Add to the beginning (most recent first)
+                    alerts.insert(0, alert_display);
+                    // Keep only the last 50 alerts
+                    if alerts.len() > 50 {
+                        alerts.truncate(50);
+                    }
+                }
+
+                // Also show as system message in the relevant session
+                if let Some(ref sid) = session_id {
+                    if self.state.current_session_id.as_ref() == Some(sid) {
+                        if let Some(history) = self.state.session_histories.get_mut(sid) {
+                            history.add_message(Message::system(&content));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1442,6 +1500,28 @@ impl TuiApp {
                             self.state.scheduled_tasks_mode = false;
                             self.state.turn_summary_mode = false;
                             self.state.accomplishments_mode = false;
+                            self.state.alerts_mode = false;
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+
+                    // Handle :alerts command - toggle proactive alerts viewing mode
+                    if input_lower.starts_with(":alerts") || input_lower == ":alert" {
+                        self.state.alerts_mode = !self.state.alerts_mode;
+                        if self.state.alerts_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            self.state.advisor_mode = false;
+                            self.state.scheduled_tasks_mode = false;
+                            self.state.turn_summary_mode = false;
+                            self.state.accomplishments_mode = false;
+                            self.state.status_mode = false;
                         }
                         self.state.input_buffer.clear();
                         return Ok(true);
@@ -2240,6 +2320,9 @@ impl TuiApp {
                         self.state.profile_data = None;
                     } else if self.state.status_mode {
                         self.state.status_mode = false;
+                    } else if self.state.alerts_mode {
+                        self.state.alerts_mode = false;
+                        self.state.alerts_data = None;
                     } else if self.state.turn_summary_mode {
                         self.state.turn_summary_mode = false;
                     } else if self.state.instructions_mode {
@@ -2348,6 +2431,8 @@ impl TuiApp {
             crate::tui::components::draw_profile_panel(f, msg_chunks[0], &self.state);
         } else if self.state.status_mode {
             crate::tui::components::draw_status_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.alerts_mode {
+            crate::tui::components::draw_alerts_panel(f, msg_chunks[0], &self.state);
         } else if self.state.turn_summary_mode {
             crate::tui::components::draw_turn_summary_panel(f, msg_chunks[0], &self.state);
         } else {
