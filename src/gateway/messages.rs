@@ -94,6 +94,8 @@ pub struct HandlerContext {
     pub tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
     /// Session accomplishments tracker
     pub session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
+    /// Session profile manager for managing session metadata (description, color, tags)
+    pub session_profiles: Arc<crate::agent::SessionProfileManager>,
     /// Turn feedback manager for tracking user feedback on agent responses
     pub turn_feedback_manager: Arc<TurnFeedbackManager>,
     /// Skill tracker for tracking skill activations and effectiveness
@@ -128,6 +130,7 @@ impl HandlerContext {
         context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
         tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
         session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
+        session_profiles: Arc<crate::agent::SessionProfileManager>,
         turn_feedback_manager: Arc<TurnFeedbackManager>,
         skill_tracker: Arc<crate::agent::SkillTracker>,
         skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
@@ -160,6 +163,7 @@ impl HandlerContext {
             context_health_monitor,
             tool_pattern_learner,
             session_accomplishments,
+            session_profiles,
             turn_feedback_manager,
             skill_tracker,
             skill_synergy,

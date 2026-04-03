@@ -1672,6 +1672,112 @@ pub fn draw_scheduled_tasks_panel(f: &mut Frame<'_>, area: Rect, state: &AppStat
 }
 
 /// Draw the accomplishments panel
+pub fn draw_profile_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
+    let title_text = " 📋 Session Profile ";
+
+    let block = Block::default()
+        .title(title_text)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Rgb(20, 15, 30)));
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(ref profile) = state.profile_data {
+        lines.push(Line::from(""));
+        
+        // Session ID
+        lines.push(Line::from(vec![
+            Span::styled("Session: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(&profile.session_id, Style::default().fg(Color::Cyan)),
+        ]));
+        
+        // Color
+        let color_emoji = match profile.color.as_str() {
+            "red" => "🔴",
+            "orange" => "🟠",
+            "yellow" => "🟡",
+            "green" => "🟢",
+            "cyan" => "🔵",
+            "blue" => "🔵",
+            "magenta" => "🟣",
+            "purple" => "🟣",
+            "gray" => "⚪",
+            _ => "🔵",
+        };
+        lines.push(Line::from(vec![
+            Span::styled("Color: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} {}", color_emoji, profile.color), Style::default().fg(Color::Cyan)),
+        ]));
+        
+        // Description
+        if !profile.description.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Description: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled(&profile.description, Style::default().fg(Color::Yellow)),
+            ]));
+        }
+        
+        // Tags
+        if !profile.tags.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Tags: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            let tag_line: Vec<Span> = profile.tags.iter()
+                .map(|t| Span::styled(format!("[{}] ", t), Style::default().fg(Color::Green)))
+                .collect();
+            lines.push(Line::from(tag_line));
+        }
+        
+        // Created notes
+        if !profile.created_notes.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Notes: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            for line in profile.created_notes.lines() {
+                if !line.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled(line, Style::default().fg(Color::Magenta)),
+                    ]));
+                }
+            }
+        }
+        
+        if profile.description.is_empty() && profile.tags.is_empty() && profile.created_notes.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("No profile data set for this session.", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from("Use the WebUI or API to set a profile:"));
+            lines.push(Line::from(vec![
+                Span::styled("  PUT /api/sessions/{id}/profile", Style::default().fg(Color::Cyan)),
+            ]));
+            lines.push(Line::from("with JSON: { \"description\": \"...\", \"color\": \"blue\", \"tags\": [\"work\"] }"));
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Loading session profile...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ]));
+    }
+    
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Press Esc or :profile again to exit", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(block)
+        .wrap(Wrap { trim: true });
+    f.render_widget(paragraph, area);
+}
+
 pub fn draw_accomplishments_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
     let title_text = " 🏆 Session Accomplishments ";
 

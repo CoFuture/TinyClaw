@@ -89,6 +89,7 @@ pub async fn start_server(
                             ctx.context_health_monitor.clone(),
                             ctx.tool_pattern_learner.clone(),
                             ctx.session_accomplishments.clone(),
+                            ctx.session_profiles.clone(),
                             ctx.turn_feedback_manager.clone(),
                             ctx.skill_tracker.clone(),
                             ctx.skill_synergy.clone(),

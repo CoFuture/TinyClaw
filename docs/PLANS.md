@@ -3264,6 +3264,51 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v15.0.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **Session Profile Manager - 会话配置文件管理器** - 为每个会话添加持久化的元数据管理
+  - **新增模块** (`src/agent/session_profiles.rs`, ~450 行代码)：
+    - `SessionProfile` 结构体：包含 session_id、description、color、tags、created_notes 等字段
+    - `SessionColor` 枚举：9 种颜色标签（red/orange/yellow/green/cyan/blue/magenta/purple/gray）
+    - `SessionProfileSummary` 结构体：列表视图用的摘要信息
+    - `SessionProfileManager` 结构体：配置文件管理器，支持 CRUD 和持久化
+    - 持久化到 `~/.config/tiny_claw/session_profiles/profiles.json`
+  - **集成到 HandlerContext** (`src/gateway/messages.rs`)：
+    - 新增 `session_profiles: Arc<SessionProfileManager>` 字段
+    - 在 `HandlerContext::new()` 中传递
+  - **集成到 main.rs**：
+    - 创建 `SessionProfileManager` 实例，存储目录 `profiles_dir`
+  - **HTTP API 端点** (`src/http/routes.rs`)：
+    - `GET /api/sessions/{session_id}/profile` - 获取会话配置文件
+    - `PUT /api/sessions/{session_id}/profile` - 更新会话配置文件
+    - `DELETE /api/sessions/{session_id}/profile` - 删除会话配置文件
+    - `GET /api/sessions/profiles` - 列出所有会话配置文件
+  - **TUI 命令** (`:profile` / `:sp`)：
+    - 查看当前会话的配置文件（描述、颜色、标签）
+    - 使用 `:profile` 或 `:sp` 打开/关闭面板
+  - **TUI 状态** (`state.rs`)：
+    - `profile_mode` - 是否处于配置文件查看模式
+    - `profile_data: Option<SessionProfileDisplay>` - 缓存的配置文件数据
+    - `SessionProfileDisplay` 结构体 - TUI 显示用的数据结构
+  - **TUI 渲染** (`components.rs`)：
+    - `draw_profile_panel()` - 显示会话配置文件面板
+    - 青绿色边框，彩色 emoji 指示器（🔵🟢🟣等）
+  - **TUI 事件处理**：
+    - `TuiGatewayEvent::SessionProfileLoaded` - 接收配置文件加载完成事件
+    - Esc 键退出配置文件查看模式
+  - **Gateway 事件** (`gateway_client.rs`)：
+    - 新增 `get_session_profile_http()` HTTP 客户端方法
+  - **代码质量**：
+    - cargo clippy 仅 2 个 pre-existing dead_code 警告
+    - cargo test **498 tests 全部通过**（新增 7 个配置文件管理器测试）
+
+**下一步**: 多会话支持增强、WebUI 会话配置文件管理界面
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

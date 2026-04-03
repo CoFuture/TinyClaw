@@ -131,6 +131,8 @@ pub enum TuiGatewayEvent {
     ScheduledTasksLoaded { tasks: Vec<ScheduledTaskDisplay> },
     /// Session accomplishments loaded (from :acc command)
     AccomplishmentsLoaded { text: String },
+    /// Session profile loaded (from :profile command)
+    SessionProfileLoaded { profile: crate::tui::state::SessionProfileDisplay },
     /// Urgent context advice from SSE (high priority advice)
     UrgentAdvice { session_id: String, advice: Vec<UrgentAdviceItemDisplay> },
 }
@@ -1245,6 +1247,19 @@ impl TuiGatewayClient {
     /// Get context advisor data via HTTP API
     pub async fn get_context_advisor_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/api/context/advisor/{}", base_url, session_id);
+        let client = reqwest::Client::new();
+        client.get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get session profile via HTTP API
+    pub async fn get_session_profile_http(&self, base_url: &str, session_id: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/sessions/{}/profile", base_url, session_id);
         let client = reqwest::Client::new();
         client.get(&url)
             .send()

@@ -172,6 +172,12 @@ pub const TUI_COMMANDS: &[TuiCommandMeta] = &[
         category: CommandCategory::Session,
     },
     TuiCommandMeta {
+        full_name: ":profile",
+        aliases: &["sp"],
+        description: "View session profile (description, color, tags)",
+        category: CommandCategory::Session,
+    },
+    TuiCommandMeta {
         full_name: ":sum",
         aliases: &["summary"],
         description: "View summarizer config & stats",
@@ -328,6 +334,10 @@ pub struct AppState {
     pub instructions_session_id: Option<String>,
     /// Current instructions being edited (None = loading/fetching)
     pub current_instructions: Option<String>,
+    /// Whether we're in session profile viewing mode
+    pub profile_mode: bool,
+    /// Cached session profile data for display
+    pub profile_data: Option<SessionProfileDisplay>,
     /// Whether we're in action confirmation mode (waiting for user to confirm/deny)
     pub confirm_mode: bool,
     /// Session ID for pending action confirmation
@@ -434,6 +444,16 @@ pub struct AppState {
     pub command_palette_selected: usize,
     /// Whether the command palette has keyboard focus (for filtering)
     pub command_palette_has_focus: bool,
+}
+
+/// Session profile data for TUI display
+#[derive(Debug, Clone)]
+pub struct SessionProfileDisplay {
+    pub session_id: String,
+    pub description: String,
+    pub color: String,
+    pub tags: Vec<String>,
+    pub created_notes: String,
 }
 
 /// Context health data for TUI display
@@ -545,6 +565,8 @@ impl Default for AppState {
             instructions_mode: false,
             instructions_session_id: None,
             current_instructions: None,
+            profile_mode: false,
+            profile_data: None,
             confirm_mode: false,
             confirm_session_id: None,
             confirm_plan_id: None,
@@ -807,6 +829,8 @@ impl AppState {
         self.confirm_mode = false;
         self.notes_mode = false;
         self.instructions_mode = false;
+        self.profile_mode = false;
+        self.profile_data = None;
         self.sumcfg_mode = false;
         self.summarizer_mode = false;
         self.quality_mode = false;

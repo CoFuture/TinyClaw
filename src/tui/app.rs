@@ -684,6 +684,10 @@ impl TuiApp {
                 debug!("Accomplishments loaded");
                 self.state.accomplishments_data = Some(text);
             }
+            TuiGatewayEvent::SessionProfileLoaded { profile } => {
+                info!("Session profile loaded: session_id={}", profile.session_id);
+                self.state.profile_data = Some(profile);
+            }
             TuiGatewayEvent::UrgentAdvice { session_id, advice } => {
                 // Display urgent advice as system messages in the chat
                 use crate::types::Message;
@@ -1297,6 +1301,44 @@ impl TuiApp {
                                     }
                                 }
                             });
+                        }
+                        self.state.input_buffer.clear();
+                        return Ok(true);
+                    }
+                    
+                    // Handle :profile command - toggle session profile viewing mode
+                    if input_lower.starts_with(":profile") || input_lower == ":sp" {
+                        self.state.profile_mode = !self.state.profile_mode;
+                        if self.state.profile_mode {
+                            // Exit other modes
+                            self.state.quality_mode = false;
+                            self.state.eval_mode = false;
+                            self.state.recommendations_mode = false;
+                            self.state.safety_mode = false;
+                            self.state.perf_mode = false;
+                            self.state.context_health_mode = false;
+                            // Fetch session profile
+                            if let Some(ref sid) = self.state.current_session_id {
+                                let client = self.gateway_client.clone();
+                                let sid_clone = sid.clone();
+                                tokio::spawn(async move {
+                                    let client = client.read().await;
+                                    if let Ok(data) = client.get_session_profile_http("http://127.0.0.1:8080", &sid_clone).await {
+                                        let description = data.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let color = data.get("color").and_then(|v| v.as_str()).unwrap_or("blue").to_string();
+                                        let tags = data.get("tags").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|t| t.as_str().map(String::from)).collect()).unwrap_or_default();
+                                        let created_notes = data.get("createdNotes").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let profile = crate::tui::state::SessionProfileDisplay {
+                                            session_id: sid_clone.clone(),
+                                            description,
+                                            color,
+                                            tags,
+                                            created_notes,
+                                        };
+                                        client.send_event(crate::tui::gateway_client::TuiGatewayEvent::SessionProfileLoaded { profile });
+                                    }
+                                });
+                            }
                         }
                         self.state.input_buffer.clear();
                         return Ok(true);
@@ -2193,6 +2235,9 @@ impl TuiApp {
                     } else if self.state.accomplishments_mode {
                         self.state.accomplishments_mode = false;
                         self.state.accomplishments_data = None;
+                    } else if self.state.profile_mode {
+                        self.state.profile_mode = false;
+                        self.state.profile_data = None;
                     } else if self.state.status_mode {
                         self.state.status_mode = false;
                     } else if self.state.turn_summary_mode {
@@ -2299,6 +2344,8 @@ impl TuiApp {
             crate::tui::components::draw_scheduled_tasks_panel(f, msg_chunks[0], &self.state);
         } else if self.state.accomplishments_mode {
             crate::tui::components::draw_accomplishments_panel(f, msg_chunks[0], &self.state);
+        } else if self.state.profile_mode {
+            crate::tui::components::draw_profile_panel(f, msg_chunks[0], &self.state);
         } else if self.state.status_mode {
             crate::tui::components::draw_status_panel(f, msg_chunks[0], &self.state);
         } else if self.state.turn_summary_mode {

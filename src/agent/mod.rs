@@ -35,6 +35,7 @@ pub mod tool_sequence_advisor;
 pub mod tool_strategy;
 pub mod tool_pattern_learner;
 pub mod session_accomplishments;
+pub mod session_profiles;
 pub mod feedback_trend;
 pub mod turn_feedback;
 pub mod turn_history;
@@ -76,6 +77,8 @@ pub use task::{TaskState, TaskSummary};
 pub use task_manager::TaskManager;
 #[allow(unused_imports)]
 pub use session_accomplishments::{SessionAccomplishments, SessionAccomplishmentsManager, SessionAccomplishmentSummary, SessionAccomplishmentStats, Accomplishment, AccomplishmentType};
+#[allow(unused_imports)]
+pub use session_profiles::{SessionProfile, SessionProfileManager, SessionProfileSummary, SessionColor};
 #[allow(unused_imports)]
 pub use turn_history::{TurnHistoryManager, TurnRecord, TurnSummary, TurnStats, ToolExecution};
 #[allow(unused_imports)]

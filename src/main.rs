@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner, SessionAccomplishmentsManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner, SessionAccomplishmentsManager, SessionProfileManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -185,6 +185,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_accomplishments = Arc::new(SessionAccomplishmentsManager::new(accomplishments_dir.clone()));
     info!("Session accomplishments manager initialized (dir: {:?})", accomplishments_dir);
 
+    // Create session profile manager for session metadata (description, color, tags)
+    let profiles_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("tiny_claw")
+        .join("session_profiles");
+    let session_profiles = Arc::new(SessionProfileManager::new(profiles_dir.clone()));
+    info!("Session profile manager initialized (dir: {:?})", profiles_dir);
+
     // Create self-evaluation manager with persistence
     let self_eval_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -328,6 +336,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_quality_manager: session_quality_manager.clone(),
         context_health_monitor: context_health_monitor.clone(),
         session_accomplishments: session_accomplishments.clone(),
+        session_profiles: session_profiles.clone(),
         skill_tracker: skill_tracker.clone(),
         skill_synergy: skill_synergy.clone(),
         tool_sequence_advisor: Arc::new(crate::agent::ToolSequenceAdvisor::new(
@@ -363,6 +372,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         context_health_monitor.clone(), // Context health monitor
         tool_pattern_learner.clone(), // Tool pattern learner for learning from turns
         session_accomplishments.clone(), // Session accomplishments tracker
+        session_profiles.clone(), // Session profile manager for session metadata
         turn_feedback.clone(), // Turn feedback manager for user feedback
         skill_tracker.clone(), // Skill tracker for tracking skill effectiveness
         skill_synergy.clone(), // Skill synergy analyzer for skill pair analysis

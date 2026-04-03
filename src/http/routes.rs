@@ -4,7 +4,7 @@ use crate::config::{Config, default_config_path};
 use crate::gateway::events::{Event, EventEmitter};
 use crate::gateway::session::SessionManager;
 use crate::gateway::server::ServerState;
-use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner, SessionAccomplishmentsManager, TurnFeedbackManager};
+use crate::agent::{Agent, SkillRegistry, SessionSkillManager, Scheduler, SessionNotesManager, SessionNoteUpdate, SuggestionManager, MemoryManager, TurnHistoryManager, ContextHealthMonitor, ToolPatternLearner, SessionAccomplishmentsManager, TurnFeedbackManager, SessionProfileManager};
 use crate::agent::retry::CircuitState;
 use crate::metrics::{MetricsCollector, collector::SystemMetrics};
 use crate::preferences::{PreferencesManager, UserPreferences, UserPreferencesUpdate};
@@ -58,6 +58,7 @@ pub struct HttpState {
     pub session_quality_manager: Arc<crate::agent::SessionQualityManager>,
     pub context_health_monitor: Arc<ContextHealthMonitor>,
     pub session_accomplishments: Arc<SessionAccomplishmentsManager>,
+    pub session_profiles: Arc<SessionProfileManager>,
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
     pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
     pub tool_sequence_advisor: Arc<crate::agent::ToolSequenceAdvisor>,
@@ -881,6 +882,11 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         // Session instructions API
         .route("/api/sessions/{session_id}/instructions", get(session_instructions_get))
         .route("/api/sessions/{session_id}/instructions", axum::routing::put(session_instructions_set))
+        // Session profile API - metadata management
+        .route("/api/sessions/{session_id}/profile", get(session_profile_get))
+        .route("/api/sessions/{session_id}/profile", axum::routing::put(session_profile_update))
+        .route("/api/sessions/{session_id}/profile", axum::routing::delete(session_profile_delete))
+        .route("/api/sessions/profiles", get(session_profiles_list))
         // Session suggestions API
         .route("/api/sessions/{session_id}/suggestions", get(suggestions_list))
         .route("/api/sessions/{session_id}/suggestions/{suggestion_id}/accept", axum::routing::post(suggestions_accept))
@@ -1816,6 +1822,115 @@ async fn session_instructions_set(
         "success": success,
         "sessionId": session_id,
         "instructions": instructions,
+    }))
+}
+
+// ============================================================
+// Session Profile API Endpoints
+// ============================================================
+
+use crate::agent::session_profiles::SessionColor;
+
+/// Get session profile
+async fn session_profile_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let profile = state.session_profiles.get(&session_id);
+    match profile {
+        Some(p) => {
+            let p = p.read();
+            Json(serde_json::json!({
+                "sessionId": p.session_id,
+                "description": p.description,
+                "color": p.color.to_string(),
+                "tags": p.tags,
+                "createdNotes": p.created_notes,
+                "createdAt": p.created_at.to_rfc3339(),
+                "updatedAt": p.updated_at.to_rfc3339(),
+            }))
+        }
+        None => {
+            // Return default profile for session without one
+            Json(serde_json::json!({
+                "sessionId": session_id,
+                "description": "",
+                "color": "blue",
+                "tags": [],
+                "createdNotes": "",
+                "createdAt": null,
+                "updatedAt": null,
+            }))
+        }
+    }
+}
+
+/// Update session profile
+async fn session_profile_update(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let profile = state.session_profiles.get_or_create(&session_id);
+    let success;
+    {
+        let mut p = profile.write();
+        if let Some(desc) = payload.get("description").and_then(|v| v.as_str()) {
+            p.set_description(desc.to_string());
+        }
+        if let Some(color_str) = payload.get("color").and_then(|v| v.as_str()) {
+            if let Ok(color) = serde_json::from_str::<SessionColor>(&format!("\"{}\"", color_str)) {
+                p.set_color(color);
+            }
+        }
+        if let Some(tags) = payload.get("tags").and_then(|v| v.as_array()) {
+            for tag in tags {
+                if let Some(t) = tag.as_str() {
+                    p.add_tag(t.to_string());
+                }
+            }
+        }
+        if let Some(notes) = payload.get("createdNotes").and_then(|v| v.as_str()) {
+            p.set_created_notes(notes.to_string());
+        }
+        success = true;
+        state.session_profiles.update(&p);
+    }
+    let p = profile.read();
+    Json(serde_json::json!({
+        "success": success,
+        "sessionId": p.session_id,
+        "description": p.description,
+        "color": p.color.to_string(),
+        "tags": p.tags,
+        "createdNotes": p.created_notes,
+        "createdAt": p.created_at.to_rfc3339(),
+        "updatedAt": p.updated_at.to_rfc3339(),
+    }))
+}
+
+/// List all session profiles
+async fn session_profiles_list(
+    State(state): State<Arc<HttpState>>,
+) -> Json<serde_json::Value> {
+    let summaries = state.session_profiles.list_summaries();
+    let tags = state.session_profiles.all_tags();
+    Json(serde_json::json!({
+        "profiles": summaries,
+        "allTags": tags,
+        "count": summaries.len(),
+    }))
+}
+
+/// Delete session profile
+async fn session_profile_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let deleted = state.session_profiles.delete(&session_id);
+    Json(serde_json::json!({
+        "success": deleted,
+        "sessionId": session_id,
     }))
 }
 
