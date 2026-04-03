@@ -426,6 +426,14 @@ pub struct AppState {
     /// Cached sessions list for display
     #[allow(dead_code)]
     pub sessions_data: Vec<crate::tui::gateway_client::SessionInfo>,
+    /// Whether we're in command palette mode
+    pub command_palette_mode: bool,
+    /// Current command palette search query
+    pub command_palette_query: String,
+    /// Selected command index in command palette (filtered list)
+    pub command_palette_selected: usize,
+    /// Whether the command palette has keyboard focus (for filtering)
+    pub command_palette_has_focus: bool,
 }
 
 /// Context health data for TUI display
@@ -584,6 +592,10 @@ impl Default for AppState {
             sessions_mode: false,
             sessions_selected_index: 0,
             sessions_data: Vec::new(),
+            command_palette_mode: false,
+            command_palette_query: String::new(),
+            command_palette_selected: 0,
+            command_palette_has_focus: false,
         }
     }
 }
@@ -786,6 +798,78 @@ impl AppState {
         self.search_query.clear();
         self.search_results.clear();
         self.search_index = None;
+    }
+
+    /// Enter command palette mode
+    pub fn enter_command_palette(&mut self) {
+        // Exit other modes first
+        self.exit_search_mode();
+        self.confirm_mode = false;
+        self.notes_mode = false;
+        self.instructions_mode = false;
+        self.sumcfg_mode = false;
+        self.summarizer_mode = false;
+        self.quality_mode = false;
+        self.eval_mode = false;
+        self.recommendations_mode = false;
+        self.safety_mode = false;
+        self.perf_mode = false;
+        self.context_health_mode = false;
+        self.advisor_mode = false;
+        self.scheduled_tasks_mode = false;
+        self.accomplishments_mode = false;
+        self.status_mode = false;
+        self.turn_summary_mode = false;
+        // Enter palette mode
+        self.command_palette_mode = true;
+        self.command_palette_query.clear();
+        self.command_palette_selected = 0;
+        self.command_palette_has_focus = true;
+    }
+
+    /// Exit command palette mode
+    pub fn exit_command_palette(&mut self) {
+        self.command_palette_mode = false;
+        self.command_palette_query.clear();
+        self.command_palette_selected = 0;
+        self.command_palette_has_focus = false;
+    }
+
+    /// Get filtered commands based on query
+    pub fn get_filtered_commands(&self) -> Vec<&'static TuiCommandMeta> {
+        let query = self.command_palette_query.to_lowercase();
+        if query.is_empty() {
+            return TUI_COMMANDS.iter().collect();
+        }
+        TUI_COMMANDS.iter()
+            .filter(|cmd| {
+                cmd.full_name.to_lowercase().contains(&query)
+                    || cmd.description.to_lowercase().contains(&query)
+                    || cmd.aliases.iter().any(|a| a.contains(&query))
+            })
+            .collect()
+    }
+
+    /// Navigate up in command palette
+    pub fn command_palette_up(&mut self) {
+        let filtered = self.get_filtered_commands();
+        if filtered.is_empty() {
+            return;
+        }
+        if self.command_palette_selected == 0 {
+            self.command_palette_selected = filtered.len() - 1;
+        } else {
+            self.command_palette_selected = self.command_palette_selected.saturating_sub(1);
+        }
+    }
+
+    /// Navigate down in command palette
+    pub fn command_palette_down(&mut self) {
+        let filtered = self.get_filtered_commands();
+        if filtered.is_empty() {
+            return;
+        }
+        self.command_palette_selected = (self.command_palette_selected + 1) % filtered.len();
     }
 
     /// Update search query and find matching messages

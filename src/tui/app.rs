@@ -724,6 +724,11 @@ impl TuiApp {
 
             match key.code {
                 KeyCode::Tab => {
+                    if self.state.command_palette_mode {
+                        // Tab - next command
+                        self.state.command_palette_down();
+                        return Ok(true);
+                    }
                     if self.state.active_panel == 2 {
                         // Tab completion in input panel
                         if self.state.completion.active {
@@ -748,7 +753,11 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::BackTab => {
-                    // Shift+Tab - previous completion
+                    // Shift+Tab - previous completion or command palette navigation
+                    if self.state.command_palette_mode {
+                        self.state.command_palette_up();
+                        return Ok(true);
+                    }
                     if self.state.active_panel == 2 && self.state.completion.active {
                         self.state.completion.prev();
                         self.state.input_buffer = self.state.completion.current()
@@ -757,6 +766,10 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Up => {
+                    if self.state.command_palette_mode {
+                        self.state.command_palette_up();
+                        return Ok(true);
+                    }
                     if self.state.active_panel == 2 {
                         // Input panel: navigate input history
                         self.state.input_history_up();
@@ -769,6 +782,10 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Down => {
+                    if self.state.command_palette_mode {
+                        self.state.command_palette_down();
+                        return Ok(true);
+                    }
                     if self.state.active_panel == 2 {
                         // Input panel: navigate input history
                         self.state.input_history_down();
@@ -783,6 +800,65 @@ impl TuiApp {
                     return Ok(true);
                 }
                 KeyCode::Enter => {
+                    // Handle command palette - execute selected command
+                    if self.state.command_palette_mode {
+                        let filtered = self.state.get_filtered_commands();
+                        if !filtered.is_empty() && self.state.command_palette_selected < filtered.len() {
+                            let cmd = filtered[self.state.command_palette_selected];
+                            self.state.exit_command_palette();
+                            // Execute the command by simulating colon input
+                            let cmd_name = cmd.full_name.trim_start_matches(':');
+                            self.state.exit_command_palette();
+                            // Directly handle simple toggle/view commands
+                            match cmd_name {
+                                "q" => return Ok(false), // Quit
+                                "h" | "?" => {
+                                    self.state.show_help = !self.state.show_help;
+                                    return Ok(true);
+                                }
+                                "n" | "new" => {
+                                    // Create new session - trigger via gateway client
+                                    let client = self.gateway_client.clone();
+                                    tokio::spawn(async move {
+                                        let client = client.read().await;
+                                        if let Err(e) = client.create_session().await {
+                                            error!("Failed to create session: {}", e);
+                                        }
+                                    });
+                                    return Ok(true);
+                                }
+                                "sessions" | "sessionlist" => {
+                                    self.state.sessions_mode = true;
+                                    return Ok(true);
+                                }
+                                "cancel" | "stop" => {
+                                    // Cancel current turn
+                                    if let Some(ref session_id) = self.state.current_session_id {
+                                        let client = self.gateway_client.clone();
+                                        let sid = session_id.clone();
+                                        tokio::spawn(async move {
+                                            let client = client.read().await;
+                                            if let Err(e) = client.cancel_turn(&sid).await {
+                                                error!("Failed to cancel turn: {}", e);
+                                            }
+                                        });
+                                    }
+                                    return Ok(true);
+                                }
+                                _ => {
+                                    // For other commands, put in buffer and let user press Enter
+                                    self.state.input_buffer.clear();
+                                    self.state.input_buffer.push(':');
+                                    self.state.input_buffer.push_str(cmd_name);
+                                    self.state.active_panel = 2;
+                                    return Ok(true);
+                                }
+                            }
+                        }
+                        self.state.exit_command_palette();
+                        return Ok(true);
+                    }
+
                     // Handle search mode
                     if self.state.search_mode {
                         // Perform search with current query
@@ -1938,6 +2014,11 @@ impl TuiApp {
                     self.state.input_buffer.push('/');
                     return Ok(true);
                 }
+                KeyCode::Char('p') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    // Ctrl+P - open command palette
+                    self.state.enter_command_palette();
+                    return Ok(true);
+                }
                 KeyCode::Char('c') => {
                     if self.state.active_panel == 0 {
                         // Number key for session selection
@@ -1984,7 +2065,22 @@ impl TuiApp {
                             return Ok(true);
                         }
                     }
-                    
+
+                    // Handle command palette mode - filter commands
+                    if self.state.command_palette_mode {
+                        if c == ':' {
+                            // Colon starts command input - exit palette and switch to command mode
+                            self.state.exit_command_palette();
+                            self.state.input_buffer.clear();
+                            self.state.input_buffer.push(':');
+                            self.state.active_panel = 2;
+                        } else {
+                            self.state.command_palette_query.push(c);
+                            self.state.command_palette_selected = 0;
+                        }
+                        return Ok(true);
+                    }
+
                     if self.state.active_panel == 2 {
                         // If navigating history, reset and start fresh
                         if self.state.is_navigating_history() {
@@ -2021,7 +2117,16 @@ impl TuiApp {
                         }
                         return Ok(true);
                     }
-                    
+
+                    // Handle command palette mode backspace
+                    if self.state.command_palette_mode {
+                        if !self.state.command_palette_query.is_empty() {
+                            self.state.command_palette_query.pop();
+                            self.state.command_palette_selected = 0;
+                        }
+                        return Ok(true);
+                    }
+
                     if self.state.active_panel == 2 {
                         // If navigating history, reset
                         if self.state.is_navigating_history() {
@@ -2116,6 +2221,8 @@ impl TuiApp {
                         self.state.confirm_session_id = None;
                         self.state.confirm_plan_id = None;
                         self.state.confirm_tools.clear();
+                    } else if self.state.command_palette_mode {
+                        self.state.exit_command_palette();
                     } else {
                         return Ok(false); // Quit
                     }
@@ -2210,6 +2317,11 @@ impl TuiApp {
         // Draw error overlay if there's an error
         if self.state.error_message.is_some() && !self.state.show_help {
             self.draw_error_overlay(f);
+        }
+
+        // Draw command palette overlay if active
+        if self.state.command_palette_mode {
+            self.draw_command_palette_overlay(f);
         }
     }
 
@@ -2360,6 +2472,119 @@ impl TuiApp {
         // Clear the area first
         f.render_widget(Clear, box_rect);
         f.render_widget(paragraph, box_rect);
+    }
+
+    fn draw_command_palette_overlay(&self, f: &mut ratatui::Frame<'_>) {
+        use ratatui::widgets::Clear;
+        use ratatui::style::{Color, Modifier, Style};
+        use ratatui::text::Span;
+        use crate::tui::state::CommandCategory;
+
+        let size = f.area();
+        let filtered = self.state.get_filtered_commands();
+        let selected = self.state.command_palette_selected.min(filtered.len().saturating_sub(1));
+
+        // Build command palette content
+        let mut content: Vec<Line> = vec![];
+
+        // Search input line
+        content.push(Line::from(vec![
+            Span::styled(" 🔍 ", Style::default().fg(Color::Cyan)),
+            Span::raw(" "),
+            Span::raw(&self.state.command_palette_query),
+            Span::styled("▌", Style::default().fg(Color::Cyan)),
+        ]));
+        content.push(Line::from(""));
+
+        // Results header
+        let result_count = filtered.len();
+        content.push(Line::from(vec![
+            Span::styled(format!(" {} commands", result_count), Style::default().fg(Color::DarkGray)),
+        ]));
+        content.push(Line::from(""));
+
+        // Show filtered commands (max 15 visible)
+        let visible_offset = selected.saturating_sub(7);
+        let visible: Vec<_> = filtered.iter()
+            .skip(visible_offset)
+            .take(15)
+            .enumerate()
+            .collect();
+
+        for (i, cmd_opt) in visible {
+            let actual_index = visible_offset + i;
+            let is_selected = actual_index == selected;
+
+            let category_color = match cmd_opt.category {
+                CommandCategory::Session => Color::Blue,
+                CommandCategory::Connection => Color::Green,
+                CommandCategory::Navigation => Color::Yellow,
+            };
+
+            let prefix = if is_selected { "▶ " } else { "  " };
+            let cmd_name_style = if is_selected {
+                Style::default().fg(Color::Black).bg(Color::White)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let cat_str = format!("[{:?}]", cmd_opt.category);
+            let desc_style = if is_selected {
+                Style::default().fg(Color::DarkGray)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+
+            // Build line parts - clone owned data to avoid lifetime issues
+            let full_name = cmd_opt.full_name.to_string();
+            let description = cmd_opt.description.to_string();
+            let parts: Vec<Span> = vec![
+                Span::raw(prefix),
+                Span::styled(full_name, cmd_name_style),
+                Span::raw(" "),
+                Span::styled(description, desc_style),
+                Span::raw(" "),
+                Span::styled(cat_str, Style::default().fg(category_color)),
+            ];
+            content.push(Line::from(parts));
+        }
+
+        if filtered.is_empty() {
+            content.push(Line::from(vec![
+                Span::styled(" No matching commands", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+
+        content.push(Line::from(""));
+        content.push(Line::from(vec![
+            Span::styled(" ↑↓ Navigate  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Enter Select  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Esc Close", Style::default().fg(Color::DarkGray)),
+        ]));
+
+        let block = Block::default()
+            .title(vec![
+                Span::styled(" Command Palette ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ])
+            .title_style(Style::default().fg(Color::Cyan))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .style(Style::default().bg(Color::DarkGray));
+
+        // Calculate palette size (centered, 50% width, auto height based on content)
+        let palette_width = (size.width as f32 * 0.5) as u16;
+        let palette_height = (content.len() as u16 + 2).min(size.height.saturating_sub(2));
+
+        let center_x = (size.width.saturating_sub(palette_width)) / 2;
+        let center_y = (size.height.saturating_sub(palette_height)) / 2;
+
+        let palette_rect = Rect::new(center_x, center_y, palette_width, palette_height);
+
+        let paragraph = Paragraph::new(content)
+            .block(block)
+            .alignment(Alignment::Left);
+
+        f.render_widget(Clear, palette_rect);
+        f.render_widget(paragraph, palette_rect);
     }
 
     fn draw_help_overlay(&self, f: &mut ratatui::Frame<'_>) {

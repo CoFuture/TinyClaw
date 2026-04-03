@@ -3170,6 +3170,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v14.4.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **TUI Command Palette - 命令面板** - 新一代命令搜索和执行界面，提升用户交互体验
+  - **新增状态字段** (`src/tui/state.rs`)：
+    - `command_palette_mode: bool` - 是否处于命令面板模式
+    - `command_palette_query: String` - 当前搜索查询
+    - `command_palette_selected: usize` - 选中命令索引
+    - `command_palette_has_focus: bool` - 是否有键盘焦点
+  - **新增方法** (`src/tui/state.rs`)：
+    - `enter_command_palette()` - 进入命令面板模式（同时关闭其他面板）
+    - `exit_command_palette()` - 退出命令面板模式
+    - `get_filtered_commands()` - 根据查询过滤命令列表
+    - `command_palette_up()` / `command_palette_down()` - 上下导航
+  - **键盘交互** (`src/tui/app.rs`)：
+    - `Ctrl+P` - 打开命令面板
+    - `↑/↓` 或 `Tab/Shift+Tab` - 导航命令列表
+    - `Enter` - 执行选中的命令（支持 `:q`/`:h`/`:n`/`:sessions`/`:cancel` 等）
+    - `Esc` - 关闭命令面板
+    - 实时字符过滤 - 输入即搜
+  - **渲染实现** (`src/tui/app.rs`)：
+    - `draw_command_palette_overlay()` - 居中浮层渲染
+    - 搜索输入行 + 命令计数
+    - 分类颜色编码（Session=蓝、Connection=绿、Navigation=黄）
+    - 选中项高亮（黑底白字）
+    - 底部快捷键提示
+  - **命令执行**：
+    - 简单命令（`:q`/`:h`）直接执行
+    - 需要输入的命令（`:ren`/`:instr` 等）放入输入缓冲区
+    - 异步命令（`:n`/`:cancel`）通过 gateway client 触发
+  - **代码质量**：
+    - cargo clippy **0 警告**
+    - cargo test **480 tests 全部通过**
+  - **设计原则**：
+    - 不堆砌工具，专注于交互体验优化
+    - 与现有命令系统无缝集成
+    - 支持实时搜索过滤，提升命令发现效率
+
+**下一步**: 基于协同分析的智能技能推荐 + 多 Session 并发支持
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
