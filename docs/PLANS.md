@@ -2884,6 +2884,39 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.25.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Turn Feedback-Guided Self-Correction System** - 将用户反馈闭环注入 Agent 上下文
+  - **问题诊断**：`TurnFeedbackManager` 收集用户的 👍/👎 反馈，但这些数据从未影响 Agent 的行为
+  - **`generate_feedback_guidance()` 方法** (`agent/turn_feedback.rs`)：
+    - 在 `TurnFeedbackManager` 上新增方法，综合分析最近负面反馈模式
+    - 从用户评论中提取关键词模式（too long/too short/wrong/incorrect/didn't work/confusing 等）
+    - 生成具体、可操作的改进建议（最多 2 条）
+    - 无评论时基于负面频率生成通用指导
+    - 注入格式：`## Recent User Feedback Guidance` 部分
+  - **`HandlerContext` 集成** (`gateway/messages.rs`)：
+    - 新增 `turn_feedback_manager: Arc<TurnFeedbackManager>` 字段
+    - 新增 `turn_feedback_manager` 参数到 `HandlerContext::new()`
+    - 更新 `main.rs` 和 `gateway/server.rs` 所有调用点传递 manager
+  - **上下文注入** (`gateway/messages.rs`)：
+    - 在 `generate_context_prompt()` 中新增 "User Feedback Guidance" 部分
+    - 在 Self-Awareness 之后注入用户反馈指导
+    - 仅在有负面反馈时添加（避免无数据时冗余）
+  - **效果**：
+    - 用户 thumbs-down 某次回复 → Agent 收到具体改进建议
+    - 形成完整的反馈闭环：用户评价 → 分析模式 → Agent 自我修正
+    - 例如：用户评论 "too long" → "Be more concise — users prefer shorter responses"
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **452 tests 全部通过**
+
+**下一步**: 跨反馈趋势分析、Agent 主动询问澄清机制
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

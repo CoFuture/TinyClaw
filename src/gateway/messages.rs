@@ -13,7 +13,7 @@ use crate::gateway::events::{Event, EventEmitter};
 use crate::persistence::HistoryManager;
 use crate::gateway::protocol::{error_codes::*, *};
 use crate::gateway::session::SessionManager;
-use crate::agent::{Agent, SessionSkillManager, TaskManager, Scheduler};
+use crate::agent::{Agent, SessionSkillManager, TaskManager, Scheduler, TurnFeedbackManager};
 use crate::agent::context_manager::ContextManager;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -94,6 +94,8 @@ pub struct HandlerContext {
     pub tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
     /// Session accomplishments tracker
     pub session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
+    /// Turn feedback manager for tracking user feedback on agent responses
+    pub turn_feedback_manager: Arc<TurnFeedbackManager>,
 }
 
 impl HandlerContext {
@@ -120,6 +122,7 @@ impl HandlerContext {
         context_health_monitor: Arc<crate::agent::ContextHealthMonitor>,
         tool_pattern_learner: Arc<RwLock<crate::agent::ToolPatternLearner>>,
         session_accomplishments: Arc<crate::agent::SessionAccomplishmentsManager>,
+        turn_feedback_manager: Arc<TurnFeedbackManager>,
     ) -> Self {
         Self {
             session_manager,
@@ -143,6 +146,7 @@ impl HandlerContext {
             context_health_monitor,
             tool_pattern_learner,
             session_accomplishments,
+            turn_feedback_manager,
         }
     }
 
@@ -492,6 +496,13 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
     let self_awareness = ctx.self_evaluation_manager.generate_self_awareness_prompt(session_key);
     if !self_awareness.is_empty() {
         parts.push(self_awareness);
+    }
+
+    // 4c. User Feedback Guidance - synthesized guidance from user thumbs up/down feedback
+    // This provides a closed feedback loop: user ratings directly inform agent behavior
+    let feedback_guidance = ctx.turn_feedback_manager.generate_feedback_guidance(session_key);
+    if !feedback_guidance.is_empty() {
+        parts.push(feedback_guidance);
     }
 
     if parts.is_empty() {

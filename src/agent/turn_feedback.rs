@@ -5,7 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use parking_lot::RwLock;
@@ -483,6 +483,96 @@ impl TurnFeedbackManager {
         }
         
         tracing::info!("Cleared all feedback");
+    }
+
+    /// Generate actionable guidance based on user feedback patterns.
+    /// This synthesizes recent feedback into specific suggestions for the agent.
+    /// Returns an empty string if there's no negative feedback to act on.
+    pub fn generate_feedback_guidance(&self, session_id: &str) -> String {
+        let recent_negative = self.get_recent_feedback(session_id, 10);
+        let negative: Vec<&TurnFeedback> = recent_negative.iter()
+            .filter(|f| f.is_negative())
+            .collect();
+
+        if negative.is_empty() {
+            return String::new();
+        }
+
+        let mut guidance_parts = Vec::new();
+
+        // Analyze comment keywords for actionable patterns
+        let mut comment_keywords: HashMap<String, usize> = HashMap::new();
+        let keyword_patterns: [(&str, &str); 12] = [
+            ("too long", "Be more concise — users prefer shorter responses"),
+            ("too short", "Provide more detail — users want more comprehensive answers"),
+            ("wrong", "Double-check your answer before responding"),
+            ("incorrect", "Verify information accuracy before responding"),
+            ("didn't work", "The previous solution didn't work — try a different approach"),
+            ("doesn't work", "The previous solution didn't work — try a different approach"),
+            (" didn't", "Your previous action had an issue — reconsider your approach"),
+            ("doesn't", "Your previous action had an issue — reconsider your approach"),
+            ("helpful", "Users found you helpful — continue this approach"),
+            ("clear", "Your explanation was clear — maintain this style"),
+            ("confusing", "Your response was confusing — simplify and structure it better"),
+            ("unclear", "Your response was unclear — be more explicit and structured"),
+        ];
+
+        for feedback in &negative {
+            if let Some(ref comment) = feedback.comment {
+                let lower = comment.to_lowercase();
+                for (keyword, suggestion) in &keyword_patterns {
+                    if lower.contains(keyword) {
+                        *comment_keywords.entry((*suggestion).to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        // Sort by frequency and take top 2 distinct suggestions
+        let mut sorted_suggestions: Vec<_> = comment_keywords.into_iter().collect();
+        sorted_suggestions.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        // Deduplicate similar suggestions
+        let mut seen: HashSet<String> = HashSet::new();
+        for (suggestion, count) in sorted_suggestions {
+            // Skip if we've already added a similar one
+            let is_duplicate = seen.iter().any(|s| {
+                s.contains("concise") && suggestion.contains("concise")
+                || s.contains("accurate") && suggestion.contains("accurate")
+                || s.contains("approach") && suggestion.contains("approach")
+                || s.contains("helpful") && suggestion.contains("helpful")
+                || s.contains("clear") && suggestion.contains("clear")
+                || s.contains("confusing") && suggestion.contains("confusing")
+            });
+            if !is_duplicate && seen.len() < 2 {
+                guidance_parts.push(format!("  - [from {} feedback] {}", count, suggestion));
+                seen.insert(suggestion);
+            }
+        }
+
+        // Frequency-based guidance if no comment patterns found
+        let negative_count = negative.len();
+        if guidance_parts.is_empty() && negative_count >= 2 {
+            let stats = self.get_session_feedback_summary(session_id);
+            if stats.positive_rate < 0.5 {
+                guidance_parts.push("  - Your recent responses have received mostly negative feedback — consider reviewing your approach".to_string());
+            } else if negative_count >= 3 {
+                guidance_parts.push("  - You've received multiple negative feedbacks recently — slow down and verify your work".to_string());
+            }
+        }
+
+        if guidance_parts.is_empty() {
+            return String::new();
+        }
+
+        let mut guidance = String::from("## Recent User Feedback Guidance\n\n");
+        guidance.push_str("Based on recent user feedback, you should:\n\n");
+        for part in &guidance_parts {
+            guidance.push_str(part);
+            guidance.push('\n');
+        }
+        guidance.push('\n');
+        guidance
     }
 }
 

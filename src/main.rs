@@ -340,6 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         context_health_monitor.clone(), // Context health monitor
         tool_pattern_learner.clone(), // Tool pattern learner for learning from turns
         session_accomplishments.clone(), // Session accomplishments tracker
+        turn_feedback.clone(), // Turn feedback manager for user feedback
     );
     
     let ws_handle = tokio::spawn(async move {
