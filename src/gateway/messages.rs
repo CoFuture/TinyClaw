@@ -100,6 +100,8 @@ pub struct HandlerContext {
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
     /// Skill synergy analyzer for analyzing skill pair effectiveness
     pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
+    /// Tool sequence advisor for context-aware tool recommendations
+    pub tool_sequence_advisor: Arc<crate::agent::ToolSequenceAdvisor>,
 }
 
 impl HandlerContext {
@@ -130,6 +132,12 @@ impl HandlerContext {
         skill_tracker: Arc<crate::agent::SkillTracker>,
         skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
     ) -> Self {
+        // Create the tool sequence advisor using existing components
+        let tool_sequence_advisor = Arc::new(crate::agent::ToolSequenceAdvisor::new(
+            tool_pattern_learner.clone(),
+            skill_synergy.clone(),
+        ));
+
         Self {
             session_manager,
             history_manager,
@@ -155,6 +163,7 @@ impl HandlerContext {
             turn_feedback_manager,
             skill_tracker,
             skill_synergy,
+            tool_sequence_advisor,
         }
     }
 
@@ -492,6 +501,13 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
                 parts.push(synergy_part);
             }
         }
+    }
+
+    // 1e. Tool Sequence Advisor - context-aware tool sequencing recommendations
+    // Analyze what the user is trying to do and recommend specific tool sequences
+    let tool_sequence_prompt = ctx.tool_sequence_advisor.generate_prompt_section(current_message);
+    if !tool_sequence_prompt.is_empty() {
+        parts.push(tool_sequence_prompt);
     }
 
     // 2. Session notes

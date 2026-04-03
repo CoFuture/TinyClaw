@@ -330,6 +330,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_accomplishments: session_accomplishments.clone(),
         skill_tracker: skill_tracker.clone(),
         skill_synergy: skill_synergy.clone(),
+        tool_sequence_advisor: Arc::new(crate::agent::ToolSequenceAdvisor::new(
+            tool_pattern_learner.clone(),
+            skill_synergy.clone(),
+        )),
     });
 
     // Spawn WebSocket server

@@ -31,6 +31,7 @@ pub mod task;
 pub mod task_manager;
 pub mod tools;
 pub mod tool_result_formatter;
+pub mod tool_sequence_advisor;
 pub mod tool_strategy;
 pub mod tool_pattern_learner;
 pub mod session_accomplishments;
@@ -99,3 +100,5 @@ pub use context_advisor::{ContextAdvisor, ContextAdvice, ContextAdvisorStats, Pa
 pub use tool_strategy::{ToolStrategy, UserIntent, ToolGuidance, WorkflowPattern};
 #[allow(unused_imports)]
 pub use tool_pattern_learner::{ToolPatternLearner, LearnedPattern, ToolStats, PatternAnalysis};
+#[allow(unused_imports)]
+pub use tool_sequence_advisor::{ToolSequenceAdvisor, ToolRecommendation, SequenceRecommendation, RecommendationConfidence};

@@ -60,6 +60,7 @@ pub struct HttpState {
     pub session_accomplishments: Arc<SessionAccomplishmentsManager>,
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
     pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
+    pub tool_sequence_advisor: Arc<crate::agent::ToolSequenceAdvisor>,
 }
 
 /// Health check response

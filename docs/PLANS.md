@@ -3214,6 +3214,56 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v14.5.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **Context-Aware Tool Sequence Advisor - 上下文感知工具序列推荐器** - 基于对话上下文和历史模式提供智能工具推荐
+  - **新增模块** (`src/agent/tool_sequence_advisor.rs`, ~520 行代码)：
+    - `ToolSequenceAdvisor` 结构体：结合历史模式学习和技能协同分析的工具推荐引擎
+    - `SequenceRecommendation` 结构体：包含任务类型、工具序列、模式匹配描述的完整推荐
+    - `ToolRecommendation` 结构体：单个工具推荐（含置信度、原因说明、历史模式来源）
+    - `RecommendationConfidence` 枚举：高/中/低三种置信度级别
+  - **任务分类系统** (`classify_task`)：
+    - 分析用户消息，识别任务类型：explore/modify/execute/search/read/write/analyze/compare/debug
+    - 基于关键词匹配，支持多任务类型同时识别
+    - 优先级排序确保最重要的任务类型排在前面
+  - **模式匹配系统** (`find_matching_patterns`)：
+    - 从历史工具调用模式中寻找与当前任务最匹配的序列
+    - 综合评分：历史成功率 + 使用频次 + 任务类型匹配 + 消息关键词匹配
+    - 返回 Top 3 最相关的历史模式
+  - **工具推荐系统** (`recommend_tools_for_task`)：
+    - 根据任务类型推荐最合适的工具序列
+    - 整合历史成功率数据，优先推荐高成功率的工具
+    - 每种任务类型有对应的推荐策略
+  - **协同增强** (`get_synergy_suggestions`)：
+    - 基于 `SkillSynergyAnalyzer` 数据，补充具有协同效应的工具组合
+    - 仅推荐正向协同（lift > 0）且置信度足够的组合
+  - **上下文提示生成** (`generate_prompt_section`)：
+    - 生成格式化的上下文提示文本，直接注入 Agent 上下文
+    - 包含任务类型、模式匹配描述、工具列表及置信度
+    - 格式：`[HIGH]/[MED]/[LOW]` + 工具名 + 推荐原因
+  - **集成到 HandlerContext** (`src/gateway/messages.rs`)：
+    - 新增 `tool_sequence_advisor` 字段
+    - 在 `generate_context_prompt` 中作为 "1e. Tool Sequence Advisor" 部分
+    - 使用当前用户消息生成针对性的工具推荐
+  - **集成到 HTTP State** (`src/http/routes.rs`)：
+    - 新增 `tool_sequence_advisor` 字段支持 HTTP API 扩展
+  - **测试覆盖**：
+    - 新增 11 个单元测试，覆盖任务分类、置信度计算等
+    - `cargo test 491 tests 全部通过`
+  - **代码质量**：
+    - cargo clippy 仅 2 个 dead_code 警告（可接受的未使用字段）
+  - **设计原则**：
+    - 不增加工具实现，专注于增强现有工具调用的智能化程度
+    - 利用已有的 skill_synergy 和 tool_pattern_learner 数据
+    - 无需 AI 预测，纯基于历史统计数据的推荐
+
+**下一步**: Agent 主动规划能力 + 任务队列系统
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
