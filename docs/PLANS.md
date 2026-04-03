@@ -2917,6 +2917,50 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.26.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Feedback Trend Analysis System** - 反馈趋势分析系统
+  - **新增 `agent/feedback_trend.rs` 模块**：
+    - `TrendDirection` 枚举：Improving/Declining/Stable/InsufficientData
+    - `FeedbackPeriodStats` 结构：每日统计（period、total_count、thumbs_up/down/neutral、positive_rate、is_current）
+    - `IssueType` 枚举：8 种问题类型（Verbose/TooBrief/IncorrectInfo/Misunderstood/ToolFailed/NotHelpful/Confusing/Slow）
+    - `FeedbackIssuePattern` 结构：检测到的问题模式（类型、次数、首末次出现时间、示例评论、建议）
+    - `FeedbackTrendAnalysis` 结构：完整趋势分析结果
+    - `FeedbackTrendAnalyzer` 管理器：分析核心逻辑
+  - **趋势分析功能**：
+    - 分析最近 7 天的反馈数据
+    - 计算每日 positive rate 变化
+    - 对比前半期 vs 后半期判断趋势方向和强度
+    - 从负面评论中自动检测问题模式
+    - 生成人类可读的总结文本
+  - **问题模式检测**：
+    - 自动从评论中识别 8 种问题类型
+    - 统计每种问题的出现次数
+    - 记录首末次出现时间
+    - 保存最多 3 条示例评论
+    - 生成具体改进建议
+  - **Gateway 事件集成** (`gateway/events.rs`)：
+    - 新增 `FeedbackTrend` 事件类型
+    - 新增 `FeedbackIssuePatternEvent` 结构
+  - **HTTP API 端点** (`http/routes.rs`)：
+    - `GET /api/feedback/trends` - 获取反馈趋势分析
+    - 支持可选的 `session_id` 查询参数过滤特定会话
+    - 返回：趋势方向、强度、周期统计、问题模式、总结
+  - **SSE 事件过滤** (`http/routes.rs`)：
+    - 添加 `feedback.trend` 事件到事件过滤和映射
+- **模块导出** (`agent/mod.rs`)：
+  - 导出 `FeedbackTrendAnalysis`、`FeedbackPeriodStats`、`FeedbackIssuePattern`、`FeedbackTrendAnalyzer`、`IssueType`、`TrendDirection`
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **457 tests 全部通过**（+5 新测试）
+
+**下一步**: Agent 主动询问澄清机制、WebUI 反馈趋势面板
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

@@ -714,6 +714,8 @@ async fn sse_events(
                                     Event::UrgentContextAdvice { session_id, .. } => session_id == filter,
                                     // Turn summary - apply session filter
                                     Event::TurnSummary { session_id, .. } => session_id == filter,
+                                    // Feedback trend - apply session filter
+                                    Event::FeedbackTrend { session_id, .. } => session_id == filter,
                                 }
                             } else {
                                 // No filter - emit all events
@@ -769,6 +771,8 @@ async fn sse_events(
                                     Event::UrgentContextAdvice { .. } => "context.urgent_advice",
                                     // Turn summary events
                                     Event::TurnSummary { .. } => "turn.summary",
+                                    // Feedback trend events
+                                    Event::FeedbackTrend { .. } => "feedback.trend",
                                 };
                                 
                                 let event = SseEvent::default()
@@ -888,6 +892,7 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/feedback", get(feedback_session_list))
         .route("/api/sessions/{session_id}/feedback/summary", get(feedback_session_summary))
         .route("/api/feedback/stats", get(feedback_global_stats))
+        .route("/api/feedback/trends", get(feedback_trend_analysis))
         // Session accomplishments API - track what was accomplished
         .route("/api/sessions/{session_id}/accomplishments", get(session_accomplishments_list))
         .route("/api/sessions/{session_id}/accomplishments", axum::routing::delete(session_accomplishments_clear))
@@ -2860,4 +2865,21 @@ async fn feedback_global_stats(
         },
         "sessionsWithFeedback": sessions.len(),
     }))
+}
+
+/// Get feedback trend analysis
+async fn feedback_trend_analysis(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(params): axum::extract::Query<TrendAnalysisParams>,
+) -> Json<crate::agent::feedback_trend::FeedbackTrendAnalysis> {
+    let session_id = params.session_id.as_deref();
+    let analysis = crate::agent::FeedbackTrendAnalyzer::analyze_trends(&state.turn_feedback, session_id);
+    Json(analysis)
+}
+
+/// Query parameters for trend analysis
+#[derive(Debug, Deserialize)]
+pub struct TrendAnalysisParams {
+    /// Optional session ID to filter by
+    pub session_id: Option<String>,
 }

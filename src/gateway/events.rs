@@ -378,6 +378,24 @@ pub enum Event {
         /// List of urgent advice items
         advice: Vec<UrgentAdviceItem>,
     },
+
+    /// Feedback trend analysis - periodic analysis of user feedback trends
+    #[serde(rename = "feedback.trend")]
+    FeedbackTrend {
+        session_id: String,
+        /// Overall trend direction
+        trend_direction: String,
+        /// Trend strength (0.0 to 1.0)
+        trend_strength: f32,
+        /// Summary text
+        summary: String,
+        /// Periods analyzed
+        periods_analyzed: u32,
+        /// Total feedback analyzed
+        total_feedback_analyzed: u32,
+        /// Issue patterns detected
+        issue_patterns: Vec<FeedbackIssuePatternEvent>,
+    },
 }
 
 /// Performance insight for events
@@ -455,6 +473,21 @@ pub struct UrgentAdviceItem {
     pub suggestion: String,
     /// Trigger pattern that caused this advice
     pub trigger_pattern: String,
+}
+
+/// Feedback issue pattern for trend events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackIssuePatternEvent {
+    /// Issue type
+    pub issue_type: String,
+    /// Display name
+    pub display_name: String,
+    /// Emoji
+    pub emoji: String,
+    /// Occurrence count
+    pub occurrence_count: u32,
+    /// Suggested behavior change
+    pub suggestion: String,
 }
 
 /// Event emitter for broadcasting events
