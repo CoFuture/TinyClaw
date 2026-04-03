@@ -3066,7 +3066,46 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
     - cargo clippy **0 警告**
     - cargo test **470 tests 全部通过**
 
-**下一步**: Skill 效果可视化面板、WebUI Skill 追踪仪表盘
+**下一步**: Skill 效果可视化面板、WebUI Skill 追踪仪表盘（已完成 ✅ v14.1.0）
+
+---
+
+### v14.1.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **WebUI Skill Tracker Panel - 技能效果追踪面板** - 完成 Skill Tracker 系统的 WebUI 集成
+  - **新增 HTML 面板** (`examples/admin.html`)：
+    - 🎯 技能效果追踪面板，显示技能激活频率、成功率、协作效果
+    - 摘要头部：追踪技能数、总激活次数
+    - 统计数据卡片：追踪技能数、总激活次数、追踪 Turns、洞察建议数
+    - 效果排行：最高效/最低效技能及其成功率条形图
+    - 协作技能：经常一起使用的技能组合标签
+    - 技能洞察列表：按类型显示（高效/低效/协作/数据不足）
+  - **CSS 样式增强**：
+    - `.skill-tracker-panel` - 面板容器
+    - `.skill-tracker-summary` - 摘要头部样式
+    - `.skill-tracker-grid` - 统计卡片网格布局
+    - `.skill-tracker-card` - 统计卡片（颜色编码）
+    - `.skill-tracker-item` - 洞察项样式（紫色左边框）
+    - `.skill-tracker-badge` - 洞察类型徽章（高效/低效/协作/数据不足/下降）
+    - `.skill-tracker-rate-bar` - 成功率条形图样式
+    - `.skill-synergy-list` / `.skill-synergy-tag` - 协作技能标签样式
+  - **JavaScript 函数** (`examples/admin.html`)：
+    - `loadSkillTracker()` - 从 `/api/skills/tracker/report` 加载数据
+    - 渲染摘要、统计卡片、效果排行、协作技能、洞察列表
+  - **SSE 事件集成** (`examples/admin.html`)：
+    - 添加 `skill.tracker` 到 SSE 事件类型列表
+    - 在 `handleSseChatEvent` 中处理 `skill.tracker` 事件，显示 toast 通知
+    - `formatEventType` 添加 `skill.tracker` → "技能追踪" 映射
+  - **refreshData 集成**：
+    - 页面刷新时自动加载技能追踪面板
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **470 tests 全部通过**
+
+**下一步**: Skill 协作推荐优化、Agent 技能选择策略增强
 
 ---
 

@@ -884,6 +884,67 @@
         .perf-tool-bar.low { background: #ef4444; }
         .perf-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
 
+        /* Skill Tracker Panel */
+        .skill-tracker-panel { margin-top: 10px; }
+        .skill-tracker-summary {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            margin-bottom: 14px;
+        }
+        .skill-tracker-summary-icon { font-size: 28px; }
+        .skill-tracker-summary-main { font-size: 15px; font-weight: 600; color: #e2e8f0; }
+        .skill-tracker-summary-sub { font-size: 12px; color: #94a3b8; }
+        .skill-tracker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .skill-tracker-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .skill-tracker-card.high { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); }
+        .skill-tracker-card.medium { border-color: rgba(250,204,21,0.4); background: rgba(250,204,21,0.05); }
+        .skill-tracker-card.low { border-color: rgba(156,163,175,0.3); background: rgba(156,163,175,0.05); }
+        .skill-tracker-value { font-size: 22px; font-weight: bold; color: #00d9ff; }
+        .skill-tracker-card.high .skill-tracker-value { color: #22c55e; }
+        .skill-tracker-card.medium .skill-tracker-value { color: #facc15; }
+        .skill-tracker-card.low .skill-tracker-value { color: #9ca3af; }
+        .skill-tracker-label { font-size: 11px; color: #888; margin-top: 4px; }
+        .skill-tracker-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+            border-left: 3px solid #a855f7;
+        }
+        .skill-tracker-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .skill-tracker-name { font-weight: bold; font-size: 13px; color: #e2e8f0; }
+        .skill-tracker-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; }
+        .skill-tracker-badge.highly-effective { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .skill-tracker-badge.low-effectiveness { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .skill-tracker-badge.good-synergy { background: rgba(0,217,255,0.2); color: #00d9ff; }
+        .skill-tracker-badge.insufficient { background: rgba(156,163,175,0.2); color: #9ca3af; }
+        .skill-tracker-badge.declining { background: rgba(250,204,21,0.2); color: #facc15; }
+        .skill-tracker-desc { font-size: 12px; color: #94a3b8; line-height: 1.4; margin-bottom: 8px; }
+        .skill-tracker-recommendation { font-size: 12px; color: #22c55e; padding: 6px 10px; background: rgba(34,197,94,0.1); border-radius: 4px; }
+        .skill-tracker-rate-bar { background: rgba(0,0,0,0.3); border-radius: 3px; height: 6px; margin-top: 6px; }
+        .skill-tracker-rate-fill { height: 6px; border-radius: 3px; background: #22c55e; }
+        .skill-tracker-rate-fill.low { background: #facc15; }
+        .skill-tracker-rate-fill.medium { background: #facc15; }
+        .skill-tracker-rate-fill.high { background: #ef4444; }
+        .skill-synergy-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .skill-synergy-tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: rgba(168,85,247,0.2); color: #a855f7; }
+        .skill-tracker-no-data { color: #888; padding: 30px; text-align: center; font-size: 13px; }
+
         /* Feedback Trend Panel */
         .feedback-trend-panel { margin-top: 10px; }
         .feedback-trend-summary {
@@ -2707,7 +2768,19 @@
                 <div style="color: #888; padding: 20px; text-align: center;">加载中...</div>
             </div>
         </div>
-        
+
+        <!-- Skill Tracker Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🎯 技能效果追踪 <span class="tool-count-badge" id="skillTrackerCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">追踪技能激活频率、成功率、协作效果，优化技能使用策略</p>
+            <div style="margin-bottom: 15px;">
+                <button class="btn" onclick="loadSkillTracker()">🔄 刷新</button>
+            </div>
+            <div id="skillTrackerContent">
+                <div class="skill-tracker-no-data">加载中...</div>
+            </div>
+        </div>
+
         <!-- Scheduled Tasks Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>⏰ 定时任务 <span class="tool-count-badge" id="scheduledCount">-</span></h2>
@@ -3197,6 +3270,13 @@
                     loadFeedbackTrend();
                 } catch (e) {
                     // Feedback trend API might not be available
+                }
+
+                // Fetch skill tracker panel
+                try {
+                    loadSkillTracker();
+                } catch (e) {
+                    // Skill tracker API might not be available
                 }
 
                 // Fetch tools list
@@ -5185,6 +5265,137 @@
             } catch (e) {
                 console.error('Failed to load performance insights:', e);
                 content.innerHTML = '<div class="perf-no-data">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        // ============================================================
+        // Skill Tracker Functions
+        // ============================================================
+
+        async function loadSkillTracker() {
+            const content = document.getElementById('skillTrackerContent');
+            try {
+                const res = await fetch(`${API_BASE}/api/skills/tracker/report`);
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+
+                document.getElementById('skillTrackerCount').textContent = data.total_turns_tracked || 0;
+
+                if (!data.skill_stats || data.skill_stats.length === 0) {
+                    content.innerHTML = '<div class="skill-tracker-no-data">暂无技能追踪数据。开始与 Agent 对话以收集数据。</div>';
+                    return;
+                }
+
+                let html = '';
+
+                // Summary Header
+                html += '<div class="skill-tracker-summary">\
+                    <div class="skill-tracker-summary-icon">🎯</div>\
+                    <div>\
+                        <div class="skill-tracker-summary-main">技能效果追踪</div>\
+                        <div class="skill-tracker-summary-sub">追踪 ' + data.skill_stats.length + ' 个技能，' + (data.total_turns_tracked || 0) + ' 次 Turn 记录</div>\
+                    </div>\
+                </div>';
+
+                // Stats Grid
+                html += '<div class="skill-tracker-grid">';
+                const totalActivations = data.skill_stats.reduce((sum, s) => sum + (s.activation_count || 0), 0);
+                html += '<div class="skill-tracker-card high">\
+                    <div class="skill-tracker-value">' + data.skill_stats.length + '</div>\
+                    <div class="skill-tracker-label">追踪技能数</div>\
+                </div>';
+                html += '<div class="skill-tracker-card medium">\
+                    <div class="skill-tracker-value">' + totalActivations + '</div>\
+                    <div class="skill-tracker-label">总激活次数</div>\
+                </div>';
+                html += '<div class="skill-tracker-card medium">\
+                    <div class="skill-tracker-value">' + (data.total_turns_tracked || 0) + '</div>\
+                    <div class="skill-tracker-label">追踪 Turns</div>\
+                </div>';
+                if (data.insights && data.insights.length > 0) {
+                    html += '<div class="skill-tracker-card low">\
+                        <div class="skill-tracker-value">' + data.insights.length + '</div>\
+                        <div class="skill-tracker-label">洞察建议</div>\
+                    </div>';
+                }
+                html += '</div>';
+
+                // Most/Least Effective Skills
+                if (data.most_effective_skill || data.least_effective_skill) {
+                    html += '<div class="ctx-advisor-section-title">🏆 效果排行</div>';
+                    if (data.most_effective_skill) {
+                        const most = data.skill_stats.find(s => s.skill_name === data.most_effective_skill);
+                        if (most) {
+                            const rate = (most.success_rate * 100).toFixed(0);
+                            const severity = rate >= 80 ? 'high' : rate >= 50 ? 'medium' : 'low';
+                            html += '<div class="skill-tracker-item" style="border-left-color: #22c55e;">\
+                                <div class="skill-tracker-item-header">\
+                                    <span class="skill-tracker-name">最高效: ' + escapeHtml(most.skill_name) + '</span>\
+                                    <span class="skill-tracker-badge highly-effective">✓ ' + rate + '%</span>\
+                                </div>\
+                                <div class="skill-tracker-desc">激活 ' + most.activation_count + ' 次，成功率 ' + rate + '%</div>\
+                                <div class="skill-tracker-rate-bar"><div class="skill-tracker-rate-fill" style="width: ' + rate + '%;"></div></div>\
+                            </div>';
+                        }
+                    }
+                    if (data.least_effective_skill) {
+                        const least = data.skill_stats.find(s => s.skill_name === data.least_effective_skill);
+                        if (least) {
+                            const rate = (least.success_rate * 100).toFixed(0);
+                            const severity = rate >= 80 ? 'high' : rate >= 50 ? 'medium' : 'low';
+                            html += '<div class="skill-tracker-item" style="border-left-color: #ef4444;">\
+                                <div class="skill-tracker-item-header">\
+                                    <span class="skill-tracker-name">最低效: ' + escapeHtml(least.skill_name) + '</span>\
+                                    <span class="skill-tracker-badge low-effectiveness">✗ ' + rate + '%</span>\
+                                </div>\
+                                <div class="skill-tracker-desc">激活 ' + least.activation_count + ' 次，成功率 ' + rate + '%</div>\
+                                <div class="skill-tracker-rate-bar"><div class="skill-tracker-rate-fill high" style="width: ' + rate + '%;"></div></div>\
+                            </div>';
+                        }
+                    }
+                }
+
+                // Synergistic Pairs
+                if (data.synergistic_pairs && data.synergistic_pairs.length > 0) {
+                    html += '<div class="ctx-advisor-section-title">🤝 协作技能</div>';
+                    data.synergistic_pairs.slice(0, 5).forEach(pair => {
+                        html += '<div class="skill-synergy-list">\
+                            <span class="skill-synergy-tag">' + escapeHtml(pair[0]) + ' + ' + escapeHtml(pair[1]) + '</span>\
+                        </div>';
+                    });
+                }
+
+                // Insights
+                if (data.insights && data.insights.length > 0) {
+                    html += '<div class="ctx-advisor-section-title">💡 技能洞察</div>';
+                    data.insights.forEach(insight => {
+                        const typeClass = insight.insight_type === 'HighlyEffective' ? 'highly-effective'
+                            : insight.insight_type === 'LowEffectiveness' ? 'low-effectiveness'
+                            : insight.insight_type === 'GoodSynergy' ? 'good-synergy'
+                            : insight.insight_type === 'DecliningEffectiveness' ? 'declining'
+                            : 'insufficient';
+                        const typeLabel = insight.insight_type === 'HighlyEffective' ? '高效'
+                            : insight.insight_type === 'LowEffectiveness' ? '低效'
+                            : insight.insight_type === 'GoodSynergy' ? '协作'
+                            : insight.insight_type === 'DecliningEffectiveness' ? '下降'
+                            : '数据不足';
+                        html += '<div class="skill-tracker-item">\
+                            <div class="skill-tracker-item-header">\
+                                <span class="skill-tracker-name">' + escapeHtml(insight.skill_name) + '</span>\
+                                <span class="skill-tracker-badge ' + typeClass + '">' + typeLabel + '</span>\
+                            </div>\
+                            <div class="skill-tracker-desc">' + escapeHtml(insight.description) + '</div>';
+                        if (insight.recommendation) {
+                            html += '<div class="skill-tracker-recommendation">💡 ' + escapeHtml(insight.recommendation) + '</div>';
+                        }
+                        html += '</div>';
+                    });
+                }
+
+                content.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load skill tracker:', e);
+                content.innerHTML = '<div class="skill-tracker-no-data">加载失败: ' + escapeHtml(e.message) + '</div>';
             }
         }
 
@@ -7735,6 +7946,9 @@
                 // Performance insights event - show toast and refresh panel
                 const insightCount = data.insights ? data.insights.length : 0;
                 showToast('📊 性能洞察: ' + insightCount + ' 条建议', 'info');
+            } else if (eventType === 'skill.tracker' && data.session_id) {
+                // Skill tracker event - show toast and refresh panel
+                showToast('🎯 技能追踪: ' + (data.total_turns_tracked || 0) + ' 次记录', 'info');
             } else if (eventType === 'turn.summary' && data.session_id) {
                 // Turn summary event - add to the turn summaries list and update panel
                 addTurnSummary(data);
@@ -8286,7 +8500,7 @@
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
                     'context.summarized', 'context.health', 'context.urgent_advice', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
-                    'agent.performance_insights', 'feedback.trend',
+                    'agent.performance_insights', 'feedback.trend', 'skill.tracker',
                     'scheduled.created', 'scheduled.fired', 'scheduled.failed', 'scheduled.updated', 'scheduled.deleted'
                 ];
                 
@@ -8448,6 +8662,7 @@
                 'skill.recommended': '技能推荐',
                 'agent.performance_insights': '性能洞察',
                 'feedback.trend': '反馈趋势',
+                'skill.tracker': '技能追踪',
                 'agent.self_evaluation': '自我评估',
                 'scheduled.created': '任务创建',
                 'scheduled.fired': '任务触发',
