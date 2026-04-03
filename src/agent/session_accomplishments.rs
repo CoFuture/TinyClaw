@@ -551,6 +551,132 @@ impl SessionAccomplishmentsManager {
         let mut sessions = self.sessions.write();
         sessions.remove(session_id);
     }
+
+    /// Find accomplishments from other sessions relevant to the current message
+    /// This helps the Agent understand what the user has accomplished in similar tasks
+    pub fn find_relevant_accomplishments(&self, message: &str, current_session_id: &str, limit: usize) -> String {
+        // First pass: collect all accomplishments from other sessions (clone to avoid borrow issues)
+        let all_accomplishments: Vec<(String, Accomplishment)> = {
+            let sessions = self.sessions.read();
+            let mut result = Vec::new();
+            
+            for (session_id, ac_locked) in sessions.iter() {
+                // Skip the current session to avoid redundancy
+                if session_id == current_session_id {
+                    continue;
+                }
+                
+                let ac = ac_locked.read();
+                for acc in ac.get_accomplishments() {
+                    result.push((session_id.clone(), acc.clone()));
+                }
+            }
+            result
+        };
+        
+        if all_accomplishments.is_empty() {
+            return String::new();
+        }
+        
+        // Score each accomplishment by relevance
+        let message_lower = message.to_lowercase();
+        let words: Vec<&str> = message_lower.split_whitespace()
+            .filter(|w| w.len() > 2) // Skip very short words
+            .collect();
+        
+        // Important keywords that indicate relevance
+        let important_patterns = [
+            "rust", "cargo", "python", "javascript", "typescript", "java", "go", "c++",
+            "bug", "error", "fix", "issue", "problem",
+            "file", "code", "script", "function", "class", "module",
+            "test", "debug", "refactor", "implement", "add", "create", "update",
+            "config", "setting", "install", "setup", "build", "compile",
+            "api", "http", "web", "server", "client",
+            "database", "sql", "query",
+            "git", "github", "commit", "branch",
+        ];
+        
+        let mut scored: Vec<(i32, String, Accomplishment)> = Vec::new();
+        
+        for (session_id, acc) in all_accomplishments {
+            let mut score = 0i32;
+            let desc_lower = acc.description.to_lowercase();
+            let evidence_text = acc.evidence.as_ref()
+                .map(|e| e.join(" ").to_lowercase())
+                .unwrap_or_default();
+            
+            // Check description for keyword matches
+            for word in &words {
+                if desc_lower.contains(word) {
+                    score += 1;
+                }
+            }
+            
+            // Check evidence for keyword matches
+            for evidence_item in evidence_text.split_whitespace() {
+                if words.iter().any(|w| evidence_item.contains(w)) {
+                    score += 2; // Evidence matches are worth more
+                }
+            }
+            
+            // Boost for important patterns
+            let combined = format!("{} {}", desc_lower, evidence_text);
+            for pattern in important_patterns {
+                if combined.contains(pattern) && message_lower.contains(pattern) {
+                    score += 3;
+                }
+            }
+            
+            // Type-based boosting - certain types are generally more informative
+            match acc.accomplishment_type {
+                AccomplishmentType::TaskCompleted | 
+                AccomplishmentType::ProblemFixed |
+                AccomplishmentType::DecisionMade => {
+                    // These are high-value accomplishments
+                    score += 2;
+                }
+                _ => {}
+            }
+            
+            if score > 0 {
+                scored.push((score, session_id, acc));
+            }
+        }
+        
+        // Sort by score descending
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        
+        // Take top results
+        let top_results: Vec<_> = scored.into_iter().take(limit).collect();
+        
+        if top_results.is_empty() {
+            return String::new();
+        }
+        
+        // Format as context prompt
+        let mut parts = vec![
+            "## Relevant Past Accomplishments\n".to_string(),
+            "Based on your history, here are relevant accomplishments from other sessions:\n".to_string(),
+        ];
+        
+        for (_score, session_id, acc) in top_results {
+            let evidence_str = acc.evidence.as_ref()
+                .map(|e| format!(" (Evidence: {})", e.join(", ")))
+                .unwrap_or_default();
+            
+            parts.push(format!(
+                "- [{}] {}: {}{}",
+                acc.accomplishment_type.as_str(),
+                acc.description,
+                session_id.chars().take(8).collect::<String>(), // Show partial session ID
+                evidence_str
+            ));
+        }
+        
+        parts.push("\nUse this context to build upon previous work when relevant.".to_string());
+        
+        parts.join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -788,5 +914,110 @@ mod tests {
 
         manager.clear("session_1");
         assert!(manager.get_summary("session_1").is_none());
+    }
+
+    #[test]
+    fn test_find_relevant_accomplishments() {
+        let manager = SessionAccomplishmentsManager::new(PathBuf::from("/tmp/test_accomplishments"));
+
+        // Add accomplishments in session_1
+        manager.record_accomplishment("session_1", Accomplishment::new(
+            AccomplishmentType::FileModified,
+            "Created src/main.rs".to_string(),
+            "turn_1".to_string(),
+            0.9,
+        ).with_evidence(vec!["src/main.rs".to_string(), "Cargo.toml".to_string()]));
+
+        manager.record_accomplishment("session_1", Accomplishment::new(
+            AccomplishmentType::TaskCompleted,
+            "Set up Rust project".to_string(),
+            "turn_2".to_string(),
+            0.85,
+        ));
+
+        // Add accomplishments in session_2
+        manager.record_accomplishment("session_2", Accomplishment::new(
+            AccomplishmentType::ProblemFixed,
+            "Fixed Rust compilation error".to_string(),
+            "turn_1".to_string(),
+            0.9,
+        ).with_evidence(vec!["src/lib.rs".to_string()]));
+
+        manager.record_accomplishment("session_2", Accomplishment::new(
+            AccomplishmentType::TaskCompleted,
+            "Fixed authentication bug".to_string(),
+            "turn_2".to_string(),
+            0.95,
+        ));
+
+        // Add accomplishments in session_3
+        manager.record_accomplishment("session_3", Accomplishment::new(
+            AccomplishmentType::FileModified,
+            "Updated Python script".to_string(),
+            "turn_1".to_string(),
+            0.8,
+        ));
+
+        // Search from session_current (which has no accomplishments)
+        // Should find session_1 and session_2 accomplishments relevant to "rust"
+        let result = manager.find_relevant_accomplishments(
+            "I want to work on a Rust project",
+            "session_current",
+            5,
+        );
+
+        // Should contain relevant accomplishments
+        assert!(!result.is_empty());
+        assert!(result.contains("Relevant Past Accomplishments"));
+        // Partial session IDs are shown (first 8 chars): "session_" = 8 chars
+        assert!(result.contains("session_") || result.contains("Rust project") || result.contains("Rust compilation"));
+
+        // Should NOT contain Python-related accomplishment when searching for Rust
+        assert!(!result.contains("Python"));
+
+        // Search should be case insensitive
+        let result2 = manager.find_relevant_accomplishments(
+            "RUST compilation error",
+            "session_current",
+            5,
+        );
+        assert!(!result2.is_empty());
+    }
+
+    #[test]
+    fn test_find_relevant_excludes_current_session() {
+        let manager = SessionAccomplishmentsManager::new(PathBuf::from("/tmp/test_accomplishments"));
+
+        // Add accomplishment to session_1
+        manager.record_accomplishment("session_1", Accomplishment::new(
+            AccomplishmentType::FileModified,
+            "Created main.rs".to_string(),
+            "turn_1".to_string(),
+            0.9,
+        ));
+
+        // Search from session_1 itself - should not find it (current session excluded)
+        let result = manager.find_relevant_accomplishments(
+            "main.rs file modification",
+            "session_1",
+            5,
+        );
+
+        // Should be empty because we exclude the current session
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_find_relevant_with_no_sessions() {
+        let manager = SessionAccomplishmentsManager::new(PathBuf::from("/tmp/test_empty_accomplishments"));
+
+        let result = manager.find_relevant_accomplishments(
+            "any message",
+            "session_1",
+            5,
+        );
+
+        // Should return empty string when no sessions exist
+        assert!(result.is_empty());
     }
 }

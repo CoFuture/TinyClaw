@@ -2848,6 +2848,42 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v13.24.0 (已完成 ✅)
+
+**日期**: 2026-04-03
+
+**完成事项**:
+- **Cross-Session Relevant Accomplishments Context** - 跨会话相关成就上下文
+  - **新增 `find_relevant_accomplishments()` 方法** (`agent/session_accomplishments.rs`)：
+    - 在 `SessionAccomplishmentsManager` 上新增方法，搜索所有其他会话的成就
+    - 基于消息内容（关键词匹配）和证据（文件路径等）进行相关性评分
+    - 排除当前会话避免冗余
+    - 返回格式化的上下文字符串用于注入到 Agent 提示词
+  - **相关性评分逻辑**：
+    - 描述关键词匹配：每个匹配 +1 分
+    - 证据关键词匹配：每个匹配 +2 分
+    - 重要模式匹配（rust/cargo/bug/fix 等）：+3 分
+    - 高价值成就类型（TaskCompleted/ProblemFixed/DecisionMade）：+2 分
+  - **上下文集成** (`gateway/messages.rs`)：
+    - 在 `generate_context_prompt()` 中新增 "Relevant Past Accomplishments" 部分
+    - 在对话摘要之后、会话指令之前注入
+    - 最多返回 5 条相关成就
+  - **效果**：
+    - Agent 在每次 Turn 时都能了解用户在类似任务中的历史成就
+    - 帮助 Agent 建立在用户之前工作的基础上
+    - 了解用户完成过的类似任务，避免重复劳动
+- **3 个新测试**：
+  - `test_find_relevant_accomplishments` - 测试基本相关性搜索
+  - `test_find_relevant_excludes_current_session` - 测试排除当前会话
+  - `test_find_relevant_with_no_sessions` - 测试空会话情况
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **452 tests 全部通过**（+3 新测试）
+
+**下一步**: 更多 Agent 能力增强、交互体验优化继续
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02

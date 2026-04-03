@@ -473,6 +473,14 @@ fn generate_context_prompt(ctx: &HandlerContext, session_key: &str, current_mess
         }
     }
 
+    // 3c. Cross-session accomplishments - relevant accomplishments from other sessions
+    // Find accomplishments from past sessions that are relevant to the current task
+    // This helps the Agent understand what the user has accomplished in similar situations
+    let accomplishments_prompt = ctx.session_accomplishments.find_relevant_accomplishments(current_message, session_key, 5);
+    if !accomplishments_prompt.is_empty() {
+        parts.push(accomplishments_prompt);
+    }
+
     // 4. Session instructions (highest priority - user-defined persona/instructions)
     if let Some(instr) = ctx.session_manager.get_instructions(session_key) {
         if !instr.trim().is_empty() {
