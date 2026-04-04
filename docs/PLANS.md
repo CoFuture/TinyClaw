@@ -3012,6 +3012,59 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v15.3.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **WebUI Proactive Alerts Management Panel - 主动提醒管理面板** - 完成 ProactiveAlertManager 的 WebUI 集成
+  - **HTTP API 端点** (`src/http/routes.rs`)：
+    - `GET /api/alerts` - 获取提醒列表（支持 severity、category、include_acknowledged 过滤）
+    - `GET /api/alerts/stats` - 获取提醒统计
+    - `POST /api/alerts/{alert_id}/acknowledge` - 确认提醒
+    - `DELETE /api/alerts/{alert_id}` - 删除提醒
+    - `DELETE /api/alerts` - 清空所有提醒
+    - `GET /api/alerts/rules` - 获取提醒规则
+    - `PATCH /api/alerts/rules/{category}/{rule_name}` - 更新提醒规则
+  - **HttpState 集成** (`src/http/routes.rs`, `src/main.rs`)：
+    - 新增 `proactive_alerts: Arc<RwLock<ProactiveAlertManager>>` 字段
+    - 在 main.rs 中创建 `ProactiveAlertManager` 实例并传递
+  - **HTML/CSS/JS 面板** (`examples/admin.html`)：
+    - 🔔 主动提醒面板，带严重级别和分类过滤
+    - 统计数据：总提醒数、活跃提醒数、按级别分类
+    - 提醒列表：图标、标题、消息、分类、级别、时间
+    - 确认按钮：一键确认提醒
+    - 清空按钮：清空所有提醒
+    - 规则配置：查看和切换提醒规则启用状态
+  - **CSS 样式**：
+    - `.alerts-panel` - 面板容器
+    - `.alerts-stat-card` - 统计卡片（按级别着色）
+    - `.alerts-item` - 提醒项（左边框按严重级别着色）
+    - `.alerts-item.acknowledged` - 已确认提醒样式
+    - `.alerts-rule-card` - 规则卡片样式
+  - **JavaScript 函数**：
+    - `loadAlerts()` - 从 API 加载提醒数据
+    - `renderAlerts(data)` - 渲染提醒列表
+    - `acknowledgeAlert(alertId)` - 确认提醒
+    - `clearAlerts()` - 清空所有提醒
+    - `showAlertRules()` - 显示/隐藏规则配置
+    - `toggleAlertRule()` - 切换规则启用状态
+    - `handleAlertEvent()` - 处理 SSE 提醒事件
+    - `getAlertSeverityIcon()` / `formatAlertTime()` - 辅助函数
+  - **SSE 事件集成**：
+    - 添加 `agent.alert` 到 SSE 事件类型列表
+    - 添加事件处理器和 formatEventType 映射
+    - 实时接收并显示 Agent 推送的提醒
+  - **refreshData 集成**：
+    - 页面刷新时自动加载提醒数据
+- **代码质量**：
+  - cargo clippy **0 警告**
+  - cargo test **506 tests 全部通过**
+
+**下一步**: 提醒规则自动配置界面、Agent 主动提醒更多集成点
+
+---
+
 ### v14.0.0 (已完成 ✅)
 
 **日期**: 2026-04-03

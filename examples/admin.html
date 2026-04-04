@@ -1030,6 +1030,103 @@
         .feedback-trend-empty { color: #888; padding: 30px; text-align: center; font-size: 13px; }
         .feedback-trend-loading { color: #888; padding: 30px; text-align: center; font-size: 13px; }
 
+        /* Proactive Alerts Panel */
+        .alerts-panel { margin-top: 10px; }
+        .alerts-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        .alerts-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .alerts-stat-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+        .alerts-stat-card.active { border-color: rgba(250,204,21,0.4); background: rgba(250,204,21,0.08); }
+        .alerts-stat-card.info { border-color: rgba(0,217,255,0.4); background: rgba(0,217,255,0.08); }
+        .alerts-stat-card.warning { border-color: rgba(250,204,21,0.4); background: rgba(250,204,21,0.08); }
+        .alerts-stat-card.critical { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+        .alerts-stat-card.emergency { border-color: rgba(239,68,68,0.6); background: rgba(239,68,68,0.15); }
+        .alerts-stat-value { font-size: 24px; font-weight: bold; color: #00d9ff; }
+        .alerts-stat-card.active .alerts-stat-value { color: #facc15; }
+        .alerts-stat-card.critical .alerts-stat-value,
+        .alerts-stat-card.emergency .alerts-stat-value { color: #ef4444; }
+        .alerts-stat-label { font-size: 11px; color: #888; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .alerts-filters { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+        .alerts-filter-select {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #eee;
+            padding: 6px 10px;
+            border-radius: 4px;
+            max-width: 150px;
+        }
+        .alerts-list { max-height: 400px; overflow-y: auto; }
+        .alerts-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 15px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 4px solid #00d9ff;
+        }
+        .alerts-item.info { border-left-color: #00d9ff; }
+        .alerts-item.warning { border-left-color: #facc15; }
+        .alerts-item.critical { border-left-color: #ef4444; }
+        .alerts-item.emergency { border-left-color: #ef4444; background: rgba(239,68,68,0.1); }
+        .alerts-item.acknowledged { opacity: 0.6; }
+        .alerts-icon { font-size: 20px; flex-shrink: 0; }
+        .alerts-content { flex: 1; min-width: 0; }
+        .alerts-title { font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+        .alerts-message { font-size: 13px; color: #94a3b8; line-height: 1.4; margin-bottom: 6px; }
+        .alerts-meta { display: flex; gap: 12px; font-size: 11px; color: #666; flex-wrap: wrap; }
+        .alerts-category { color: #00d9ff; }
+        .alerts-severity { color: #facc15; }
+        .alerts-item.critical .alerts-severity,
+        .alerts-item.emergency .alerts-severity { color: #ef4444; }
+        .alerts-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .alerts-empty { color: #888; padding: 40px; text-align: center; font-size: 13px; }
+        .alerts-rules-section { margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .alerts-rules-title { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 12px; }
+        .alerts-rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+        .alerts-rule-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .alerts-rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .alerts-rule-name { font-weight: 600; color: #e2e8f0; font-size: 13px; }
+        .alerts-rule-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+        }
+        .alerts-rule-badge.enabled { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .alerts-rule-badge.disabled { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .alerts-rule-info { font-size: 11px; color: #888; }
+        .alerts-rule-toggle {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #eee;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .alerts-rule-toggle:hover { background: rgba(255,255,255,0.1); }
+
         /* Turn Summary Panel */
         .turn-summary-grid {
             display: grid;
@@ -2722,6 +2819,46 @@
             </div>
         </div>
 
+        <!-- Proactive Alerts Panel -->
+        <div class="card full-width" style="margin-top: 20px;">
+            <h2>🔔 主动提醒 <span class="tool-count-badge" id="alertsCount">-</span></h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Agent 主动推送的重要事件提醒，帮助你及时了解关键状态变化</p>
+            <div class="alerts-filters">
+                <select id="alertsSeverityFilter" class="alerts-filter-select" onchange="loadAlerts()">
+                    <option value="">全部严重级别</option>
+                    <option value="info">🔵 Info</option>
+                    <option value="warning">🟡 Warning</option>
+                    <option value="critical">🔴 Critical</option>
+                    <option value="emergency">🛑 Emergency</option>
+                </select>
+                <select id="alertsCategoryFilter" class="alerts-filter-select" onchange="loadAlerts()">
+                    <option value="">全部分类</option>
+                    <option value="context_health">Context Health</option>
+                    <option value="feedback_trend">Feedback Trend</option>
+                    <option value="safety">Safety</option>
+                    <option value="quality">Quality</option>
+                    <option value="general">General</option>
+                </select>
+                <label style="color: #888; font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="alertsIncludeAcked" onchange="loadAlerts()">
+                    显示已确认
+                </label>
+            </div>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+                <button class="btn" onclick="loadAlerts()">🔄 刷新</button>
+                <button class="btn btn-secondary" onclick="clearAlerts()">🗑️ 清空</button>
+                <button class="btn" onclick="showAlertRules()">⚙️ 提醒规则</button>
+            </div>
+            <div class="alerts-list" id="alertsContent">
+                <div class="alerts-empty">暂无提醒数据。Agent 会在重要事件发生时自动推送提醒。</div>
+            </div>
+            <div class="alerts-rules-section" id="alertsRulesSection" style="display: none;">
+                <div class="alerts-rules-title">提醒规则配置</div>
+                <div class="alerts-rules-grid" id="alertsRulesContent">
+                </div>
+            </div>
+        </div>
+
         <!-- Turn Summary Panel -->
         <div class="card full-width" style="margin-top: 20px;">
             <h2>📋 Turn 总结 <span class="tool-count-badge" id="turnSummaryCount">-</span></h2>
@@ -3277,6 +3414,13 @@
                     loadSkillTracker();
                 } catch (e) {
                     // Skill tracker API might not be available
+                }
+
+                // Fetch proactive alerts panel
+                try {
+                    loadAlerts();
+                } catch (e) {
+                    // Alerts API might not be available
                 }
 
                 // Fetch tools list
@@ -5563,6 +5707,221 @@
                     if (current) sel.value = current;
                 })
                 .catch(() => {});
+        }
+
+        // ============================================================
+        // Proactive Alerts Functions
+        // ============================================================
+
+        // Store alerts data
+        let alertsData = [];
+
+        async function loadAlerts() {
+            const severityFilter = document.getElementById('alertsSeverityFilter')?.value || '';
+            const categoryFilter = document.getElementById('alertsCategoryFilter')?.value || '';
+            const includeAcked = document.getElementById('alertsIncludeAcked')?.checked || false;
+
+            let url = API_BASE + '/api/alerts?limit=50&include_acknowledged=' + includeAcked;
+            if (severityFilter) url += '&severity=' + severityFilter;
+            if (categoryFilter) url += '&category=' + categoryFilter;
+
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+                alertsData = data.alerts || [];
+                renderAlerts(data);
+            } catch (e) {
+                console.error('Failed to load alerts:', e);
+            }
+        }
+
+        function renderAlerts(data) {
+            const content = document.getElementById('alertsContent');
+            const badge = document.getElementById('alertsCount');
+            const alerts = data.alerts || [];
+            const stats = data;
+
+            // Update badge
+            badge.textContent = alerts.length;
+
+            // Render stats
+            if (stats.total !== undefined) {
+                // We could show stats in a separate area if needed
+            }
+
+            if (alerts.length === 0) {
+                content.innerHTML = '<div class="alerts-empty">暂无提醒数据。Agent 会在重要事件发生时自动推送提醒。</div>';
+                return;
+            }
+
+            let html = '';
+            alerts.forEach(alert => {
+                const severity = alert.severity || 'info';
+                const category = alert.category || 'general';
+                const acknowledged = alert.acknowledged ? 'acknowledged' : '';
+                const icon = getAlertSeverityIcon(severity);
+                const time = formatAlertTime(alert.created_at);
+
+                html += '<div class="alerts-item ' + severity + ' ' + acknowledged + '" id="alert-' + alert.id + '">\
+                    <div class="alerts-icon">' + icon + '</div>\
+                    <div class="alerts-content">\
+                        <div class="alerts-title">' + escapeHtml(alert.title) + '</div>\
+                        <div class="alerts-message">' + escapeHtml(alert.message) + '</div>\
+                        <div class="alerts-meta">\
+                            <span class="alerts-category">' + category.replace('_', ' ') + '</span>\
+                            <span class="alerts-severity">' + severity + '</span>\
+                            <span>' + time + '</span>\
+                        </div>\
+                    </div>\
+                    <div class="alerts-actions">\
+                        ' + (alert.acknowledged ? '' : '<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="acknowledgeAlert(\'' + alert.id + '\')">✓ 确认</button>') + '\
+                    </div>\
+                </div>';
+            });
+
+            content.innerHTML = html;
+        }
+
+        function getAlertSeverityIcon(severity) {
+            const iconMap = {
+                'info': '🔵',
+                'warning': '🟡',
+                'critical': '🔴',
+                'emergency': '🛑'
+            };
+            return iconMap[severity] || '🔵';
+        }
+
+        function formatAlertTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp * 1000);
+            const now = new Date();
+            const diff = now - date;
+
+            // If less than 1 hour ago, show minutes
+            if (diff < 60 * 60 * 1000) {
+                const mins = Math.floor(diff / (60 * 1000));
+                return mins <= 1 ? '刚刚' : mins + '分钟前';
+            }
+            // If less than 24 hours ago, show hours
+            if (diff < 24 * 60 * 60 * 1000) {
+                const hours = Math.floor(diff / (60 * 60 * 1000));
+                return hours + '小时前';
+            }
+            // Otherwise show date
+            return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function acknowledgeAlert(alertId) {
+            try {
+                const resp = await fetch(API_BASE + '/api/alerts/' + alertId + '/acknowledge', { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    // Update the UI
+                    const alertEl = document.getElementById('alert-' + alertId);
+                    if (alertEl) {
+                        alertEl.classList.add('acknowledged');
+                        const actions = alertEl.querySelector('.alerts-actions');
+                        if (actions) actions.innerHTML = '<span style="color: #22c55e; font-size: 11px;">✓ 已确认</span>';
+                    }
+                    showToast('提醒已确认', 'success');
+                }
+            } catch (e) {
+                console.error('Failed to acknowledge alert:', e);
+                showToast('确认提醒失败', 'error');
+            }
+        }
+
+        async function clearAlerts() {
+            if (!confirm('确定要清空所有提醒吗？')) return;
+            try {
+                const resp = await fetch(API_BASE + '/api/alerts', { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.success) {
+                    alertsData = [];
+                    renderAlerts({ alerts: [] });
+                    document.getElementById('alertsCount').textContent = '0';
+                    showToast('提醒已清空', 'success');
+                }
+            } catch (e) {
+                console.error('Failed to clear alerts:', e);
+                showToast('清空提醒失败', 'error');
+            }
+        }
+
+        async function showAlertRules() {
+            const section = document.getElementById('alertsRulesSection');
+            const content = document.getElementById('alertsRulesContent');
+
+            if (section.style.display === 'none') {
+                // Load and show rules
+                try {
+                    const resp = await fetch(API_BASE + '/api/alerts/rules');
+                    const data = await resp.json();
+                    const rules = data.rules || [];
+
+                    if (rules.length === 0) {
+                        content.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">暂无提醒规则</div>';
+                    } else {
+                        let html = '';
+                        rules.forEach(rule => {
+                            const badgeClass = rule.enabled ? 'enabled' : 'disabled';
+                            const badgeText = rule.enabled ? '已启用' : '已禁用';
+                            html += '<div class="alerts-rule-card">\
+                                <div class="alerts-rule-header">\
+                                    <span class="alerts-rule-name">' + escapeHtml(rule.name) + '</span>\
+                                    <span class="alerts-rule-badge ' + badgeClass + '">' + badgeText + '</span>\
+                                </div>\
+                                <div class="alerts-rule-info">\
+                                    分类: ' + (rule.category || 'general').replace('_', ' ') + ' | \
+                                    最低级别: ' + (rule.min_severity || 'info') + ' | \
+                                    冷却: ' + (rule.cooldown_secs || 300) + '秒\
+                                </div>\
+                                <div style="margin-top: 8px;">\
+                                    <button class="alerts-rule-toggle" onclick="toggleAlertRule(\'' + rule.category + '\', \'' + rule.name + '\', ' + !rule.enabled + ')">\
+                                        ' + (rule.enabled ? '禁用' : '启用') + '\
+                                    </button>\
+                                </div>\
+                            </div>';
+                        });
+                        content.innerHTML = html;
+                    }
+
+                    section.style.display = 'block';
+                } catch (e) {
+                    console.error('Failed to load alert rules:', e);
+                    showToast('加载提醒规则失败', 'error');
+                }
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
+        async function toggleAlertRule(category, ruleName, enable) {
+            try {
+                const resp = await fetch(API_BASE + '/api/alerts/rules/' + category + '/' + ruleName + '?enabled=' + enable, { method: 'PATCH' });
+                const data = await resp.json();
+                if (data.success) {
+                    showAlertRules(); // Refresh the rules display
+                    showToast('规则已' + (enable ? '启用' : '禁用'), 'success');
+                } else {
+                    showToast(data.error || '更新规则失败', 'error');
+                }
+            } catch (e) {
+                console.error('Failed to toggle alert rule:', e);
+                showToast('更新规则失败', 'error');
+            }
+        }
+
+        // Handle agent.alert SSE event
+        function handleAlertEvent(data) {
+            console.log('Alert event received:', data);
+            // Reload alerts to show the new one
+            loadAlerts();
+            // Show toast notification
+            if (data.title) {
+                showToast('🔔 ' + data.title, data.severity === 'critical' || data.severity === 'emergency' ? 'error' : 'info');
+            }
         }
 
         // ============================================================
@@ -7949,6 +8308,9 @@
             } else if (eventType === 'skill.tracker' && data.session_id) {
                 // Skill tracker event - show toast and refresh panel
                 showToast('🎯 技能追踪: ' + (data.total_turns_tracked || 0) + ' 次记录', 'info');
+            } else if (eventType === 'agent.alert') {
+                // Agent proactive alert event - handle it
+                handleAlertEvent(data);
             } else if (eventType === 'turn.summary' && data.session_id) {
                 // Turn summary event - add to the turn summaries list and update panel
                 addTurnSummary(data);
@@ -8500,7 +8862,7 @@
                     'assistant.text', 'assistant.partial', 'assistant.tool_use', 'action.plan_preview', 'tool_result',
                     'session.created', 'session.ended', 'error', 'status', 'heartbeat',
                     'context.summarized', 'context.health', 'context.urgent_advice', 'session.quality', 'agent.self_evaluation', 'skill.recommended',
-                    'agent.performance_insights', 'feedback.trend', 'skill.tracker',
+                    'agent.performance_insights', 'feedback.trend', 'skill.tracker', 'agent.alert',
                     'scheduled.created', 'scheduled.fired', 'scheduled.failed', 'scheduled.updated', 'scheduled.deleted'
                 ];
                 
@@ -8571,6 +8933,7 @@
             else if (event.type === 'context.health') cssClass += ' event-turn-ended';
             else if (event.type === 'session.quality') cssClass += ' event-turn-ended';
             else if (event.type === 'agent.self_evaluation') cssClass += ' event-turn-ended';
+            else if (event.type === 'agent.alert') cssClass += ' event-turn-ended';
             else if (event.type === 'skill.recommended') cssClass += ' event-tool';
             else if (event.type === 'system') cssClass += ' event-system';
             
@@ -8609,6 +8972,8 @@
                     if (event.content.strengths && event.content.strengths.length > 0) {
                         contentText += ' ✓ ' + event.content.strengths[0];
                     }
+                } else if (event.type === 'agent.alert') {
+                    contentText = (event.content.severity_emoji || '🔔') + ' ' + (event.content.title || '提醒');
                 } else if (event.type === 'session.quality') {
                     contentText = '质量: ' + ((event.content.quality_score || 0) * 100).toFixed(0) + '% | ' + 
                         '任务: ' + ((event.content.task_completion_rate || 0) * 100).toFixed(0) + '% | ' +
@@ -8664,6 +9029,7 @@
                 'feedback.trend': '反馈趋势',
                 'skill.tracker': '技能追踪',
                 'agent.self_evaluation': '自我评估',
+                'agent.alert': '主动提醒',
                 'scheduled.created': '任务创建',
                 'scheduled.fired': '任务触发',
                 'scheduled.failed': '任务失败',

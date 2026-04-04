@@ -63,6 +63,7 @@ pub struct HttpState {
     pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
     #[allow(dead_code)]
     pub tool_sequence_advisor: Arc<crate::agent::ToolSequenceAdvisor>,
+    pub proactive_alerts: Arc<RwLock<crate::agent::ProactiveAlertManager>>,
 }
 
 /// Health check response
@@ -921,6 +922,14 @@ pub fn create_router(state: Arc<HttpState>, static_dir: &str) -> Router {
         .route("/api/sessions/{session_id}/feedback/summary", get(feedback_session_summary))
         .route("/api/feedback/stats", get(feedback_global_stats))
         .route("/api/feedback/trends", get(feedback_trend_analysis))
+        // Proactive alerts API - agent proactive notifications
+        .route("/api/alerts", get(alerts_list))
+        .route("/api/alerts/stats", get(alerts_stats))
+        .route("/api/alerts/{alert_id}/acknowledge", axum::routing::post(alerts_acknowledge))
+        .route("/api/alerts/{alert_id}", axum::routing::delete(alerts_delete))
+        .route("/api/alerts", axum::routing::delete(alerts_clear))
+        .route("/api/alerts/rules", get(alerts_rules_get))
+        .route("/api/alerts/rules/{category}/{rule_name}", axum::routing::patch(alerts_rules_update))
         // Session accomplishments API - track what was accomplished
         .route("/api/sessions/{session_id}/accomplishments", get(session_accomplishments_list))
         .route("/api/sessions/{session_id}/accomplishments", axum::routing::delete(session_accomplishments_clear))
@@ -3190,4 +3199,203 @@ async fn feedback_trend_analysis(
 pub struct TrendAnalysisParams {
     /// Optional session ID to filter by
     pub session_id: Option<String>,
+}
+
+// ============================================================================
+// Proactive Alerts API Handlers
+// ============================================================================
+
+use crate::agent::proactive_alerts::{AlertCategory, AlertRule, ProactiveAlert, ProactiveAlertStats};
+
+/// Get all alerts (with optional filtering)
+async fn alerts_list(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(params): axum::extract::Query<AlertsListParams>,
+) -> Json<AlertsListResponse> {
+    let limit = params.limit.unwrap_or(50);
+    let include_acknowledged = params.include_acknowledged.unwrap_or(true);
+    let severity_filter = params.severity.as_deref();
+    let category_filter = params.category.as_deref();
+
+    let manager = state.proactive_alerts.read();
+    let mut alerts = if include_acknowledged {
+        manager.get_recent_alerts(limit)
+    } else {
+        manager.get_active_alerts()
+    };
+    let total = manager.get_stats().total_alerts;
+
+    // Apply severity filter
+    if let Some(sev) = severity_filter {
+        alerts.retain(|a| a.severity.as_str() == sev);
+    }
+
+    // Apply category filter
+    if let Some(cat) = category_filter {
+        alerts.retain(|a| a.category.as_str() == cat);
+    }
+    drop(manager);
+
+    let count = alerts.len();
+    Json(AlertsListResponse {
+        alerts,
+        count,
+        total,
+    })
+}
+
+/// Query parameters for listing alerts
+#[derive(Debug, Deserialize)]
+pub struct AlertsListParams {
+    pub limit: Option<usize>,
+    pub include_acknowledged: Option<bool>,
+    pub severity: Option<String>,
+    pub category: Option<String>,
+}
+
+/// Response for alerts list
+#[derive(Serialize)]
+pub struct AlertsListResponse {
+    pub alerts: Vec<ProactiveAlert>,
+    pub count: usize,
+    pub total: u64,
+}
+
+/// Get alert statistics
+async fn alerts_stats(
+    State(state): State<Arc<HttpState>>,
+) -> Json<ProactiveAlertStats> {
+    Json(state.proactive_alerts.read().get_stats())
+}
+
+/// Acknowledge an alert
+async fn alerts_acknowledge(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(alert_id): axum::extract::Path<String>,
+) -> Json<AlertAcknowledgeResponse> {
+    let success = state.proactive_alerts.write().acknowledge_alert(&alert_id);
+    Json(AlertAcknowledgeResponse { success, alert_id })
+}
+
+/// Response for alert acknowledgement
+#[derive(Serialize)]
+pub struct AlertAcknowledgeResponse {
+    pub success: bool,
+    pub alert_id: String,
+}
+
+/// Delete a specific alert
+async fn alerts_delete(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path(alert_id): axum::extract::Path<String>,
+) -> Json<AlertDeleteResponse> {
+    // Note: The manager doesn't have a direct delete, so we acknowledge it instead
+    let success = state.proactive_alerts.write().acknowledge_alert(&alert_id);
+    Json(AlertDeleteResponse { success, alert_id })
+}
+
+/// Response for alert deletion
+#[derive(Serialize)]
+pub struct AlertDeleteResponse {
+    pub success: bool,
+    pub alert_id: String,
+}
+
+/// Clear all alerts
+async fn alerts_clear(
+    State(state): State<Arc<HttpState>>,
+) -> Json<AlertClearResponse> {
+    state.proactive_alerts.write().clear_alerts();
+    Json(AlertClearResponse { success: true })
+}
+
+/// Response for clearing alerts
+#[derive(Serialize)]
+pub struct AlertClearResponse {
+    pub success: bool,
+}
+
+/// Get alert rules
+async fn alerts_rules_get(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Query(params): axum::extract::Query<AlertRulesParams>,
+) -> Json<AlertRulesResponse> {
+    let category = params.category.as_ref().and_then(|c| {
+        match c.to_lowercase().as_str() {
+            "context_health" => Some(AlertCategory::ContextHealth),
+            "feedback_trend" => Some(AlertCategory::FeedbackTrend),
+            "safety" => Some(AlertCategory::Safety),
+            "scheduled_task" => Some(AlertCategory::ScheduledTask),
+            "memory" => Some(AlertCategory::Memory),
+            "quality" => Some(AlertCategory::Quality),
+            "self_evaluation" => Some(AlertCategory::SelfEvaluation),
+            "general" => Some(AlertCategory::General),
+            _ => None,
+        }
+    });
+
+    let rules = state.proactive_alerts.read().get_rules(category);
+    Json(AlertRulesResponse { rules })
+}
+
+/// Query parameters for alert rules
+#[derive(Debug, Deserialize)]
+pub struct AlertRulesParams {
+    pub category: Option<String>,
+}
+
+/// Response for alert rules
+#[derive(Serialize)]
+pub struct AlertRulesResponse {
+    pub rules: Vec<AlertRule>,
+}
+
+/// Update an alert rule
+async fn alerts_rules_update(
+    State(state): State<Arc<HttpState>>,
+    axum::extract::Path((category, rule_name)): axum::extract::Path<(String, String)>,
+    axum::extract::Query(params): axum::extract::Query<AlertRuleUpdateParams>,
+) -> Json<AlertRuleUpdateResponse> {
+    let cat = match category.to_lowercase().as_str() {
+        "context_health" => AlertCategory::ContextHealth,
+        "feedback_trend" => AlertCategory::FeedbackTrend,
+        "safety" => AlertCategory::Safety,
+        "scheduled_task" => AlertCategory::ScheduledTask,
+        "memory" => AlertCategory::Memory,
+        "quality" => AlertCategory::Quality,
+        "self_evaluation" => AlertCategory::SelfEvaluation,
+        "general" => AlertCategory::General,
+        _ => {
+            return Json(AlertRuleUpdateResponse {
+                success: false,
+                error: Some("Invalid category".to_string()),
+            });
+        }
+    };
+
+    let success = state.proactive_alerts.write().update_rule(
+        cat,
+        &rule_name,
+        params.enabled,
+        params.cooldown_secs,
+    );
+
+    Json(AlertRuleUpdateResponse {
+        success,
+        error: if success { None } else { Some("Rule not found".to_string()) },
+    })
+}
+
+/// Query parameters for updating alert rule
+#[derive(Debug, Deserialize)]
+pub struct AlertRuleUpdateParams {
+    pub enabled: Option<bool>,
+    pub cooldown_secs: Option<u64>,
+}
+
+/// Response for alert rule update
+#[derive(Serialize)]
+pub struct AlertRuleUpdateResponse {
+    pub success: bool,
+    pub error: Option<String>,
 }

@@ -33,7 +33,7 @@ use metrics::MetricsCollector;
 use persistence::HistoryManager;
 use preferences::PreferencesManager;
 use ratelimit::RateLimiter;
-use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner, SessionAccomplishmentsManager, SessionProfileManager};
+use agent::{SkillRegistry, SessionSkillManager, TaskManager, Scheduler, SessionNotesManager, MemoryManager, ToolPatternLearner, SessionAccomplishmentsManager, SessionProfileManager, ProactiveAlertManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -193,6 +193,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_profiles = Arc::new(SessionProfileManager::new(profiles_dir.clone()));
     info!("Session profile manager initialized (dir: {:?})", profiles_dir);
 
+    // Create proactive alert manager for agent-initiated notifications
+    let proactive_alerts = Arc::new(RwLock::new(ProactiveAlertManager::new()));
+    info!("Proactive alerts manager initialized");
+
     // Create self-evaluation manager with persistence
     let self_eval_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -343,6 +347,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tool_pattern_learner.clone(),
             skill_synergy.clone(),
         )),
+        proactive_alerts: proactive_alerts.clone(),
     });
 
     // Spawn WebSocket server
