@@ -453,6 +453,7 @@ pub struct AppState {
 /// Proactive alert data for TUI display
 #[derive(Debug, Clone)]
 pub struct ProactiveAlertDisplay {
+    #[allow(dead_code)]
     pub id: String,
     pub category: String,
     pub severity: String,
@@ -460,6 +461,7 @@ pub struct ProactiveAlertDisplay {
     pub message: String,
     pub session_id: Option<String>,
     pub created_at: String,
+    #[allow(dead_code)]
     pub acknowledged: bool,
 }
 

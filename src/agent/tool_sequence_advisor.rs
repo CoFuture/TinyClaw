@@ -45,6 +45,7 @@ pub struct ToolRecommendation {
     /// Confidence level of this recommendation
     pub confidence: RecommendationConfidence,
     /// Which historical pattern this is based on (if any)
+    #[allow(dead_code)]
     pub based_on_pattern: Option<String>,
 }
 

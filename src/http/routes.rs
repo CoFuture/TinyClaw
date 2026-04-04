@@ -61,6 +61,7 @@ pub struct HttpState {
     pub session_profiles: Arc<SessionProfileManager>,
     pub skill_tracker: Arc<crate::agent::SkillTracker>,
     pub skill_synergy: Arc<crate::agent::SkillSynergyAnalyzer>,
+    #[allow(dead_code)]
     pub tool_sequence_advisor: Arc<crate::agent::ToolSequenceAdvisor>,
 }
 
@@ -724,7 +725,7 @@ async fn sse_events(
                                     Event::SkillTrackerEffectiveness { session_id, .. } => session_id == filter,
                                     // Proactive alert - apply session filter (session_id is optional)
                                     Event::ProactiveAlert { session_id, .. } => {
-                                        session_id.as_ref().map_or(true, |sid| sid == filter)
+                                        session_id.as_ref().is_none_or(|sid| sid == filter)
                                     }
                                 }
                             } else {

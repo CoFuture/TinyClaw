@@ -713,7 +713,7 @@ impl TuiApp {
                 use std::time::SystemTime;
 
                 // Format the timestamp
-                let created_str = match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(created_at as u64)) {
+                let created_str = match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(created_at)) {
                     Some(time) => {
                         let datetime: chrono::DateTime<chrono::Utc> = time.into();
                         datetime.format("%H:%M:%S").to_string()

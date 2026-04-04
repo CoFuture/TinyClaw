@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Alert severity level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[allow(dead_code)]
 pub enum AlertSeverity {
     /// Low severity - informational
     Info,
@@ -21,6 +22,7 @@ pub enum AlertSeverity {
 }
 
 impl AlertSeverity {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             AlertSeverity::Info => "info",
@@ -30,7 +32,8 @@ impl AlertSeverity {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    #[allow(dead_code)]
+    pub fn parse_from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "critical" => AlertSeverity::Critical,
             "emergency" => AlertSeverity::Emergency,
@@ -42,6 +45,7 @@ impl AlertSeverity {
 
 /// Alert category - what type of event triggered the alert
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[allow(dead_code)]
 pub enum AlertCategory {
     /// Context health related alert
     ContextHealth,
@@ -62,6 +66,7 @@ pub enum AlertCategory {
 }
 
 impl AlertCategory {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             AlertCategory::ContextHealth => "context_health",
@@ -78,6 +83,7 @@ impl AlertCategory {
 
 /// A proactive alert item
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ProactiveAlert {
     /// Unique alert ID
     pub id: String,
@@ -103,6 +109,7 @@ pub struct ProactiveAlert {
 
 impl ProactiveAlert {
     /// Create a new alert
+    #[allow(dead_code)]
     pub fn new(
         category: AlertCategory,
         severity: AlertSeverity,
@@ -127,18 +134,21 @@ impl ProactiveAlert {
     }
 
     /// Create with session ID
+    #[allow(dead_code)]
     pub fn with_session(mut self, session_id: &str) -> Self {
         self.session_id = Some(session_id.to_string());
         self
     }
 
     /// Create with additional data
+    #[allow(dead_code)]
     pub fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = data;
         self
     }
 
     /// Create with auto-dismiss
+    #[allow(dead_code)]
     pub fn with_auto_dismiss(mut self, secs: u64) -> Self {
         self.auto_dismiss_secs = Some(secs);
         self
@@ -147,6 +157,7 @@ impl ProactiveAlert {
 
 /// Alert rule - defines conditions for triggering alerts
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct AlertRule {
     /// Unique rule ID
     pub id: String,
@@ -167,6 +178,7 @@ pub struct AlertRule {
 
 impl AlertRule {
     /// Create a new alert rule
+    #[allow(dead_code)]
     pub fn new(name: &str, category: AlertCategory, min_severity: AlertSeverity) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -180,6 +192,7 @@ impl AlertRule {
     }
 
     /// Check if this rule should trigger (respecting cooldown)
+    #[allow(dead_code)]
     pub fn should_trigger(&self, severity: AlertSeverity, current_time: u64) -> bool {
         if !self.enabled {
             return false;
@@ -196,6 +209,7 @@ impl AlertRule {
     }
 
     /// Record that this rule triggered an alert
+    #[allow(dead_code)]
     pub fn record_alert(&mut self, current_time: u64) {
         self.last_alert_at = Some(current_time);
     }
@@ -203,6 +217,7 @@ impl AlertRule {
 
 /// Alert statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ProactiveAlertStats {
     /// Total alerts generated
     pub total_alerts: u64,
@@ -218,11 +233,13 @@ pub struct ProactiveAlertStats {
 
 impl ProactiveAlertStats {
     /// Create new stats
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Record an alert
+    #[allow(dead_code)]
     pub fn record_alert(&mut self, alert: &ProactiveAlert) {
         self.total_alerts += 1;
         *self.by_severity.entry(alert.severity.as_str().to_string()).or_insert(0) += 1;
@@ -231,6 +248,7 @@ impl ProactiveAlertStats {
     }
 
     /// Update active count
+    #[allow(dead_code)]
     pub fn set_active_count(&mut self, count: u64) {
         self.active_count = count;
     }
@@ -238,6 +256,7 @@ impl ProactiveAlertStats {
 
 /// Proactive Alert Manager - manages alert rules and alert history
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProactiveAlertManager {
     /// Alert rules by category
     rules: HashMap<AlertCategory, Vec<AlertRule>>,
@@ -253,6 +272,7 @@ pub struct ProactiveAlertManager {
 
 impl ProactiveAlertManager {
     /// Create a new alert manager
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let mut manager = Self {
             rules: HashMap::new(),
@@ -289,19 +309,22 @@ impl ProactiveAlertManager {
     }
 
     /// Add an alert rule
+    #[allow(dead_code)]
     pub fn add_rule(&mut self, rule: AlertRule) {
         self.rules
             .entry(rule.category)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(rule);
     }
 
     /// Set the alert sender (for SSE integration)
+    #[allow(dead_code)]
     pub fn set_alert_sender(&mut self, sender: tokio::sync::broadcast::Sender<ProactiveAlert>) {
         self.alert_sender = Some(sender);
     }
 
     /// Generate an alert based on conditions
+    #[allow(dead_code)]
     pub fn generate_alert(
         &mut self,
         category: AlertCategory,
@@ -356,6 +379,7 @@ impl ProactiveAlertManager {
     }
 
     /// Generate a context health alert
+    #[allow(dead_code)]
     pub fn alert_context_health(
         &mut self,
         session_id: &str,
@@ -384,6 +408,7 @@ impl ProactiveAlertManager {
     }
 
     /// Generate a feedback trend alert
+    #[allow(dead_code)]
     pub fn alert_feedback_trend(
         &mut self,
         session_id: &str,
@@ -411,6 +436,7 @@ impl ProactiveAlertManager {
     }
 
     /// Generate a safety alert
+    #[allow(dead_code)]
     pub fn alert_safety_event(
         &mut self,
         session_id: &str,
@@ -430,6 +456,7 @@ impl ProactiveAlertManager {
     }
 
     /// Generate a quality alert
+    #[allow(dead_code)]
     pub fn alert_quality(
         &mut self,
         session_id: &str,
@@ -461,6 +488,7 @@ impl ProactiveAlertManager {
     }
 
     /// Acknowledge an alert
+    #[allow(dead_code)]
     pub fn acknowledge_alert(&mut self, alert_id: &str) -> bool {
         if let Some(alert) = self.recent_alerts.iter_mut().find(|a| a.id == alert_id) {
             alert.acknowledged = true;
@@ -472,6 +500,7 @@ impl ProactiveAlertManager {
     }
 
     /// Get unacknowledged alerts
+    #[allow(dead_code)]
     pub fn get_active_alerts(&self) -> Vec<ProactiveAlert> {
         self.recent_alerts
             .iter()
@@ -481,6 +510,7 @@ impl ProactiveAlertManager {
     }
 
     /// Get recent alerts (last N)
+    #[allow(dead_code)]
     pub fn get_recent_alerts(&self, limit: usize) -> Vec<ProactiveAlert> {
         self.recent_alerts
             .iter()
@@ -490,6 +520,7 @@ impl ProactiveAlertManager {
     }
 
     /// Get statistics
+    #[allow(dead_code)]
     pub fn get_stats(&self) -> ProactiveAlertStats {
         let mut stats = self.stats.clone();
         stats.set_active_count(self.recent_alerts.iter().filter(|a| !a.acknowledged).count() as u64);
@@ -497,6 +528,7 @@ impl ProactiveAlertManager {
     }
 
     /// Update rule configuration
+    #[allow(dead_code)]
     pub fn update_rule(&mut self, category: AlertCategory, rule_name: &str, enabled: Option<bool>, cooldown_secs: Option<u64>) -> bool {
         if let Some(rules) = self.rules.get_mut(&category) {
             for rule in rules.iter_mut() {
@@ -515,6 +547,7 @@ impl ProactiveAlertManager {
     }
 
     /// Get rules for a category
+    #[allow(dead_code)]
     pub fn get_rules(&self, category: Option<AlertCategory>) -> Vec<AlertRule> {
         match category {
             Some(cat) => self.rules.get(&cat).cloned().unwrap_or_default(),
@@ -523,6 +556,7 @@ impl ProactiveAlertManager {
     }
 
     /// Clear all alerts
+    #[allow(dead_code)]
     pub fn clear_alerts(&mut self) {
         self.recent_alerts.clear();
         self.stats.set_active_count(0);

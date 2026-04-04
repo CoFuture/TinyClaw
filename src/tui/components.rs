@@ -1994,9 +1994,9 @@ pub fn draw_alerts_panel(f: &mut Frame<'_>, area: Rect, state: &AppState) {
 
                 // Category badge
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  Category: "), Style::default().fg(Color::DarkGray)),
+                    Span::styled("  Category: ".to_string(), Style::default().fg(Color::DarkGray)),
                     Span::styled(alert.category.to_uppercase(), Style::default().fg(Color::Cyan)),
-                    Span::styled(format!(" | Severity: "), Style::default().fg(Color::DarkGray)),
+                    Span::styled(" | Severity: ".to_string(), Style::default().fg(Color::DarkGray)),
                     Span::styled(alert.severity.to_uppercase(), Style::default().fg(severity_color)),
                 ]));
 
