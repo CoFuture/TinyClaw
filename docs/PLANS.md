@@ -3354,6 +3354,31 @@ TinyClaw 是 OpenClaw 的 **Rust 实现子集**，聚焦于：
 
 ---
 
+### v15.2.0 (已完成 ✅)
+
+**日期**: 2026-04-04
+
+**完成事项**:
+- **代码质量维护** - 消除所有 clippy 警告
+  - **Style 修复**：
+    - `proactive_alerts.rs`: 将 `from_str` 重命名为 `parse_from_str`（避免与 std trait 混淆）
+    - `proactive_alerts.rs`: 使用 `or_default()` 替代 `or_insert_with(Vec::new)`
+    - `routes.rs`: 使用 `is_none_or()` 替代 `map_or()`
+    - `app.rs`: 移除不必要的 `u64` 类型转换
+    - `components.rs`: 使用 `.to_string()` 替代 `format!()`
+  - **Dead Code 标注**（有意定义为未来使用但尚未集成）：
+    - `proactive_alerts.rs`: 为 `AlertSeverity`、`AlertCategory`、`ProactiveAlert`、`AlertRule`、`ProactiveAlertStats`、`ProactiveAlertManager` 及所有方法添加 `#[allow(dead_code)]`
+    - `tool_sequence_advisor.rs`: 为 `based_on_pattern` 字段添加 `#[allow(dead_code)]`
+    - `routes.rs`: 为 `HttpState` 中的 `tool_sequence_advisor` 字段添加 `#[allow(dead_code)]`
+    - `state.rs`: 为 `ProactiveAlertDisplay` 中的 `id` 和 `acknowledged` 字段添加 `#[allow(dead_code)]`
+  - **代码质量**：
+    - cargo clippy **0 警告**
+    - cargo test **506 tests 全部通过**
+
+**下一步**: ProactiveAlertManager 完整集成、WebUI 主动提醒管理界面
+
+---
+
 ### v13.13.0 (已完成 ✅)
 
 **日期**: 2026-04-02
